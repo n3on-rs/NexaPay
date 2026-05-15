@@ -118,12 +118,15 @@ async function confirmPaymentIntent(intentId) {
 
   try {
     const response = await client.paymentIntents.confirm(intentId, {
-      card_number: "4242424242424242", // Test card for success
+      method: "card",
+      card_number: "4242424242424242",
       expiry_month: "12",
-      expiry_year: "2029",
+      expiry_year: "2026",
       cvv: "123",
-      pin: "1234", // 4-digit PIN
-      card_holder_name: "Ahmed Ben Ali", // Optional
+      pin: "1234",
+      customer_first_name: "John",
+      customer_last_name: "Doe",
+      customer_phone: "+21612345678",
     });
 
     if (response.success) {
@@ -142,6 +145,45 @@ async function confirmPaymentIntent(intentId) {
   } catch (error) {
     console.error("❌ Error confirming payment intent:");
     handleError(error);
+  }
+}
+
+async function walletPayment(client) {
+  // Step 1: create a payment intent
+  const create = await client.paymentIntents.create({
+    amount: 10000,
+    description: "Wallet test",
+    currency: "TND",
+  });
+  if (!create.ok) {
+    console.error("Create failed:", create);
+    return;
+  }
+  const intent = create.data;
+  console.log("Intent created:", intent.intent_id);
+
+  // Step 2: confirm with wallet (sends OTP)
+  const step1 = await client.paymentIntents.confirm(intent.intent_id, {
+    method: "wallet",
+    phone: "+21612345678",
+    pin: "1234",
+  });
+  if (!step1.ok) {
+    console.error("Confirm failed:", step1);
+    return;
+  }
+  console.log("Step 1:", step1.data);
+  if (step1.data.step === "otp_required") {
+    // In sandbox, dev_otp is provided
+    const otp = step1.data.dev_otp || prompt("Enter OTP:");
+    // Step 3: verify OTP
+    const step2 = await client.paymentIntents.confirm(intent.intent_id, {
+      method: "wallet",
+      phone: "+21612345678",
+      pin: "1234",
+      otp,
+    });
+    console.log("Step 2:", step2.data);
   }
 }
 

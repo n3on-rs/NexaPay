@@ -1,0 +1,7 @@
+-- Add card status fields
+ALTER TABLE cards ADD COLUMN IF NOT EXISTS frozen BOOLEAN DEFAULT FALSE;
+ALTER TABLE cards ADD COLUMN IF NOT EXISTS lost_reported BOOLEAN DEFAULT FALSE;
+
+-- Add user profile fields
+ALTER TABLE users ADD COLUMN IF NOT EXISTS delegation VARCHAR(100);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;

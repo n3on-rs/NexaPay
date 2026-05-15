@@ -5,7 +5,7 @@ export interface NexaPayConfig {
   /**
    * Your NexaPay API key (optional for endpoints that don't require authentication)
    * Format: nxp_{owner_tag}_{token}_{checksum}
-   * Example: nxp_merchant_abc123def456ghi789_12345678
+   * Example: nxp_dev_abc123def456ghi789_12345678
    */
   apiKey?: string;
 
@@ -234,113 +234,6 @@ export function getResponseError(response: any): string | undefined {
 }
 
 /**
- * Merchant registration request
- */
-export interface RegisterMerchantRequest {
-  /**
-   * Merchant display name
-   */
-  name: string;
-
-  /**
-   * Legal business name (optional)
-   */
-  business_name?: string;
-
-  /**
-   * Support email for merchant communications
-   */
-  support_email: string;
-
-  /**
-   * Webhook URL for payment events (optional)
-   */
-  webhook_url?: string;
-}
-
-/**
- * Merchant registration response
- */
-export interface RegisterMerchantResponse {
-  /**
-   * Merchant identifier (short code)
-   * Example: mrc_abc123def456
-   */
-  merchant_id: string;
-
-  /**
-   * Merchant UUID for internal reference
-   */
-  merchant_uuid: string;
-
-  /**
-   * API key for the merchant
-   * Format: nxp_merchant_{token}_{checksum}
-   */
-  api_key: string;
-
-  /**
-   * API key prefix for identification
-   */
-  api_key_prefix: string;
-
-  /**
-   * Base URL for checkout pages
-   */
-  checkout_base_url: string;
-
-  /**
-   * Merchant account status
-   */
-  status: "active" | "pending" | "suspended" | "inactive";
-}
-
-/**
- * Merchant statistics
- */
-export interface MerchantStats {
-  /**
-   * Payment statistics
-   */
-  payments: {
-    /**
-     * Number of successful payments
-     */
-    succeeded: number;
-
-    /**
-     * Number of failed payments
-     */
-    failed: number;
-
-    /**
-     * Number of pending payments
-     */
-    pending: number;
-  };
-
-  /**
-   * Financial totals
-   */
-  totals: {
-    /**
-     * Gross amount collected (in millimes)
-     */
-    gross: number;
-
-    /**
-     * Total amount refunded (in millimes)
-     */
-    refunded: number;
-
-    /**
-     * Available balance for payout (in millimes)
-     */
-    available: number;
-  };
-}
-
-/**
  * Payment intent creation request
  */
 export interface CreatePaymentIntentRequest {
@@ -428,6 +321,11 @@ export interface PaymentIntent {
   customer_name?: string;
 
   /**
+   * Customer phone if provided
+   */
+  customer_phone?: string;
+
+  /**
    * Checkout URL for customer payment
    */
   checkout_url: string;
@@ -473,37 +371,69 @@ export interface PaymentIntent {
  */
 export interface ConfirmPaymentIntentRequest {
   /**
-   * Card number (without spaces)
-   * Example: 4242424242424242
+   * Payment method: 'card' or 'wallet'
    */
-  card_number: string;
+  method?: "card" | "wallet";
 
   /**
-   * Expiry month (2 digits)
-   * Example: '12'
+   * Card number (e.g., 4242424242424242)
    */
-  expiry_month: string;
+  card_number?: string;
 
   /**
-   * Expiry year (4 digits)
-   * Example: '2029'
+   * Expiry month (MM)
    */
-  expiry_year: string;
+  expiry_month?: string;
 
   /**
-   * Card verification value (3 or 4 digits)
+   * Expiry year (YYYY)
    */
-  cvv: string;
+  expiry_year?: string;
 
   /**
-   * 4-digit PIN for authorization
+   * CVV
    */
-  pin: string;
+  cvv?: string;
 
   /**
-   * Card holder name (optional)
+   * 4-digit card PIN or wallet PIN
+   */
+  pin?: string;
+
+  /**
+   * OTP code (for wallet payment step 2)
+   */
+  otp?: string;
+
+  /**
+   * Phone number with +216 prefix (for wallet payment)
+   */
+  phone?: string;
+
+  /**
+   * Card holder name
    */
   card_holder_name?: string;
+
+  /**
+   * Customer first name
+   */
+  customer_first_name?: string;
+
+  /**
+   * Customer last name
+   */
+  customer_last_name?: string;
+
+  /**
+   * Customer phone
+   */
+  customer_phone?: string;
+
+  /**
+   * Optional: custom amount for variable-amount intents (in millimes)
+   */
+  amount?: number;
 }
 
 /**
@@ -511,29 +441,44 @@ export interface ConfirmPaymentIntentRequest {
  */
 export interface ConfirmPaymentIntentResponse {
   /**
-   * Whether payment was successful
+   * Whether the confirmation succeeded
    */
   success: boolean;
 
   /**
-   * Payment intent identifier
+   * Intent ID
    */
   intent_id: string;
 
   /**
-   * Updated status
+   * Payment status after confirmation
    */
-  status: "succeeded" | "failed";
+  status: string;
 
   /**
-   * Failure reason if applicable
+   * Optional: failure reason if declined
    */
   failure_reason?: string;
 
   /**
-   * Redirect URL for customer
+   * Optional: redirect URL after payment
    */
-  redirect_url: string;
+  redirect_url?: string;
+
+  /**
+   * Optional: OTP flow step (e.g. 'otp_required')
+   */
+  step?: string;
+
+  /**
+   * Optional: masked phone hint for OTP
+   */
+  phone_hint?: string;
+
+  /**
+   * Optional: dev OTP (sandbox only)
+   */
+  dev_otp?: string;
 }
 
 /**
@@ -554,6 +499,21 @@ export interface CreateRefundRequest {
    * Reason for refund (optional)
    */
   reason?: string;
+
+  /**
+   * Optional: card brand
+   */
+  card_brand?: string;
+
+  /**
+   * Optional: customer name
+   */
+  customer_name?: string;
+
+  /**
+   * Optional: customer phone
+   */
+  customer_phone?: string;
 }
 
 /**

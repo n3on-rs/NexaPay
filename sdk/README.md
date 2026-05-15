@@ -71,7 +71,6 @@ API keys follow the format: `nxp_{owner_tag}_{token}_{checksum}`
 
 - **Merchant keys**: `nxp_merchant_...` - For merchant operations (create intents, refunds, etc.)
 - **Developer keys**: `nxp_developer_...` - For developer operations (register merchants, get snippets)
-- **Bank keys**: `nxp_bank_...` - For bank operations (network statistics)
 
 ## API Reference
 
@@ -140,7 +139,7 @@ const refund = await client.refunds.create({
 
 ### Payouts
 
-Transfer available balance to a destination (bank account, wallet, etc.).
+Transfer available balance to a destination (e.g. wallet or payout target).
 
 ```javascript
 // Create a payout

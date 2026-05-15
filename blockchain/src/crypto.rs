@@ -76,8 +76,14 @@ pub fn address_from_public_key(public_key_hex: &str) -> String {
     format!("NXP{}", &hash[..32])
 }
 
-pub fn kyc_hash(cin: &str, full_name: &str, dob: &str) -> String {
-    sha256_hex(format!("{}{}{}", cin, full_name, dob).as_bytes())
+/// On-chain onboarding digest (commitment over login id, name, DOB).
+pub fn registration_digest(login_id: &str, full_name: &str, dob: &str) -> String {
+    sha256_hex(format!("{}{}{}", login_id, full_name, dob).as_bytes())
+}
+
+/// 4-digit transaction PIN stored on `cards.pin_hash` (hex SHA-256).
+pub fn hash_transaction_pin(chain_address: &str, pin: &str, pepper: &str) -> String {
+    sha256_hex(format!("txpin:{}:{}:{}", chain_address, pin, pepper).as_bytes())
 }
 
 pub fn generate_api_key(prefix: &str) -> (String, String, String) {

@@ -8,8 +8,8 @@ use uuid::Uuid;
 
 use crate::api::middleware::{
     api_principal_kind, api_principal_owner_id, api_principal_prefix, auth_error_response,
-    create_structured_api_key, extract_api_key, has_permission, log_api_call, permissions_to_csv,
-    require_api_key, ApiPrincipal,
+    can_manage_keys, create_structured_api_key, extract_api_key, log_api_call,
+    permissions_to_csv, require_api_key, ApiPrincipal,
 };
 use crate::api::AppState;
 
@@ -84,7 +84,7 @@ pub async fn rotate_api_key(
         let (new_key, new_hash, new_prefix, checksum) = create_structured_api_key(&owner_type);
         let key_name = payload.name.unwrap_or(existing_name);
 
-        sqlx::query("UPDATE api_keys SET status = 'revoked', revoked_at = NOW(), rotated_at = NOW() WHERE id = $1")
+        sqlx::query("DELETE FROM api_keys WHERE id = $1")
             .bind(key_id)
             .execute(&state.pg_pool)
             .await
@@ -143,8 +143,7 @@ pub async fn revoke_api_key(
     let owner_id = api_principal_owner_id(&principal);
 
     let affected = sqlx::query(
-        "UPDATE api_keys
-         SET status = 'revoked', revoked_at = NOW()
+        "DELETE FROM api_keys
          WHERE prefix = $1
            AND owner_type = $2
            AND (($3::uuid IS NULL AND owner_id IS NULL) OR owner_id = $3::uuid)
@@ -202,28 +201,6 @@ pub async fn api_key_usage(
     )
     .await;
 
-    let merchant_summary = if let ApiPrincipal::Merchant { merchant_id, .. } = principal.clone() {
-        let successful_payments = scalar_count_by_uuid(
-            &state,
-            "SELECT COUNT(*) AS count FROM payment_intents WHERE merchant_id = $1 AND status = 'succeeded'",
-            merchant_id,
-        )
-        .await;
-        let refunds = scalar_count_by_uuid(
-            &state,
-            "SELECT COUNT(*) AS count FROM refunds WHERE merchant_id = $1",
-            merchant_id,
-        )
-        .await;
-
-        json!({
-            "successful_payments": successful_payments,
-            "refunds": refunds
-        })
-    } else {
-        json!({})
-    };
-
     log_api_call(&state, Some(&principal), "/api-keys/usage", "GET", 200).await;
 
     Ok(Json(json!({
@@ -232,7 +209,6 @@ pub async fn api_key_usage(
         "today_calls": today_calls,
         "minute_calls": minute_calls,
         "failed_calls": failed_calls,
-        "summary": merchant_summary
     })))
 }
 
@@ -303,9 +279,6 @@ pub async fn update_api_key_permissions(
     })))
 }
 
-fn can_manage_keys(principal: &ApiPrincipal) -> bool {
-    matches!(principal, ApiPrincipal::Merchant { .. }) || has_permission(principal, "api_keys:manage")
-}
 
 async fn rotate_legacy_key(
     state: &AppState,
@@ -372,16 +345,6 @@ async fn sync_legacy_key_row(
         }
     }
 
-    if owner_type == "bank" {
-        if let Some(owner_id) = owner_id {
-            let _ = sqlx::query("UPDATE banks SET api_key = $1, api_key_prefix = $2 WHERE id = $3")
-                .bind(new_hash)
-                .bind(&legacy_prefix)
-                .bind(owner_id)
-                .execute(&state.pg_pool)
-                .await;
-        }
-    }
 }
 
 async fn sync_legacy_key_by_prefix(
@@ -404,14 +367,6 @@ async fn sync_legacy_key_by_prefix(
         .await;
     }
 
-    if owner_type == "bank" {
-        let _ = sqlx::query("UPDATE banks SET api_key = $1, api_key_prefix = $2 WHERE api_key_prefix = $3")
-            .bind(new_hash)
-            .bind(&legacy_prefix)
-            .bind(current_prefix)
-            .execute(&state.pg_pool)
-            .await;
-    }
 }
 
 async fn scalar_count(state: &AppState, query: &str, prefix: &str) -> i64 {
@@ -434,28 +389,18 @@ async fn scalar_count_by_uuid(state: &AppState, query: &str, owner: Uuid) -> i64
         .unwrap_or(0)
 }
 
-fn default_permissions_for_owner(owner_type: &str) -> Vec<String> {
-    match owner_type {
-        "merchant" => vec![
-            "intents:write".to_string(),
-            "intents:read".to_string(),
-            "refunds:write".to_string(),
-            "balance:read".to_string(),
-            "transactions:read".to_string(),
-            "payouts:write".to_string(),
-            "webhooks:manage".to_string(),
-        ],
-        "developer" => vec![
-            "merchant:register".to_string(),
-            "api_keys:manage".to_string(),
-            "dev:docs".to_string(),
-        ],
-        "bank" => vec![
-            "network:read".to_string(),
-            "accounts:read".to_string(),
-        ],
-        _ => vec!["*".to_string()],
-    }
+fn default_permissions_for_owner(_owner_type: &str) -> Vec<String> {
+    vec![
+        "api_keys:manage".to_string(),
+        "dev:docs".to_string(),
+        "balance:read".to_string(),
+        "transactions:read".to_string(),
+        "payouts:write".to_string(),
+        "refunds:write".to_string(),
+        "intents:write".to_string(),
+        "intents:read".to_string(),
+        "webhooks:manage".to_string(),
+    ]
 }
 
 fn api_error(status: StatusCode, message: &str) -> (StatusCode, HeaderMap, Json<Value>) {

@@ -196,12 +196,16 @@ export async function confirmPayment(
 
   // Type-safe request building
   const requestData: ConfirmPaymentIntentRequest = {
+    method: "card",
     card_number: cardData.number.replace(/\s/g, ""),
     expiry_month: cardData.expiryMonth.padStart(2, "0"),
     expiry_year: cardData.expiryYear,
     cvv: cardData.cvv,
     pin: cardData.pin,
     card_holder_name: cardData.holderName,
+    customer_first_name: "John",
+    customer_last_name: "Doe",
+    customer_phone: "+21612345678",
   };
 
   try {
@@ -528,6 +532,9 @@ async function runTypeScriptExamples(): Promise<void> {
 
     // Note: In production, use hosted checkout instead of direct confirmation
     // await confirmPayment(intent.intent_id, testCard);
+
+    // Example wallet payment with OTP
+    // await confirmWalletPayment(intent.intent_id);
 
     // Example refund (would need successful payment first)
     // await createRefund(intent.intent_id, 14950, 'Partial refund requested');

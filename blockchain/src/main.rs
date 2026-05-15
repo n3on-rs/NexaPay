@@ -6,13 +6,15 @@ mod consensus;
 mod crypto;
 mod db;
 mod generator;
-mod scoring;
 mod storage;
+mod services;
 
 use std::env;
 use std::collections::HashMap;
+use std::fs;
 use std::sync::Arc;
 
+use axum::extract::DefaultBodyLimit;
 use axum::http::Method;
 use jwt_simple::prelude::HS256Key;
 use tokio::sync::Mutex;
@@ -26,6 +28,7 @@ use crate::crypto::{address_from_public_key, generate_keypair};
 use crate::db::postgres::{connect, run_migrations};
 use crate::db::sqlite::SqliteState;
 use crate::storage::BlockStorage;
+use crate::services::agent_scorer;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -46,10 +49,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .ok()
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty());
+    let payment_session_minutes = env::var("NEXAPAY_PAYMENT_SESSION_MINUTES")
+        .ok()
+        .and_then(|v| v.parse::<i64>().ok())
+        .unwrap_or(10);
+    let env = env::var("NEXAPAY_ENV")
+        .unwrap_or_else(|_| "sandbox".to_string())
+        .to_lowercase();
 
     let pool = connect(&database_url).await?;
     run_migrations(&pool).await?;
-    let sqlite_state = SqliteState::open("./nexapay_state.sqlite")?;
+    let chain_state_dir =
+        env::var("NEXAPAY_STATE_DIR").unwrap_or_else(|_| "./chain_state".to_string());
+    fs::create_dir_all(&chain_state_dir)?;
+    let sqlite_state = SqliteState::open(&format!("{chain_state_dir}/nexapay_state.sqlite"))?;
 
     let system_private_key = env::var("NEXAPAY_SYSTEM_PRIVATE_KEY").unwrap_or_else(|_| {
         let (sk, _pk) = generate_keypair();
@@ -59,7 +72,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (validator_private_key, validator_public_key) = generate_keypair();
     let validator_address = address_from_public_key(&validator_public_key);
 
-    let storage = BlockStorage::open("./chain_data")?;
+    let chain_data_dir =
+        env::var("NEXAPAY_CHAIN_DATA_DIR").unwrap_or_else(|_| "./chain_data".to_string());
+    fs::create_dir_all(&chain_data_dir)?;
+    let storage = BlockStorage::open(&chain_data_dir)?;
     let chain = Blockchain::new(storage)?;
     let chain = Arc::new(Mutex::new(chain));
 
@@ -69,6 +85,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         validator_private_key.clone(),
         validator_public_key.clone(),
     );
+
+    // Spawn background agent scorer task
+    let pg_pool_clone = pool.clone();
+    let chain_clone = chain.clone();
+    tokio::spawn(async move {
+        agent_scorer::spawn_agent_scorer(pg_pool_clone, chain_clone).await;
+    });
 
     let state = AppState {
         chain,
@@ -88,14 +111,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         twilio_auth_token,
         twilio_phone_number,
         otp_fallback_code,
+        sse_broadcasters: Arc::new(std::sync::RwLock::new(HashMap::new())),
+        env,
+        payment_session_minutes,
     };
 
     let cors = CorsLayer::new()
         .allow_origin(Any)
-        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::PATCH, Method::OPTIONS])
         .allow_headers(Any);
 
-    let app = build_router(state).layer(cors).layer(TraceLayer::new_for_http());
+    let app = build_router(state)
+        .layer(DefaultBodyLimit::max(16 * 1024 * 1024))
+        .layer(cors)
+        .layer(TraceLayer::new_for_http());
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await?;
 
     println!("NexaPay node listening on 0.0.0.0:{port}");

@@ -4,9 +4,6 @@
 
 import { NexaPayClient } from './client';
 import {
-  RegisterMerchantRequest,
-  RegisterMerchantResponse,
-  MerchantStats,
   CreatePaymentIntentRequest,
   PaymentIntent,
   ConfirmPaymentIntentRequest,
@@ -50,33 +47,6 @@ export abstract class BaseResource {
    */
   protected buildPath(endpoint: string = ''): string {
     return `${this.resourcePath}${endpoint}`;
-  }
-}
-
-/**
- * Merchants resource for merchant management
- */
-export class MerchantsResource extends BaseResource {
-  protected readonly resourcePath = '/gateway/v1/merchants';
-
-  /**
-   * Register a new merchant
-   * @param data Merchant registration data
-   * @param options Request options
-   */
-  async register(
-    data: RegisterMerchantRequest,
-    options?: RequestOptions
-  ): Promise<ApiResponse<RegisterMerchantResponse>> {
-    return this.client.post(`${this.resourcePath}/register`, data, options);
-  }
-
-  /**
-   * Get merchant statistics
-   * @param options Request options
-   */
-  async stats(options?: RequestOptions): Promise<ApiResponse<MerchantStats>> {
-    return this.client.get(`${this.resourcePath}/stats`, options);
   }
 }
 

@@ -281,6 +281,27 @@ impl Blockchain {
                 account.tx_count = account.tx_count.saturating_add(1);
                 Ok(())
             }
+            TxType::AgentApply => {
+                // AgentApply is an audit-only transaction recorded when an
+                // application is approved. No change to balances; increment
+                // tx_count on the account if it exists, otherwise create a
+                // minimal Bank account entry so the audit is captured.
+                let account = self
+                    .accounts
+                    .entry(tx.to.clone())
+                    .or_insert(ChainAccount {
+                        address: tx.to.clone(),
+                        public_key: String::new(),
+                        balance: 0,
+                        tx_count: 0,
+                        account_type: AccountType::Bank,
+                        created_at: now_ts(),
+                        is_active: true,
+                        kyc_hash: String::new(),
+                    });
+                account.tx_count = account.tx_count.saturating_add(1);
+                Ok(())
+            }
             TxType::DevRegister => {
                 let account = self
                     .accounts
@@ -307,15 +328,32 @@ impl Blockchain {
                 match tx.tx_type {
                     TxType::Transfer | TxType::LoanRepay => {
                         if tx.from != "SYSTEM" {
-                            if let Some(acc) = self.accounts.get_mut(&tx.from) {
-                                acc.balance = acc.balance.saturating_sub(tx.amount.saturating_add(tx.fee));
-                                acc.tx_count = acc.tx_count.saturating_add(1);
-                            }
+                            let from_entry = self.accounts.entry(tx.from.clone()).or_insert(ChainAccount {
+                                address: tx.from.clone(),
+                                public_key: String::new(),
+                                balance: 0,
+                                tx_count: 0,
+                                account_type: AccountType::User,
+                                created_at: now_ts(),
+                                is_active: true,
+                                kyc_hash: String::new(),
+                            });
+                            from_entry.balance =
+                                from_entry.balance.saturating_sub(tx.amount.saturating_add(tx.fee));
+                            from_entry.tx_count = from_entry.tx_count.saturating_add(1);
                         }
-                        if let Some(acc) = self.accounts.get_mut(&tx.to) {
-                            acc.balance = acc.balance.saturating_add(tx.amount);
-                            acc.tx_count = acc.tx_count.saturating_add(1);
-                        }
+                        let to_entry = self.accounts.entry(tx.to.clone()).or_insert(ChainAccount {
+                            address: tx.to.clone(),
+                            public_key: String::new(),
+                            balance: 0,
+                            tx_count: 0,
+                            account_type: AccountType::User,
+                            created_at: now_ts(),
+                            is_active: true,
+                            kyc_hash: String::new(),
+                        });
+                        to_entry.balance = to_entry.balance.saturating_add(tx.amount);
+                        to_entry.tx_count = to_entry.tx_count.saturating_add(1);
                     }
                     TxType::LoanDisburse | TxType::AccountCreate => {
                         // Ensure account exists when replaying blocks. Previously
@@ -336,14 +374,49 @@ impl Blockchain {
                         entry.balance = entry.balance.saturating_add(tx.amount);
                         entry.tx_count = entry.tx_count.saturating_add(1);
                     }
-                    TxType::BankJoin | TxType::DevRegister => {}
+                    TxType::BankJoin => {
+                        self.accounts.entry(tx.to.clone()).or_insert(ChainAccount {
+                            address: tx.to.clone(),
+                            public_key: String::new(),
+                            balance: 0,
+                            tx_count: 1,
+                            account_type: AccountType::Bank,
+                            created_at: now_ts(),
+                            is_active: true,
+                            kyc_hash: String::new(),
+                        });
+                    }
+                    TxType::AgentApply => {
+                        self.accounts.entry(tx.to.clone()).or_insert(ChainAccount {
+                            address: tx.to.clone(),
+                            public_key: String::new(),
+                            balance: 0,
+                            tx_count: 1,
+                            account_type: AccountType::Bank,
+                            created_at: now_ts(),
+                            is_active: true,
+                            kyc_hash: String::new(),
+                        });
+                    }
+                    TxType::DevRegister => {
+                        self.accounts.entry(tx.to.clone()).or_insert(ChainAccount {
+                            address: tx.to.clone(),
+                            public_key: String::new(),
+                            balance: 0,
+                            tx_count: 1,
+                            account_type: AccountType::Developer,
+                            created_at: now_ts(),
+                            is_active: true,
+                            kyc_hash: String::new(),
+                        });
+                    }
                 }
             }
         }
     }
 }
 
-fn now_ts() -> u64 {
+pub fn now_ts() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())

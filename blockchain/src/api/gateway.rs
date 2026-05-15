@@ -1,47 +1,57 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::Json;
+use chrono::Utc;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sqlx::Row;
 use uuid::Uuid;
 
+use crate::api::auth::{
+    generate_otp_code, hash_otp, is_valid_otp, login_phone_variants, mask_phone_hint, send_otp_sms,
+    verify_pin,
+};
 use crate::api::middleware::{
-    api_principal_kind, auth_error_response, create_structured_api_key, has_permission,
-    log_api_call, permissions_to_csv, require_api_key, try_api_key, ApiPrincipal,
+    auth_error_response, has_permission, log_api_call, require_api_key, try_api_key, ApiPrincipal,
 };
 use crate::api::AppState;
 use crate::crypto::sha256_hex;
 
 #[derive(Debug, Deserialize)]
-pub struct RegisterMerchantRequest {
-    pub name: String,
-    pub business_name: Option<String>,
-    pub support_email: String,
-    pub webhook_url: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
 pub struct CreateIntentRequest {
-    pub amount: u64,
+    pub amount: Option<u64>,
     pub currency: Option<String>,
     pub description: Option<String>,
     pub customer_email: Option<String>,
     pub customer_name: Option<String>,
     pub metadata: Option<Value>,
     pub idempotency_key: Option<String>,
+    pub variable_amount: Option<bool>,
+    pub accepted_methods: Option<Vec<String>>,
+    pub expiry: Option<String>,
+    pub max_usages: Option<i32>,
+    pub order_id: Option<String>,
+    pub checkout_theme: Option<String>,
+    pub success_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct ConfirmIntentRequest {
-    pub card_number: String,
-    pub expiry_month: String,
-    pub expiry_year: String,
-    pub cvv: String,
-    pub pin: Option<String>, // Made optional but no longer required
+    pub method: Option<String>,
+    pub card_number: Option<String>,
+    pub expiry_month: Option<String>,
+    pub expiry_year: Option<String>,
+    pub cvv: Option<String>,
+    pub pin: Option<String>,
     pub card_holder_name: Option<String>,
+    pub phone: Option<String>,
+    pub otp: Option<String>,
+    pub amount: Option<i64>,
+    pub customer_first_name: Option<String>,
+    pub customer_last_name: Option<String>,
+    pub customer_phone: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -63,123 +73,7 @@ pub struct CreateWebhookRequest {
     pub event_types: Option<Vec<String>>,
 }
 
-pub async fn register_merchant(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(payload): Json<RegisterMerchantRequest>,
-) -> Result<Json<Value>, (StatusCode, HeaderMap, Json<Value>)> {
-    let principal = require_api_key(&state, &headers)
-        .await
-        .map_err(|e| auth_error_response(e, "Invalid API key"))?;
-
-    if matches!(principal, ApiPrincipal::Merchant { .. }) {
-        return Err(api_error(
-            StatusCode::FORBIDDEN,
-            "Merchant keys cannot register new merchants",
-        ));
-    }
-
-    if !has_permission(&principal, "merchant:register") {
-        return Err(api_error(
-            StatusCode::FORBIDDEN,
-            "This API key cannot register merchants",
-        ));
-    }
-
-    if payload.name.trim().is_empty() || payload.support_email.trim().is_empty() {
-        return Err(api_error(
-            StatusCode::BAD_REQUEST,
-            "name and support_email are required",
-        ));
-    }
-
-    let merchant_uuid = Uuid::new_v4();
-    let merchant_code = format!("mrc_{}", &sha256_hex(merchant_uuid.as_bytes())[..12]);
-    let owner_type = api_principal_kind(&principal).to_string();
-    let owner_id = crate::api::middleware::api_principal_owner_id(&principal);
-
-    sqlx::query(
-        "INSERT INTO merchants (id, merchant_code, owner_type, owner_id, name, business_name, support_email, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, 'active')",
-    )
-    .bind(merchant_uuid)
-    .bind(&merchant_code)
-    .bind(&owner_type)
-    .bind(owner_id)
-    .bind(&payload.name)
-    .bind(&payload.business_name)
-    .bind(&payload.support_email)
-    .execute(&state.pg_pool)
-    .await
-    .map_err(|e| api_error(StatusCode::BAD_REQUEST, &format!("merchant registration failed: {e}")))?;
-
-    let (merchant_key, merchant_hash, merchant_prefix, checksum) =
-        create_structured_api_key("merchant");
-    let permissions = vec![
-        "intents:write".to_string(),
-        "intents:read".to_string(),
-        "refunds:write".to_string(),
-        "balance:read".to_string(),
-        "transactions:read".to_string(),
-        "payouts:write".to_string(),
-        "webhooks:manage".to_string(),
-        "api_keys:manage".to_string(),
-    ];
-
-    sqlx::query(
-        "INSERT INTO api_keys (owner_type, owner_id, name, key_hash, prefix, checksum, permissions, rate_limit_per_minute, daily_limit, status)
-         VALUES ('merchant', $1, 'primary', $2, $3, $4, $5, 90, 30000, 'active')",
-    )
-    .bind(merchant_uuid)
-    .bind(&merchant_hash)
-    .bind(&merchant_prefix)
-    .bind(&checksum)
-    .bind(permissions_to_csv(&permissions))
-    .execute(&state.pg_pool)
-    .await
-    .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "failed to store merchant API key"))?;
-
-    if let Some(webhook_url) = payload.webhook_url {
-        if !webhook_url.trim().is_empty() {
-            let secret = format!(
-                "whsec_{}",
-                &sha256_hex(format!("{}:{}", merchant_code, now_ts()).as_bytes())[..24]
-            );
-            let event_types = "payment_intent.succeeded,payment_intent.failed,payment_intent.refunded,payout.created";
-            let _ = sqlx::query(
-                "INSERT INTO webhooks (merchant_id, url, event_types, signing_secret, is_active)
-                 VALUES ($1, $2, $3, $4, TRUE)",
-            )
-            .bind(merchant_uuid)
-            .bind(&webhook_url)
-            .bind(event_types)
-            .bind(secret)
-            .execute(&state.pg_pool)
-            .await;
-        }
-    }
-
-    log_api_call(
-        &state,
-        Some(&principal),
-        "/gateway/v1/merchants/register",
-        "POST",
-        200,
-    )
-    .await;
-
-    Ok(Json(json!({
-        "success": true,
-        "merchant_id": merchant_code,
-        "merchant_uuid": merchant_uuid,
-        "api_key": merchant_key,
-        "api_key_prefix": merchant_prefix,
-        "checkout_base_url": format!("{}/checkout", state.portal_base_url),
-        "status": "active"
-    })))
-}
-
-pub async fn merchant_stats(
+pub async fn gateway_stats(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<Value>, (StatusCode, HeaderMap, Json<Value>)> {
@@ -187,7 +81,7 @@ pub async fn merchant_stats(
         .await
         .map_err(|e| auth_error_response(e, "Invalid API key"))?;
 
-    let merchant_id = merchant_id_from_principal(&principal)?;
+    let merchant_id = merchant_id_from_principal(&state, &principal).await?;
 
     let successful = scalar_by_uuid(
         &state,
@@ -267,9 +161,10 @@ pub async fn create_intent(
         ));
     }
 
-    let merchant_id = merchant_id_from_principal(&principal)?;
+    let merchant_id = merchant_id_from_principal(&state, &principal).await?;
 
-    if payload.amount == 0 {
+    let amount = payload.amount.unwrap_or(0);
+    if amount == 0 && payload.amount.is_some() {
         return Err(api_error(
             StatusCode::BAD_REQUEST,
             "Amount must be greater than 0",
@@ -303,7 +198,7 @@ pub async fn create_intent(
                 "currency": currency,
                 "status": status,
                 "description": description,
-                "checkout_url": format!("{}/checkout/{}", state.portal_base_url, intent_id),
+                "checkout_url": format!("{}/checkout/{}", resolve_portal_url(&state, &headers), intent_id),
                 "reused": true
             })));
         }
@@ -318,22 +213,40 @@ pub async fn create_intent(
         .unwrap_or_else(|| "TND".to_string())
         .to_uppercase();
 
+    let variable_amount = payload.variable_amount.unwrap_or(false);
+    let accepted_methods = payload.accepted_methods.unwrap_or_else(|| vec!["wallet".to_string(), "bank_card".to_string()]);
+    let checkout_theme = payload.checkout_theme.unwrap_or_else(|| "dark".to_string());
+    let max_usages = payload.max_usages;
+    let order_id = payload.order_id;
+    let success_url = payload.success_url;
+    let expiry_dt: Option<chrono::DateTime<chrono::Utc>> = payload.expiry.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&chrono::Utc)));
+
     sqlx::query(
-        "INSERT INTO payment_intents (intent_id, merchant_id, amount, currency, status, description, customer_email, customer_name, metadata, idempotency_key, payment_method)
-         VALUES ($1, $2, $3, $4, 'requires_confirmation', $5, $6, $7, $8, $9, 'card')",
+        "INSERT INTO payment_intents (intent_id, merchant_id, amount, currency, status, description, customer_email, customer_name, metadata, idempotency_key, payment_method, variable_amount, accepted_methods, expiry, max_usages, order_id, checkout_theme, success_url)
+         VALUES ($1, $2, $3, $4, 'requires_confirmation', $5, $6, $7, $8, $9, 'card', $10, $11, $12, $13, $14, $15, $16)",
     )
     .bind(&intent_id)
     .bind(merchant_id)
-    .bind(payload.amount as i64)
+    .bind(amount as i64)
     .bind(&currency)
     .bind(payload.description)
     .bind(payload.customer_email)
     .bind(payload.customer_name)
     .bind(payload.metadata)
     .bind(payload.idempotency_key)
+    .bind(variable_amount)
+    .bind(&accepted_methods)
+    .bind(expiry_dt)
+    .bind(max_usages)
+    .bind(&order_id)
+    .bind(&checkout_theme)
+    .bind(&success_url)
     .execute(&state.pg_pool)
     .await
-    .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to create payment intent"))?;
+    .map_err(|e| {
+        eprintln!("CREATE_INTENT_ERROR: {:?}", e);
+        api_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to create payment intent")
+    })?;
 
     log_api_call(&state, Some(&principal), "/gateway/v1/intents", "POST", 200).await;
 
@@ -341,10 +254,11 @@ pub async fn create_intent(
         "success": true,
         "intent_id": intent_id,
         "status": "requires_confirmation",
-        "amount": payload.amount,
+        "amount": amount,
         "currency": currency,
-        "checkout_url": format!("{}/checkout/{}", state.portal_base_url, intent_id),
-        "client_secret": sha256_hex(format!("{}:{}", intent_id, merchant_id).as_bytes())
+        "checkout_url": format!("{}/checkout/{}", resolve_portal_url(&state, &headers), intent_id),
+        "client_secret": sha256_hex(format!("{}:{}", intent_id, merchant_id).as_bytes()),
+        "env": state.env,
     })))
 }
 
@@ -364,7 +278,7 @@ pub async fn get_intent(
         ));
     }
 
-    let merchant_id = merchant_id_from_principal(&principal)?;
+    let merchant_id = merchant_id_from_principal(&state, &principal).await?;
 
     let row = sqlx::query(
         "SELECT intent_id, amount, currency, status, description, customer_email, customer_name, card_last4, card_brand, failure_reason, created_at, confirmed_at
@@ -404,20 +318,167 @@ pub async fn get_intent(
         "failure_reason": row.try_get::<Option<String>, _>("failure_reason").ok().flatten(),
         "created_at": row.try_get::<chrono::DateTime<chrono::Utc>, _>("created_at").map(|v| v.to_rfc3339()).ok(),
         "confirmed_at": row.try_get::<Option<chrono::DateTime<chrono::Utc>>, _>("confirmed_at").ok().flatten().map(|v| v.to_rfc3339()),
-        "checkout_url": format!("{}/checkout/{}", state.portal_base_url, intent_id),
+        "checkout_url": format!("{}/checkout/{}", resolve_portal_url(&state, &headers), intent_id),
         "client_secret": sha256_hex(format!("{}:{}", intent_id, merchant_id).as_bytes())
+    })))
+}
+
+pub async fn delete_intent(
+    State(state): State<AppState>,
+    Path(intent_id): Path<String>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, (StatusCode, HeaderMap, Json<Value>)> {
+    let principal = require_api_key(&state, &headers)
+        .await
+        .map_err(|e| auth_error_response(e, "Invalid API key"))?;
+
+    if !has_permission(&principal, "intents:write") {
+        return Err(api_error(
+            StatusCode::FORBIDDEN,
+            "This key cannot delete intents",
+        ));
+    }
+
+    let merchant_id = merchant_id_from_principal(&state, &principal).await?;
+
+    let result = sqlx::query(
+        "DELETE FROM payment_intents WHERE intent_id = $1 AND merchant_id = $2"
+    )
+    .bind(&intent_id)
+    .bind(merchant_id)
+    .execute(&state.pg_pool)
+    .await
+    .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Database error"))?;
+
+    if result.rows_affected() == 0 {
+        return Err(api_error(StatusCode::NOT_FOUND, "Payment intent not found"));
+    }
+
+    log_api_call(&state, Some(&principal), "/gateway/v1/intents/:intent_id", "DELETE", 200).await;
+
+    Ok(Json(json!({
+        "success": true,
+        "deleted": intent_id,
+        "env": state.env,
+    })))
+}
+
+pub async fn create_session(
+    State(state): State<AppState>,
+    Path(intent_id): Path<String>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, (StatusCode, HeaderMap, Json<Value>)> {
+    let row = sqlx::query(
+        "SELECT intent_id, merchant_id, amount, currency, description, customer_email, customer_name, variable_amount, accepted_methods, max_usages, order_id, checkout_theme, success_url
+         FROM payment_intents
+         WHERE intent_id = $1 LIMIT 1",
+    )
+    .bind(&intent_id)
+    .fetch_optional(&state.pg_pool)
+    .await
+    .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Database error"))?;
+
+    let row = match row {
+        Some(r) => r,
+        None => return Err(api_error(StatusCode::NOT_FOUND, "Payment link not found")),
+    };
+
+    let merchant_id: Uuid = row
+        .try_get("merchant_id")
+        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Invalid merchant"))?;
+    let amount: i64 = row.try_get::<i64, _>("amount").unwrap_or(0);
+    let currency: String = row
+        .try_get::<String, _>("currency")
+        .unwrap_or_else(|_| "TND".to_string());
+    let description: Option<String> = row.try_get("description").ok();
+    let variable_amount: bool = row.try_get::<bool, _>("variable_amount").unwrap_or(false);
+    let accepted_methods: Vec<String> = row
+        .try_get::<Vec<String>, _>("accepted_methods")
+        .unwrap_or_else(|_| vec!["wallet".to_string(), "bank_card".to_string()]);
+    let max_usages: Option<i32> = row.try_get("max_usages").ok().flatten();
+    let order_id: Option<String> = row.try_get("order_id").ok().flatten();
+    let checkout_theme: String = row
+        .try_get::<String, _>("checkout_theme")
+        .unwrap_or_else(|_| "dark".to_string());
+    let success_url: Option<String> = row.try_get("success_url").ok().flatten();
+    let customer_email: Option<String> = row.try_get("customer_email").ok().flatten();
+    let customer_name: Option<String> = row.try_get("customer_name").ok().flatten();
+
+    let new_intent_id = format!(
+        "pi_{}",
+        &sha256_hex(format!("{}:{}", Uuid::new_v4(), now_ts()).as_bytes())[..16]
+    );
+
+    sqlx::query(
+        "INSERT INTO payment_intents (intent_id, merchant_id, amount, currency, status, description, customer_email, customer_name, payment_method, variable_amount, accepted_methods, max_usages, order_id, checkout_theme, success_url, parent_intent_id)
+         VALUES ($1, $2, $3, $4, 'requires_confirmation', $5, $6, $7, 'card', $8, $9, $10, $11, $12, $13, $14)",
+    )
+    .bind(&new_intent_id)
+    .bind(merchant_id)
+    .bind(amount)
+    .bind(&currency)
+    .bind(&description)
+    .bind(&customer_email)
+    .bind(&customer_name)
+    .bind(variable_amount)
+    .bind(&accepted_methods)
+    .bind(max_usages)
+    .bind(&order_id)
+    .bind(&checkout_theme)
+    .bind(&success_url)
+    .bind(&intent_id)
+    .execute(&state.pg_pool)
+    .await
+    .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to create session"))?;
+
+    let merchant_name: String = sqlx::query(
+        "SELECT COALESCE(ap.business_name, d.email) as name
+         FROM developers d
+         LEFT JOIN agent_profiles ap ON ap.user_address = d.owner_user_address
+         WHERE d.id = $1 LIMIT 1"
+    )
+    .bind(merchant_id)
+    .fetch_optional(&state.pg_pool)
+    .await
+    .ok()
+    .flatten()
+    .and_then(|r| r.try_get::<String, _>("name").ok())
+    .unwrap_or_else(|| "NexaPay Merchant".to_string());
+
+    let portal_url = resolve_portal_url(&state, &headers);
+
+    Ok(Json(json!({
+        "success": true,
+        "intent_id": new_intent_id,
+        "parent_intent_id": intent_id,
+        "amount": amount,
+        "currency": currency,
+        "status": "requires_confirmation",
+        "description": description,
+        "variable_amount": variable_amount,
+        "accepted_methods": accepted_methods,
+        "checkout_url": format!("{}/checkout/{}", portal_url, new_intent_id),
+        "agent_name": merchant_name,
+        "customer_email": customer_email,
+        "customer_name": customer_name,
+        "created_at": chrono::Utc::now().to_rfc3339(),
+        "env": state.env,
     })))
 }
 
 pub async fn get_intent_public(
     State(state): State<AppState>,
     Path(intent_id): Path<String>,
+    headers: HeaderMap,
 ) -> Result<Json<Value>, (StatusCode, HeaderMap, Json<Value>)> {
     let row = sqlx::query(
-        "SELECT p.intent_id, p.amount, p.currency, p.status, p.description, p.customer_email, p.customer_name, p.card_last4, p.card_brand, p.created_at, p.confirmed_at, m.name as merchant_name, m.business_name
-         FROM payment_intents p
-         JOIN merchants m ON p.merchant_id = m.id
-         WHERE p.intent_id = $1 LIMIT 1",
+        "SELECT intent_id, merchant_id, amount, currency, status, description,
+                customer_email, customer_name, card_last4, card_brand,
+                created_at, confirmed_at, variable_amount, accepted_methods,
+                expiry, max_usages, used_count, order_id, checkout_theme,
+                success_url
+         FROM payment_intents
+         WHERE intent_id = $1 LIMIT 1",
     )
     .bind(&intent_id)
     .fetch_optional(&state.pg_pool)
@@ -429,12 +490,32 @@ pub async fn get_intent_public(
         None => return Err(api_error(StatusCode::NOT_FOUND, "Payment intent not found")),
     };
 
+    let merchant_id: Uuid = row
+        .try_get("merchant_id")
+        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Invalid merchant"))?;
+
+    let merchant_name: String = sqlx::query(
+        "SELECT COALESCE(ap.business_name, d.email) as name
+         FROM developers d
+         LEFT JOIN agent_profiles ap ON ap.user_address = d.owner_user_address
+         WHERE d.id = $1 LIMIT 1"
+    )
+    .bind(merchant_id)
+    .fetch_optional(&state.pg_pool)
+    .await
+    .ok()
+    .flatten()
+    .and_then(|r| r.try_get::<String, _>("name").ok())
+    .unwrap_or_else(|| "NexaPay Merchant".to_string());
+
+    let status: String = row.try_get::<String, _>("status").unwrap_or_else(|_| "unknown".to_string());
+
     Ok(Json(json!({
         "success": true,
         "intent_id": row.try_get::<String, _>("intent_id").unwrap_or_default(),
         "amount": row.try_get::<i64, _>("amount").unwrap_or(0),
         "currency": row.try_get::<String, _>("currency").unwrap_or_else(|_| "TND".to_string()),
-        "status": row.try_get::<String, _>("status").unwrap_or_else(|_| "unknown".to_string()),
+        "status": status,
         "description": row.try_get::<Option<String>, _>("description").ok().flatten(),
         "customer_email": row.try_get::<Option<String>, _>("customer_email").ok().flatten(),
         "customer_name": row.try_get::<Option<String>, _>("customer_name").ok().flatten(),
@@ -442,9 +523,72 @@ pub async fn get_intent_public(
         "card_brand": row.try_get::<Option<String>, _>("card_brand").ok().flatten(),
         "created_at": row.try_get::<chrono::DateTime<chrono::Utc>, _>("created_at").map(|v| v.to_rfc3339()).ok(),
         "confirmed_at": row.try_get::<Option<chrono::DateTime<chrono::Utc>>, _>("confirmed_at").ok().flatten().map(|v| v.to_rfc3339()),
-        "merchant_name": row.try_get::<String, _>("merchant_name").unwrap_or_default(),
-        "business_name": row.try_get::<Option<String>, _>("business_name").ok().flatten(),
-        "checkout_url": format!("{}/checkout/{}", state.portal_base_url, intent_id),
+        "variable_amount": row.try_get::<bool, _>("variable_amount").unwrap_or(false),
+        "accepted_methods": row.try_get::<Vec<String>, _>("accepted_methods").unwrap_or_else(|_| vec!["wallet".to_string(), "bank_card".to_string()]),
+        "expiry": row.try_get::<Option<chrono::DateTime<chrono::Utc>>, _>("expiry").ok().flatten().map(|v| v.to_rfc3339()),
+        "max_usages": row.try_get::<Option<i32>, _>("max_usages").ok().flatten(),
+        "used_count": row.try_get::<i32, _>("used_count").unwrap_or(0),
+        "order_id": row.try_get::<Option<String>, _>("order_id").ok().flatten(),
+        "checkout_theme": row.try_get::<String, _>("checkout_theme").unwrap_or_else(|_| "dark".to_string()),
+        "success_url": row.try_get::<Option<String>, _>("success_url").ok().flatten(),
+        "agent_name": merchant_name,
+        "checkout_url": format!("{}/checkout/{}", resolve_portal_url(&state, &headers), intent_id),
+        "env": state.env,
+    })))
+}
+
+pub async fn list_intents(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, (StatusCode, HeaderMap, Json<Value>)> {
+    let principal = require_api_key(&state, &headers)
+        .await
+        .map_err(|e| auth_error_response(e, "Invalid API key"))?;
+
+    let merchant_id = merchant_id_from_principal(&state, &principal).await?;
+
+    let rows = sqlx::query(
+        "SELECT id, intent_id, amount, currency, status, description, customer_email, customer_name, card_last4, card_brand, failure_reason, created_at, confirmed_at, used_count, max_usages
+         FROM payment_intents
+         WHERE merchant_id = $1 AND parent_intent_id IS NULL AND created_at > NOW() - INTERVAL '30 days'
+         ORDER BY created_at DESC
+         LIMIT 100",
+    )
+    .bind(merchant_id)
+    .fetch_all(&state.pg_pool)
+    .await
+    .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Database error"))?;
+
+    let intents: Vec<Value> = rows
+        .into_iter()
+        .map(|row| {
+            let intent_id = row.try_get::<String, _>("intent_id").unwrap_or_default();
+            json!({
+                "id": row.try_get::<String, _>("id").unwrap_or_default(),
+                "intent_id": intent_id,
+                "amount": row.try_get::<i64, _>("amount").unwrap_or(0),
+                "currency": row.try_get::<String, _>("currency").unwrap_or_else(|_| "TND".to_string()),
+                "status": row.try_get::<String, _>("status").unwrap_or_else(|_| "unknown".to_string()),
+                "description": row.try_get::<Option<String>, _>("description").ok().flatten(),
+                "customer_email": row.try_get::<Option<String>, _>("customer_email").ok().flatten(),
+                "customer_name": row.try_get::<Option<String>, _>("customer_name").ok().flatten(),
+                "card_last4": row.try_get::<Option<String>, _>("card_last4").ok().flatten(),
+                "card_brand": row.try_get::<Option<String>, _>("card_brand").ok().flatten(),
+                "failure_reason": row.try_get::<Option<String>, _>("failure_reason").ok().flatten(),
+                "created_at": row.try_get::<chrono::DateTime<chrono::Utc>, _>("created_at").map(|v| v.to_rfc3339()).ok(),
+                "confirmed_at": row.try_get::<Option<chrono::DateTime<chrono::Utc>>, _>("confirmed_at").ok().flatten().map(|v| v.to_rfc3339()),
+                "used_count": row.try_get::<i32, _>("used_count").unwrap_or(0),
+                "max_usages": row.try_get::<Option<i32>, _>("max_usages").ok().flatten(),
+                "pay_url": format!("{}/checkout/{}", resolve_portal_url(&state, &headers), intent_id),
+            })
+        })
+        .collect();
+
+    log_api_call(&state, Some(&principal), "/gateway/v1/intents", "GET", 200).await;
+
+    Ok(Json(json!({
+        "success": true,
+        "intents": intents,
     })))
 }
 
@@ -484,6 +628,13 @@ pub async fn confirm_intent(
     let status: String = row
         .try_get("status")
         .unwrap_or_else(|_| "requires_confirmation".to_string());
+    let variable_amount: bool = row.try_get::<bool, _>("variable_amount").unwrap_or(false);
+    let db_amount: i64 = row.try_get::<i64, _>("amount").unwrap_or(0);
+    let final_amount = if variable_amount {
+        payload.amount.unwrap_or(db_amount)
+    } else {
+        db_amount
+    };
     let created_at: chrono::DateTime<chrono::Utc> = row.try_get("created_at").map_err(|_| {
         api_error(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -491,8 +642,8 @@ pub async fn confirm_intent(
         )
     })?;
 
-    if chrono::Utc::now() > created_at + chrono::Duration::minutes(10) {
-        // Mark as failed if it's expired, or just return an error
+    let session_limit = chrono::Duration::minutes(state.payment_session_minutes);
+    if chrono::Utc::now() > created_at + session_limit {
         let _ = sqlx::query(
             "UPDATE payment_intents SET status = 'failed', failure_reason = 'session_expired', updated_at = NOW() WHERE id = $1"
         )
@@ -502,23 +653,8 @@ pub async fn confirm_intent(
 
         return Err(api_error(
             StatusCode::BAD_REQUEST,
-            "Payment session has expired (10 minutes limit).",
+            &format!("Payment session has expired ({} minutes limit).", state.payment_session_minutes),
         ));
-    }
-
-    if let Some(principal) = optional_principal.as_ref() {
-        if let ApiPrincipal::Merchant {
-            merchant_id: principal_merchant,
-            ..
-        } = principal
-        {
-            if principal_merchant != &merchant_id {
-                return Err(api_error(
-                    StatusCode::FORBIDDEN,
-                    "Intent does not belong to this merchant",
-                ));
-            }
-        }
     }
 
     if status == "succeeded" {
@@ -526,7 +662,7 @@ pub async fn confirm_intent(
             "success": true,
             "intent_id": intent_id,
             "status": status,
-            "redirect_url": format!("{}/payment/success?intent_id={}&status=succeeded", state.portal_base_url, intent_id)
+            "redirect_url": format!("{}/payment/success?intent_id={}&status=succeeded", resolve_portal_url(&state, &headers), intent_id)
         })));
     }
 
@@ -537,56 +673,223 @@ pub async fn confirm_intent(
         ));
     }
 
-    let card_number_clean = payload.card_number.replace(' ', "");
-    let card_valid = is_luhn_valid(&card_number_clean) && payload.cvv.len() >= 3;
+    let (approved, failure_reason, card_last4, card_brand, auto_first_name, auto_last_name) = if payload.method.as_deref() == Some("wallet") {
+        let phone = payload.phone.as_deref().unwrap_or("").trim();
+        let pin = payload.pin.as_deref().unwrap_or("").trim();
 
-    let card_last4 = card_number_clean
-        .chars()
-        .rev()
-        .take(4)
-        .collect::<String>()
-        .chars()
-        .rev()
-        .collect::<String>();
+        if phone.is_empty() || pin.is_empty() {
+            return Err(api_error(StatusCode::BAD_REQUEST, "Phone and PIN are required for wallet payment"));
+        }
 
-    let card_brand = if card_number_clean.starts_with('4') {
-        "visa"
-    } else if card_number_clean.starts_with('5') {
-        "mastercard"
+        let (n11, n8) = login_phone_variants(phone).ok_or_else(|| {
+            api_error(StatusCode::BAD_REQUEST, "Invalid phone (8 digits or +216 / 216 prefix)")
+        })?;
+
+        let user_row = sqlx::query(
+            "SELECT chain_address, cin, phone, full_name FROM users WHERE phone = $1 OR phone = $2 LIMIT 1",
+        )
+        .bind(&n11)
+        .bind(&n8)
+        .fetch_optional(&state.pg_pool)
+        .await
+        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Database error"))?;
+
+        let user_row = match user_row {
+            Some(r) => r,
+            None => return Err(api_error(StatusCode::UNAUTHORIZED, "Account not found")),
+        };
+
+        let chain_address: String = user_row
+            .try_get("chain_address")
+            .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Invalid row data"))?;
+        let cin: String = user_row
+            .try_get("cin")
+            .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Invalid row data"))?;
+        let user_phone: String = user_row
+            .try_get("phone")
+            .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Invalid row data"))?;
+        let user_full_name: String = user_row
+            .try_get("full_name")
+            .unwrap_or_else(|_| String::new());
+
+        if let Some(otp_code) = payload.otp.as_deref() {
+            // Step 2: verify OTP
+            if !is_valid_otp(otp_code) {
+                return Err(api_error(StatusCode::BAD_REQUEST, "OTP must be 6 digits"));
+            }
+
+            let otp_row = sqlx::query(
+                "SELECT id, otp_hash, expires_at, used FROM login_otps WHERE user_address = $1 AND used = FALSE ORDER BY created_at DESC LIMIT 1",
+            )
+            .bind(&chain_address)
+            .fetch_optional(&state.pg_pool)
+            .await
+            .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Database error"))?;
+
+            let otp_row = match otp_row {
+                Some(r) => r,
+                None => return Err(api_error(StatusCode::UNAUTHORIZED, "Invalid or expired OTP")),
+            };
+
+            let otp_id: Uuid = otp_row
+                .try_get("id")
+                .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Invalid row data"))?;
+            let stored_hash: String = otp_row
+                .try_get("otp_hash")
+                .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Invalid row data"))?;
+            let expires_at: chrono::DateTime<chrono::Utc> = otp_row
+                .try_get("expires_at")
+                .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Invalid row data"))?;
+            let used: bool = otp_row
+                .try_get("used")
+                .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Invalid row data"))?;
+
+            if used || Utc::now() > expires_at {
+                return Err(api_error(StatusCode::UNAUTHORIZED, "Invalid or expired OTP"));
+            }
+
+            let provided_hash = hash_otp(&cin, otp_code, &state.encryption_key);
+            if stored_hash != provided_hash {
+                return Err(api_error(StatusCode::UNAUTHORIZED, "Invalid OTP"));
+            }
+
+            let _ = sqlx::query("UPDATE login_otps SET used = TRUE WHERE id = $1")
+                .bind(otp_id)
+                .execute(&state.pg_pool)
+                .await;
+
+            let name_parts: Vec<&str> = user_full_name.split_whitespace().collect();
+            let auto_first = name_parts.first().map(|s| s.to_string());
+            let auto_last = if name_parts.len() > 1 { name_parts.last().map(|s| s.to_string()) } else { None };
+
+            (true, None, "••••".to_string(), "wallet", auto_first, auto_last)
+        } else {
+            // Step 1: verify PIN, then send OTP
+            verify_pin(&state, &chain_address, pin).await.map_err(|(s, j)| (s, HeaderMap::new(), j))?;
+
+            let otp = generate_otp_code();
+            let otp_hash = hash_otp(&cin, &otp, &state.encryption_key);
+            let expires_at = Utc::now() + chrono::Duration::minutes(5);
+
+            sqlx::query(
+                "INSERT INTO login_otps (user_address, otp_hash, expires_at) VALUES ($1, $2, $3)",
+            )
+            .bind(&chain_address)
+            .bind(&otp_hash)
+            .bind(expires_at)
+            .execute(&state.pg_pool)
+            .await
+            .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to save OTP"))?;
+
+            let _ = send_otp_sms(&state, &user_phone, &otp).await;
+
+            let mut dev_otp: Option<String> = None;
+            let app_env = std::env::var("APP_ENV").unwrap_or_default();
+            let dev_show = std::env::var("DEV_SHOW_OTP").unwrap_or_default();
+            if app_env == "development" || dev_show == "true" {
+                dev_otp = Some(otp.clone());
+                println!("[dev] wallet payment OTP for {} is {}", cin, otp);
+            }
+
+            log_api_call(&state, optional_principal.as_ref(), "/gateway/v1/intents/:intent_id/confirm", "POST", 200).await;
+
+            return Ok(Json(json!({
+                "success": true,
+                "step": "otp_required",
+                "phone_hint": mask_phone_hint(&user_phone),
+                "dev_otp": dev_otp,
+                "intent_id": intent_id,
+            })));
+        }
     } else {
-        "unknown"
-    };
+        // Card payment flow
+        let card_number_clean = payload.card_number.as_deref().unwrap_or("").replace(' ', "");
+        let cvv = payload.cvv.as_deref().unwrap_or("");
+        let card_valid = is_luhn_valid(&card_number_clean) && cvv.len() >= 3;
 
-    let test_card_result = evaluate_test_card(&card_number_clean, payload.pin.as_deref());
-    let approved = test_card_result.unwrap_or(
-        card_valid
-            && card_number_clean.len() >= 15
-            && payload
-                .expiry_month
-                .parse::<u32>()
-                .ok()
-                .map(|m| (1..=12).contains(&m))
-                .unwrap_or(false)
-            && payload.expiry_year.len() == 4
-            && payload
-                .card_holder_name
-                .clone()
-                .unwrap_or_default()
-                .trim()
-                .len()
-                >= 3,
-    );
+        let card_last4 = card_number_clean
+            .chars()
+            .rev()
+            .take(4)
+            .collect::<String>()
+            .chars()
+            .rev()
+            .collect::<String>();
+
+        let card_brand = if card_number_clean.starts_with('4') {
+            "visa"
+        } else if card_number_clean.starts_with('5') {
+            "mastercard"
+        } else {
+            "unknown"
+        };
+
+        let (approved, failure_reason) = if state.env == "sandbox" {
+            let test_card = sqlx::query(
+                "SELECT behavior FROM sandbox_test_cards WHERE number = $1 LIMIT 1"
+            )
+            .bind(&card_number_clean)
+            .fetch_optional(&state.pg_pool)
+            .await
+            .ok()
+            .flatten();
+
+            match test_card {
+                Some(tc) => {
+                    let behavior: String = tc.try_get("behavior").unwrap_or_else(|_| "declined".to_string());
+                    match behavior.as_str() {
+                        "success" => (true, None),
+                        "declined" => (false, Some("card_declined")),
+                        "insufficient_funds" => (false, Some("insufficient_funds")),
+                        _ => (false, Some("card_declined")),
+                    }
+                }
+                None => {
+                    return Err((
+                        StatusCode::BAD_REQUEST,
+                        HeaderMap::new(),
+                        Json(json!({
+                            "success": false,
+                            "error": "INVALID_TEST_CARD",
+                            "message": "In sandbox mode, only test cards are accepted.",
+                            "env": state.env,
+                        }))
+                    ));
+                }
+            }
+        } else {
+            let test_card_result = evaluate_test_card(&card_number_clean, payload.pin.as_deref());
+            let expiry_month = payload.expiry_month.as_deref().unwrap_or("");
+            let expiry_year = payload.expiry_year.as_deref().unwrap_or("");
+            let card_holder_name = payload.card_holder_name.as_deref().unwrap_or("");
+            let app = test_card_result.unwrap_or(
+                card_valid
+                    && card_number_clean.len() >= 15
+                    && expiry_month.parse::<u32>().ok().map(|m| (1..=12).contains(&m)).unwrap_or(false)
+                    && expiry_year.len() == 4
+                    && card_holder_name.trim().len() >= 3,
+            );
+            let fr = if app {
+                None
+            } else {
+                if test_card_result == Some(false) {
+                    Some("test_card_forced_decline")
+                } else {
+                    Some("card_validation_failed_or_pin_declined")
+                }
+            };
+            (app, fr)
+        };
+        (approved, failure_reason, card_last4, card_brand, None, None)
+    };
 
     let final_status = if approved { "succeeded" } else { "failed" };
-    let failure_reason = if approved {
-        None
-    } else {
-        if test_card_result == Some(false) {
-            Some("test_card_forced_decline")
-        } else {
-            Some("card_validation_failed_or_pin_declined")
-        }
-    };
+
+    let customer_first_name = payload.customer_first_name.as_ref().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+        .or(auto_first_name);
+    let customer_last_name = payload.customer_last_name.as_ref().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+        .or(auto_last_name);
+    let customer_phone = payload.customer_phone.as_ref().map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
 
     sqlx::query(
         "UPDATE payment_intents
@@ -594,19 +897,42 @@ pub async fn confirm_intent(
              card_last4 = $2,
              card_brand = $3,
              failure_reason = $4,
+             amount = $5,
              confirm_attempts = confirm_attempts + 1,
+             used_count = CASE WHEN $1 = 'succeeded' THEN used_count + 1 ELSE used_count END,
              confirmed_at = CASE WHEN $1 = 'succeeded' THEN NOW() ELSE confirmed_at END,
+             customer_first_name = COALESCE($7, customer_first_name),
+             customer_last_name = COALESCE($8, customer_last_name),
+             customer_phone = COALESCE($9, customer_phone),
              updated_at = NOW()
-         WHERE id = $5",
+         WHERE id = $6",
     )
     .bind(final_status)
     .bind(card_last4)
     .bind(card_brand)
     .bind(failure_reason)
+    .bind(final_amount)
     .bind(intent_uuid)
+    .bind(&customer_first_name)
+    .bind(&customer_last_name)
+    .bind(&customer_phone)
     .execute(&state.pg_pool)
     .await
     .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to update intent"))?;
+
+    // Also increment parent intent used_count if this is a session
+    if approved {
+        let _ = sqlx::query(
+            "UPDATE payment_intents
+             SET used_count = used_count + 1,
+                 updated_at = NOW()
+             WHERE intent_id = (SELECT parent_intent_id FROM payment_intents WHERE id = $1)
+               AND parent_intent_id IS NULL"
+        )
+        .bind(intent_uuid)
+        .execute(&state.pg_pool)
+        .await;
+    }
 
     let event_type = if approved {
         "payment_intent.succeeded"
@@ -619,13 +945,37 @@ pub async fn confirm_intent(
         "event": event_type,
         "status": final_status,
         "merchant_id": merchant_id,
-        "amount": row.try_get::<i64, _>("amount").unwrap_or(0),
+        "amount": final_amount,
         "currency": row.try_get::<String, _>("currency").unwrap_or_else(|_| "TND".to_string()),
         "description": row.try_get::<Option<String>, _>("description").ok().flatten(),
         "customer_email": row.try_get::<Option<String>, _>("customer_email").ok().flatten()
     });
 
     dispatch_webhooks(&state, merchant_id, event_type, payload_json).await;
+
+    // SSE notification to agent dashboard
+    if approved {
+        if let Ok(Some(dev_row)) = sqlx::query(
+            "SELECT user_address FROM developers WHERE id = $1 LIMIT 1"
+        )
+        .bind(merchant_id)
+        .fetch_optional(&state.pg_pool)
+        .await
+        {
+            if let Ok(addr) = dev_row.try_get::<String, _>("user_address") {
+                let event = json!({
+                    "type": "payment_intent.succeeded",
+                    "intent_id": intent_id,
+                    "amount": final_amount,
+                    "currency": row.try_get::<String, _>("currency").unwrap_or_else(|_| "TND".to_string()),
+                    "description": row.try_get::<Option<String>, _>("description").ok().flatten(),
+                    "customer_email": row.try_get::<Option<String>, _>("customer_email").ok().flatten(),
+                    "timestamp": chrono::Utc::now().to_rfc3339(),
+                });
+                crate::api::accounts::broadcast_event(&state, &addr, &event.to_string());
+            }
+        }
+    }
 
     let endpoint = "/gateway/v1/intents/:intent_id/confirm";
     log_api_call(
@@ -644,7 +994,8 @@ pub async fn confirm_intent(
         "intent_id": intent_id,
         "status": final_status,
         "failure_reason": failure_reason,
-        "redirect_url": format!("{}/payment/success?intent_id={}&status={}", state.portal_base_url, intent_id, redirect_status)
+        "env": state.env,
+        "redirect_url": format!("{}/payment/success?intent_id={}&status={}", resolve_portal_url(&state, &headers), intent_id, redirect_status)
     })))
 }
 
@@ -664,7 +1015,7 @@ pub async fn create_refund(
         ));
     }
 
-    let merchant_id = merchant_id_from_principal(&principal)?;
+    let merchant_id = merchant_id_from_principal(&state, &principal).await?;
 
     let row = sqlx::query(
         "SELECT id, amount, status FROM payment_intents WHERE intent_id = $1 AND merchant_id = $2 LIMIT 1",
@@ -794,7 +1145,7 @@ pub async fn gateway_balance(
         ));
     }
 
-    let merchant_id = merchant_id_from_principal(&principal)?;
+    let merchant_id = merchant_id_from_principal(&state, &principal).await?;
 
     let gross = sum_amount_by_uuid(
         &state,
@@ -835,9 +1186,17 @@ pub async fn gateway_balance(
     })))
 }
 
+#[derive(Debug, Deserialize)]
+pub struct TransactionsQuery {
+    pub status: Option<String>,
+    pub page: Option<i64>,
+    pub limit: Option<i64>,
+}
+
 pub async fn gateway_transactions(
     State(state): State<AppState>,
     headers: HeaderMap,
+    Query(query): Query<TransactionsQuery>,
 ) -> Result<Json<Value>, (StatusCode, HeaderMap, Json<Value>)> {
     let principal = require_api_key(&state, &headers)
         .await
@@ -852,23 +1211,49 @@ pub async fn gateway_transactions(
         ));
     }
 
-    let merchant_id = merchant_id_from_principal(&principal)?;
+    let merchant_id = merchant_id_from_principal(&state, &principal).await?;
 
-    let intents_rows = sqlx::query(
-        "SELECT intent_id, amount, currency, status, description, created_at
+    let page = query.page.unwrap_or(1).max(1);
+    let limit = query.limit.unwrap_or(20).clamp(1, 100);
+    let offset = (page - 1) * limit;
+
+    let status_filter = query.status.as_deref().map(|s| s.to_lowercase());
+    let status_clause = match status_filter.as_deref() {
+        Some("confirmed") => "AND status IN ('succeeded', 'confirmed')",
+        Some("pending") => "AND status = 'pending'",
+        Some("refunded") => "AND status = 'refunded'",
+        Some("failed") => "AND status = 'failed'",
+        _ => "",
+    };
+
+    let sql = format!(
+        "SELECT intent_id, amount, currency, status, description, created_at,
+                customer_first_name, customer_last_name, customer_phone,
+                card_last4, card_brand
          FROM payment_intents
-         WHERE merchant_id = $1
+         WHERE merchant_id = $1 AND status != 'requires_confirmation' {}
          ORDER BY created_at DESC
-         LIMIT 50",
-    )
-    .bind(merchant_id)
-    .fetch_all(&state.pg_pool)
-    .await
-    .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Database error"))?;
+         LIMIT {} OFFSET {}",
+        status_clause, limit, offset
+    );
+
+    let intents_rows = sqlx::query(&sql)
+        .bind(merchant_id)
+        .fetch_all(&state.pg_pool)
+        .await
+        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Database error"))?;
 
     let intents = intents_rows
         .into_iter()
         .map(|row| {
+            let first = row.try_get::<Option<String>, _>("customer_first_name").ok().flatten();
+            let last = row.try_get::<Option<String>, _>("customer_last_name").ok().flatten();
+            let name = match (first, last) {
+                (Some(f), Some(l)) => Some(format!("{} {}", f, l)),
+                (Some(f), None) => Some(f),
+                (None, Some(l)) => Some(l),
+                _ => None,
+            };
             json!({
                 "type": "intent",
                 "id": row.try_get::<String, _>("intent_id").unwrap_or_default(),
@@ -876,33 +1261,11 @@ pub async fn gateway_transactions(
                 "currency": row.try_get::<String, _>("currency").unwrap_or_else(|_| "TND".to_string()),
                 "status": row.try_get::<String, _>("status").unwrap_or_else(|_| "unknown".to_string()),
                 "description": row.try_get::<Option<String>, _>("description").ok().flatten(),
-                "created_at": row.try_get::<chrono::DateTime<chrono::Utc>, _>("created_at").map(|d| d.to_rfc3339()).ok()
-            })
-        })
-        .collect::<Vec<_>>();
-
-    let refunds_rows = sqlx::query(
-        "SELECT refund_id, amount, status, reason, created_at
-         FROM refunds
-         WHERE merchant_id = $1
-         ORDER BY created_at DESC
-         LIMIT 50",
-    )
-    .bind(merchant_id)
-    .fetch_all(&state.pg_pool)
-    .await
-    .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Database error"))?;
-
-    let refunds = refunds_rows
-        .into_iter()
-        .map(|row| {
-            json!({
-                "type": "refund",
-                "id": row.try_get::<String, _>("refund_id").unwrap_or_default(),
-                "amount": row.try_get::<i64, _>("amount").unwrap_or(0),
-                "status": row.try_get::<String, _>("status").unwrap_or_else(|_| "unknown".to_string()),
-                "reason": row.try_get::<Option<String>, _>("reason").ok().flatten(),
-                "created_at": row.try_get::<chrono::DateTime<chrono::Utc>, _>("created_at").map(|d| d.to_rfc3339()).ok()
+                "created_at": row.try_get::<chrono::DateTime<chrono::Utc>, _>("created_at").map(|d| d.to_rfc3339()).ok(),
+                "customer_name": name,
+                "customer_phone": row.try_get::<Option<String>, _>("customer_phone").ok().flatten(),
+                "card_last4": row.try_get::<Option<String>, _>("card_last4").ok().flatten(),
+                "card_brand": row.try_get::<Option<String>, _>("card_brand").ok().flatten(),
             })
         })
         .collect::<Vec<_>>();
@@ -919,7 +1282,8 @@ pub async fn gateway_transactions(
     Ok(Json(json!({
         "success": true,
         "intents": intents,
-        "refunds": refunds
+        "page": page,
+        "limit": limit,
     })))
 }
 
@@ -939,7 +1303,7 @@ pub async fn gateway_payout(
         ));
     }
 
-    let merchant_id = merchant_id_from_principal(&principal)?;
+    let merchant_id = merchant_id_from_principal(&state, &principal).await?;
 
     if payload.amount == 0 || payload.destination.trim().is_empty() {
         return Err(api_error(
@@ -1031,7 +1395,7 @@ pub async fn create_webhook(
         ));
     }
 
-    let merchant_id = merchant_id_from_principal(&principal)?;
+    let merchant_id = merchant_id_from_principal(&state, &principal).await?;
 
     if !payload.url.starts_with("http://") && !payload.url.starts_with("https://") {
         return Err(api_error(
@@ -1115,7 +1479,7 @@ pub async fn list_webhooks(
         ));
     }
 
-    let merchant_id = merchant_id_from_principal(&principal)?;
+    let merchant_id = merchant_id_from_principal(&state, &principal).await?;
 
     let rows = sqlx::query(
         "SELECT id, url, event_types, is_active, created_at
@@ -1165,7 +1529,7 @@ pub async fn webhook_deliveries(
         ));
     }
 
-    let merchant_id = merchant_id_from_principal(&principal)?;
+    let merchant_id = merchant_id_from_principal(&state, &principal).await?;
     let webhook_uuid = Uuid::parse_str(&id)
         .map_err(|_| api_error(StatusCode::BAD_REQUEST, "Invalid webhook ID"))?;
 
@@ -1228,7 +1592,7 @@ pub async fn test_webhook(
         ));
     }
 
-    let merchant_id = merchant_id_from_principal(&principal)?;
+    let merchant_id = merchant_id_from_principal(&state, &principal).await?;
     let webhook_uuid = Uuid::parse_str(&id)
         .map_err(|_| api_error(StatusCode::BAD_REQUEST, "Invalid webhook ID"))?;
 
@@ -1297,7 +1661,7 @@ pub async fn delete_webhook(
         ));
     }
 
-    let merchant_id = merchant_id_from_principal(&principal)?;
+    let merchant_id = merchant_id_from_principal(&state, &principal).await?;
     let webhook_uuid = Uuid::parse_str(&id)
         .map_err(|_| api_error(StatusCode::BAD_REQUEST, "Invalid webhook ID"))?;
 
@@ -1329,48 +1693,38 @@ pub async fn delete_webhook(
     })))
 }
 
-pub async fn dev_docs_snippets(
+pub async fn get_environment(
     State(state): State<AppState>,
-    headers: HeaderMap,
 ) -> Result<Json<Value>, (StatusCode, HeaderMap, Json<Value>)> {
-    let principal = require_api_key(&state, &headers)
+    let test_cards = if state.env == "sandbox" {
+        let rows = sqlx::query(
+            "SELECT brand, number, expiry_month, expiry_year, cvv, behavior, description FROM sandbox_test_cards ORDER BY id"
+        )
+        .fetch_all(&state.pg_pool)
         .await
-        .map_err(|e| auth_error_response(e, "Invalid API key"))?;
+        .unwrap_or_default();
 
-    if !has_permission(&principal, "dev:docs") && !has_permission(&principal, "merchant:register") {
-        return Err(api_error(
-            StatusCode::FORBIDDEN,
-            "This key cannot access developer snippets",
-        ));
-    }
-
-    log_api_call(&state, Some(&principal), "/dev/docs/snippets", "GET", 200).await;
+        rows.into_iter()
+            .map(|row| {
+                json!({
+                    "brand": row.try_get::<String, _>("brand").unwrap_or_default(),
+                    "number": row.try_get::<String, _>("number").unwrap_or_default(),
+                    "expiry_month": row.try_get::<i32, _>("expiry_month").unwrap_or(0),
+                    "expiry_year": row.try_get::<i32, _>("expiry_year").unwrap_or(0),
+                    "cvv": row.try_get::<String, _>("cvv").unwrap_or_default(),
+                    "behavior": row.try_get::<String, _>("behavior").unwrap_or_default(),
+                    "description": row.try_get::<String, _>("description").unwrap_or_default(),
+                })
+            })
+            .collect::<Vec<Value>>()
+    } else {
+        vec![]
+    };
 
     Ok(Json(json!({
         "success": true,
-        "snippets": {
-            "create_intent_curl": "curl -X POST '$API/gateway/v1/intents' -H 'X-API-Key: <merchant_key>' -H 'Content-Type: application/json' -d '{\"amount\":42000,\"currency\":\"TND\",\"description\":\"Order #42\"}'",
-            "confirm_intent_curl": "curl -X POST '$API/gateway/v1/intents/pi_xxx/confirm' -H 'Content-Type: application/json' -d '{\"card_number\":\"4242424242424242\",\"expiry_month\":\"12\",\"expiry_year\":\"2029\",\"cvv\":\"123\",\"pin\":\"1234\",\"card_holder_name\":\"Nexa Customer\"}'",
-            "test_cards": [
-                {
-                    "card_number": "4242424242424242",
-                    "pin": "1234",
-                    "result": "success"
-                },
-                {
-                    "card_number": "5555555555554444",
-                    "pin": "1234",
-                    "result": "success"
-                },
-                {
-                    "card_number": "4000000000000002",
-                    "pin": "1234",
-                    "result": "declined"
-                }
-            ],
-            "webhook_signature_note": "Verify signature with SHA256(secret + '.' + raw_body) and compare with X-NexaPay-Signature",
-            "checkout_url_pattern": format!("{}/checkout/{{intent_id}}", state.portal_base_url)
-        }
+        "environment": state.env,
+        "test_cards": test_cards,
     })))
 }
 
@@ -1387,15 +1741,14 @@ fn evaluate_test_card(card_number: &str, pin: Option<&str>) -> Option<bool> {
     None
 }
 
-fn merchant_id_from_principal(
+async fn merchant_id_from_principal(
+    _state: &AppState,
     principal: &ApiPrincipal,
 ) -> Result<Uuid, (StatusCode, HeaderMap, Json<Value>)> {
     match principal {
-        ApiPrincipal::Merchant { merchant_id, .. } => Ok(*merchant_id),
-        _ => Err(api_error(
-            StatusCode::FORBIDDEN,
-            "Merchant API key required",
-        )),
+        ApiPrincipal::Developer { owner_id, .. } => {
+            owner_id.ok_or_else(|| api_error(StatusCode::FORBIDDEN, "Developer workspace not found"))
+        }
     }
 }
 
@@ -1502,6 +1855,34 @@ fn truncate_response(raw: &str) -> String {
         return raw.to_string();
     }
     format!("{}...", &raw[..1000])
+}
+
+fn resolve_portal_url(state: &AppState, headers: &HeaderMap) -> String {
+    // For local development, extract portal URL from request headers
+    if let Some(origin) = headers.get("origin").and_then(|v| v.to_str().ok()) {
+        if origin.contains("localhost") || origin.contains("127.0.0.1") {
+            return origin.to_string();
+        }
+    }
+    if let Some(referer) = headers.get("referer").and_then(|v| v.to_str().ok()) {
+        if referer.contains("localhost") || referer.contains("127.0.0.1") {
+            if let Some(end) = referer.find("/agent") {
+                return referer[..end].to_string();
+            }
+            if let Some(end) = referer.find("/checkout") {
+                return referer[..end].to_string();
+            }
+            // Just take the scheme+host+port
+            if let Some(idx) = referer.find("/") {
+                if idx > 0 && &referer[idx..idx + 2] == "//" {
+                    if let Some(next_slash) = referer[idx + 2..].find("/") {
+                        return referer[..idx + 2 + next_slash].to_string();
+                    }
+                }
+            }
+        }
+    }
+    state.portal_base_url.clone()
 }
 
 fn extract_request_ip(headers: &HeaderMap) -> String {

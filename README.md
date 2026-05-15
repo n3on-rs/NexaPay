@@ -3,11 +3,11 @@
 NexaPay is a full-stack fintech platform that combines:
 
 - A custom Rust blockchain engine for account state and transaction history
-- A banking and developer API layer for user operations and payment gateway workflows
-- A Next.js web portal for customer, developer, and banking experiences
+- A developer and customer API layer for wallets, accounts, and payment gateway workflows
+- A Next.js web portal for end users and developers (e-wallet + checkout)
 - A docs-site (Docusaurus) for API and platform documentation
 
-The platform supports user onboarding, account and card management, wallet transfers, loan lifecycle, merchant payment intents, refunds, payouts, and webhook delivery.
+The platform supports user onboarding, account and card management, wallet transfers, merchant payment intents, refunds, payouts, and webhook delivery—positioned as a Tunisia-focused payments and developer API layer (similar in spirit to Stripe-style acquiring and checkout, adapted for local rails).
 
 ## Live Website
 
@@ -21,12 +21,12 @@ The NexaPay website is available online.
 
 ```mermaid
 flowchart LR
-    U[End Users / Merchants / Banks] --> P[Portal - Next.js App Router]
+    U[End Users / Merchants] --> P[Portal - Next.js App Router]
     U --> D[Docs Site - Docusaurus]
 
-    P --> NAPI[Next API Routes\nOCR + Loan Scoring Proxy]
+    P --> NAPI[Next API Routes\nAuth + proxy helpers]
     P --> BAPI[Rust API Layer - Axum]
-    NAPI --> OCR[External OCR + Scoring Service]
+    NAPI --> BAPI
 
     BAPI --> PG[(PostgreSQL)]
     BAPI --> SQ[(SQLite)]
@@ -93,8 +93,7 @@ The Axum router exposes grouped capabilities:
 
 - Auth: register, password login, OTP request/verify
 - Accounts: details, public profile, search, transactions, wallet transfer
-- Loans: request, list, repay, contract signature validation
-- Network: bank registration and stats
+- Developer portal: register, login, merchant registration, key rotation, usage overview
 - Developer: key management and docs snippets
 - Payment Gateway: merchant onboarding, intents, confirm, refunds, payouts, webhooks
 - Chain Observability: chain stats, blocks, transaction lookup
@@ -102,9 +101,7 @@ The Axum router exposes grouped capabilities:
 ```mermaid
 flowchart LR
     AUTH[Auth + OTP] --> ACC[Account APIs]
-    ACC --> LOAN[Loan APIs]
     DEV[Developer APIs] --> GW[Gateway APIs]
-    BANK[Bank APIs] --> NET[Network Stats]
     CHAIN[Chain APIs] --> OBS[Explorer / Monitoring]
 ```
 
@@ -196,7 +193,7 @@ sequenceDiagram
 
 ```text
 blockchain/   Rust node, API modules, chain engine, migrations
-portal/       Next.js web app (customer, bank, developer, checkout)
+portal/       Next.js web app (customer wallet, developer portal, checkout)
 docs-site/    Docusaurus documentation site
 docs/         Additional markdown docs
 scripts/      Demo and operational helper scripts
@@ -244,10 +241,9 @@ For public deployment on nexapay.space:
 
 ## 9) Key Platform Highlights
 
-- Unified banking + gateway APIs in one node
+- Wallet, developer, and gateway APIs in one node
 - Signed, append-only block persistence with periodic consensus ticks
 - OTP-based user auth with optional Twilio integration
-- Contract-aware loan disbursement flow with e-signature and PDF export
 - Merchant-grade payment intent lifecycle with refund, payout, and webhook support
 
 ---

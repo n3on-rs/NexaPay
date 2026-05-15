@@ -17,31 +17,21 @@ use crate::api::AppState;
 pub struct SessionClaims {
     pub address: String,
     pub cin_hash: String,
+    #[serde(default = "default_session_id")]
+    pub session_id: String,
+}
+
+fn default_session_id() -> String {
+    String::new()
 }
 
 #[derive(Debug, Clone)]
 pub enum ApiPrincipal {
-    Bank {
-        prefix: String,
-        key_id: Option<Uuid>,
-        permissions: Vec<String>,
-        rate_limit_per_minute: i32,
-        daily_limit: i32,
-    },
     Developer {
         prefix: String,
-        plan: String,
         call_limit: i32,
         owner_id: Option<Uuid>,
         key_id: Option<Uuid>,
-        permissions: Vec<String>,
-        rate_limit_per_minute: i32,
-        daily_limit: i32,
-    },
-    Merchant {
-        prefix: String,
-        merchant_id: Uuid,
-        key_id: Uuid,
         permissions: Vec<String>,
         rate_limit_per_minute: i32,
         daily_limit: i32,
@@ -64,25 +54,19 @@ pub fn hash_api_key(value: &str) -> String {
 
 pub fn api_principal_prefix(principal: &ApiPrincipal) -> String {
     match principal {
-        ApiPrincipal::Bank { prefix, .. } => prefix.clone(),
         ApiPrincipal::Developer { prefix, .. } => prefix.clone(),
-        ApiPrincipal::Merchant { prefix, .. } => prefix.clone(),
     }
 }
 
 pub fn api_principal_kind(principal: &ApiPrincipal) -> &'static str {
     match principal {
-        ApiPrincipal::Bank { .. } => "bank",
         ApiPrincipal::Developer { .. } => "developer",
-        ApiPrincipal::Merchant { .. } => "merchant",
     }
 }
 
 pub fn api_principal_owner_id(principal: &ApiPrincipal) -> Option<Uuid> {
     match principal {
-        ApiPrincipal::Bank { .. } => None,
         ApiPrincipal::Developer { owner_id, .. } => *owner_id,
-        ApiPrincipal::Merchant { merchant_id, .. } => Some(*merchant_id),
     }
 }
 
@@ -97,42 +81,22 @@ pub fn permissions_to_csv(values: &[String]) -> String {
     values.join(",")
 }
 
-pub fn default_permissions(owner_type: &str) -> Vec<String> {
-    match owner_type {
-        "merchant" => vec![
-            "intents:write".to_string(),
-            "intents:read".to_string(),
-            "refunds:write".to_string(),
-            "balance:read".to_string(),
-            "transactions:read".to_string(),
-            "payouts:write".to_string(),
-            "webhooks:manage".to_string(),
-        ],
-        "developer" => vec![
-            "merchant:register".to_string(),
-            "api_keys:manage".to_string(),
-            "dev:docs".to_string(),
-        ],
-        "bank" => vec![
-            "network:read".to_string(),
-            "accounts:read".to_string(),
-        ],
-        _ => vec!["*".to_string()],
-    }
+pub fn default_permissions(_owner_type: &str) -> Vec<String> {
+    vec![
+        "api_keys:manage".to_string(),
+        "dev:docs".to_string(),
+        "balance:read".to_string(),
+        "transactions:read".to_string(),
+        "payouts:write".to_string(),
+        "refunds:write".to_string(),
+        "intents:write".to_string(),
+        "intents:read".to_string(),
+        "webhooks:manage".to_string(),
+    ]
 }
 
 pub fn has_permission(principal: &ApiPrincipal, needed: &str) -> bool {
     let permissions = match principal {
-        ApiPrincipal::Bank {
-            key_id,
-            permissions,
-            ..
-        } => {
-            if key_id.is_none() {
-                return true;
-            }
-            permissions
-        }
         ApiPrincipal::Developer {
             key_id,
             permissions,
@@ -143,7 +107,6 @@ pub fn has_permission(principal: &ApiPrincipal, needed: &str) -> bool {
             }
             permissions
         }
-        ApiPrincipal::Merchant { permissions, .. } => permissions,
     };
 
     permissions.iter().any(|granted| {
@@ -186,11 +149,12 @@ pub fn validate_structured_api_key(raw_key: &str) -> bool {
     checksum == expected
 }
 
-pub fn issue_session_token(state: &AppState, address: &str, cin_hash: &str) -> Result<String, StatusCode> {
+pub fn issue_session_token(state: &AppState, address: &str, cin_hash: &str, session_id: &str) -> Result<String, StatusCode> {
     let claims = Claims::with_custom_claims(
         SessionClaims {
             address: address.to_string(),
             cin_hash: cin_hash.to_string(),
+            session_id: session_id.to_string(),
         },
         Duration::from_hours(24),
     );
@@ -233,6 +197,24 @@ pub async fn require_account_token(
     if claims.address != address {
         return Err(StatusCode::FORBIDDEN);
     }
+    // Check session revocation for tokens with session_id
+    if !claims.session_id.is_empty() {
+        let session_uuid = Uuid::parse_str(&claims.session_id).map_err(|_| StatusCode::UNAUTHORIZED)?;
+        let row = sqlx::query(
+            "SELECT is_revoked FROM user_sessions WHERE user_address = $1 AND id = $2 LIMIT 1",
+        )
+        .bind(address)
+        .bind(session_uuid)
+        .fetch_optional(&state.pg_pool)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        if let Some(r) = row {
+            let is_revoked: bool = r.try_get("is_revoked").unwrap_or(false);
+            if is_revoked {
+                return Err(StatusCode::UNAUTHORIZED);
+            }
+        }
+    }
     Ok(claims)
 }
 
@@ -253,17 +235,6 @@ pub async fn require_api_key(
     clear_auth_failures(state, &raw_key).await;
     enforce_rate_limit(state, &principal).await?;
     touch_last_used(state, &principal).await;
-    Ok(principal)
-}
-
-pub async fn require_bank_api_key(
-    state: &AppState,
-    headers: &HeaderMap,
-) -> Result<ApiPrincipal, AuthError> {
-    let principal = require_api_key(state, headers).await?;
-    if !matches!(principal, ApiPrincipal::Bank { .. }) {
-        return Err(AuthError::Forbidden);
-    }
     Ok(principal)
 }
 
@@ -330,46 +301,25 @@ async fn resolve_api_key(state: &AppState, raw_key: &str) -> Result<ApiPrincipal
         let daily_limit: i32 = row.try_get("daily_limit").unwrap_or(10000);
 
         return match owner_type.as_str() {
-            "merchant" => {
-                if let Some(merchant_id) = owner_id {
-                    Ok(ApiPrincipal::Merchant {
-                        prefix,
-                        merchant_id,
-                        key_id,
-                        permissions,
-                        rate_limit_per_minute,
-                        daily_limit,
-                    })
-                } else {
-                    register_auth_failure(state, raw_key).await;
-                    Err(AuthError::Unauthorized)
-                }
-            }
             "developer" => {
-                let (plan, call_limit) = if let Some(dev_id) = owner_id {
+                let call_limit = if let Some(dev_id) = owner_id {
                     if let Ok(Some(dev_row)) = sqlx::query(
-                        "SELECT plan, call_limit FROM developers WHERE id = $1 AND is_active = TRUE LIMIT 1",
+                        "SELECT call_limit FROM developers WHERE id = $1 AND is_active = TRUE LIMIT 1",
                     )
                     .bind(dev_id)
                     .fetch_optional(&state.pg_pool)
                     .await
                     {
-                        (
-                            dev_row
-                                .try_get::<String, _>("plan")
-                                .unwrap_or_else(|_| "free".to_string()),
-                            dev_row.try_get::<i32, _>("call_limit").unwrap_or(1000),
-                        )
+                        dev_row.try_get::<i32, _>("call_limit").unwrap_or(1_000_000)
                     } else {
-                        ("free".to_string(), 1000)
+                        1_000_000
                     }
                 } else {
-                    ("free".to_string(), 1000)
+                    1_000_000
                 };
 
                 Ok(ApiPrincipal::Developer {
                     prefix,
-                    plan,
                     call_limit,
                     owner_id,
                     key_id: Some(key_id),
@@ -378,13 +328,6 @@ async fn resolve_api_key(state: &AppState, raw_key: &str) -> Result<ApiPrincipal
                     daily_limit,
                 })
             }
-            "bank" => Ok(ApiPrincipal::Bank {
-                prefix,
-                key_id: Some(key_id),
-                permissions,
-                rate_limit_per_minute,
-                daily_limit,
-            }),
             _ => {
                 register_auth_failure(state, raw_key).await;
                 Err(AuthError::Unauthorized)
@@ -393,36 +336,17 @@ async fn resolve_api_key(state: &AppState, raw_key: &str) -> Result<ApiPrincipal
     }
 
     if let Ok(Some(row)) = sqlx::query(
-        "SELECT api_key_prefix FROM banks WHERE api_key = $1 AND subscription_status = 'active'",
-    )
-    .bind(&api_key_hash)
-    .fetch_optional(&state.pg_pool)
-    .await
-    {
-        let prefix: String = row.try_get("api_key_prefix").unwrap_or_else(|_| "nxp_bank".to_string());
-        return Ok(ApiPrincipal::Bank {
-            prefix,
-            key_id: None,
-            permissions: default_permissions("bank"),
-            rate_limit_per_minute: 120,
-            daily_limit: 200_000,
-        });
-    }
-
-    if let Ok(Some(row)) = sqlx::query(
-        "SELECT id, api_key_prefix, plan, call_limit FROM developers WHERE api_key = $1 AND is_active = TRUE",
+        "SELECT id, api_key_prefix, call_limit FROM developers WHERE api_key = $1 AND is_active = TRUE",
     )
     .bind(&api_key_hash)
     .fetch_optional(&state.pg_pool)
     .await
     {
         let prefix: String = row.try_get("api_key_prefix").unwrap_or_else(|_| "nxp_dev_".to_string());
-        let plan: String = row.try_get("plan").unwrap_or_else(|_| "free".to_string());
-        let call_limit: i32 = row.try_get("call_limit").unwrap_or(1000);
+        let call_limit: i32 = row.try_get("call_limit").unwrap_or(1_000_000);
         let owner_id: Option<Uuid> = row.try_get("id").ok();
         return Ok(ApiPrincipal::Developer {
             prefix,
-            plan,
             call_limit,
             owner_id,
             key_id: None,
@@ -438,21 +362,8 @@ async fn resolve_api_key(state: &AppState, raw_key: &str) -> Result<ApiPrincipal
 
 pub async fn enforce_rate_limit(state: &AppState, principal: &ApiPrincipal) -> Result<(), AuthError> {
     match principal {
-        ApiPrincipal::Bank {
-            key_id,
-            prefix,
-            rate_limit_per_minute,
-            daily_limit,
-            ..
-        } => {
-            if key_id.is_none() {
-                return Ok(());
-            }
-            enforce_window_limits(state, prefix, *rate_limit_per_minute as i64, *daily_limit as i64).await
-        }
         ApiPrincipal::Developer {
             prefix,
-            plan,
             call_limit,
             key_id,
             rate_limit_per_minute,
@@ -469,13 +380,7 @@ pub async fn enforce_rate_limit(state: &AppState, principal: &ApiPrincipal) -> R
                 .await;
             }
 
-            let legacy_day_limit = if plan == "pro" {
-                1_000_000i64
-            } else if plan == "starter" {
-                10_000i64
-            } else {
-                (*call_limit).max(1000) as i64
-            };
+            let legacy_day_limit = (*call_limit).max(1000) as i64;
 
             let row = sqlx::query(
                 "SELECT COUNT(*) AS count FROM api_logs WHERE api_key_prefix = $1 AND called_at::date = NOW()::date",
@@ -493,20 +398,6 @@ pub async fn enforce_rate_limit(state: &AppState, principal: &ApiPrincipal) -> R
             }
 
             Ok(())
-        }
-        ApiPrincipal::Merchant {
-            prefix,
-            rate_limit_per_minute,
-            daily_limit,
-            ..
-        } => {
-            enforce_window_limits(
-                state,
-                prefix,
-                (*rate_limit_per_minute).max(20) as i64,
-                (*daily_limit).max(1000) as i64,
-            )
-            .await
         }
     }
 }
@@ -546,9 +437,7 @@ pub async fn log_api_call(
     status_code: i32,
 ) {
     let prefix = principal.map(|p| match p {
-        ApiPrincipal::Bank { prefix, .. } => prefix.clone(),
         ApiPrincipal::Developer { prefix, .. } => prefix.clone(),
-        ApiPrincipal::Merchant { prefix, .. } => prefix.clone(),
     });
     let prefix_for_log = prefix.clone();
 
@@ -665,9 +554,7 @@ async fn clear_auth_failures(state: &AppState, raw_key: &str) {
 
 async fn touch_last_used(state: &AppState, principal: &ApiPrincipal) {
     let key_id = match principal {
-        ApiPrincipal::Bank { key_id, .. } => *key_id,
         ApiPrincipal::Developer { key_id, .. } => *key_id,
-        ApiPrincipal::Merchant { key_id, .. } => Some(*key_id),
     };
 
     if let Some(key_id) = key_id {
@@ -675,6 +562,12 @@ async fn touch_last_used(state: &AppState, principal: &ApiPrincipal) {
             .bind(key_id)
             .execute(&state.pg_pool)
             .await;
+    }
+}
+
+pub fn can_manage_keys(principal: &ApiPrincipal) -> bool {
+    match principal {
+        ApiPrincipal::Developer { permissions, .. } => permissions.iter().any(|p| p == "api_keys:manage"),
     }
 }
 

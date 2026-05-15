@@ -13,7 +13,6 @@ import {
   extractResponseData,
 } from "./types";
 import {
-  MerchantsResource,
   PaymentIntentsResource,
   RefundsResource,
   PayoutsResource,
@@ -40,7 +39,6 @@ export class NexaPayClient {
   /**
    * Resources
    */
-  public readonly merchants: MerchantsResource;
   public readonly paymentIntents: PaymentIntentsResource;
   public readonly refunds: RefundsResource;
   public readonly payouts: PayoutsResource;
@@ -92,7 +90,6 @@ export class NexaPayClient {
     );
 
     // Initialize resources
-    this.merchants = new MerchantsResource(this);
     this.paymentIntents = new PaymentIntentsResource(this);
     this.refunds = new RefundsResource(this);
     this.payouts = new PayoutsResource(this);

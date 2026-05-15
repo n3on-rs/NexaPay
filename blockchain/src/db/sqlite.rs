@@ -19,6 +19,16 @@ pub struct SqliteState {
     conn: Arc<Mutex<Connection>>,
 }
 
+#[derive(Debug, Clone)]
+pub struct ChainAccountSnapshot {
+    pub address: String,
+    pub balance: u64,
+    pub tx_count: u64,
+    pub account_type: AccountType,
+    pub is_active: bool,
+    pub updated_at: u64,
+}
+
 impl SqliteState {
     pub fn open(path: &str) -> Result<Self, SqliteStateError> {
         let conn = Connection::open(path)?;
@@ -110,6 +120,41 @@ impl SqliteState {
         Ok(())
     }
 
+    pub fn get_account_snapshot(
+        &self,
+        address: &str,
+    ) -> Result<Option<ChainAccountSnapshot>, SqliteStateError> {
+        let conn = self.conn.lock().map_err(|_| SqliteStateError::Poisoned)?;
+        let mut stmt = conn.prepare(
+            "
+            SELECT address, balance, tx_count, account_type, is_active, updated_at
+            FROM chain_accounts
+            WHERE address = ?1
+            LIMIT 1
+            ",
+        )?;
+
+        let mut rows = stmt.query(params![address])?;
+        let Some(row) = rows.next()? else {
+            return Ok(None);
+        };
+
+        let account_type = match row.get::<_, String>(3)?.as_str() {
+            "Bank" => AccountType::Bank,
+            "Developer" => AccountType::Developer,
+            _ => AccountType::User,
+        };
+
+        Ok(Some(ChainAccountSnapshot {
+            address: row.get::<_, String>(0)?,
+            balance: row.get::<_, i64>(1)?.max(0) as u64,
+            tx_count: row.get::<_, i64>(2)?.max(0) as u64,
+            account_type,
+            is_active: row.get::<_, i64>(4)? != 0,
+            updated_at: row.get::<_, i64>(5)?.max(0) as u64,
+        }))
+    }
+
     pub fn upsert_card_ref(
         &self,
         address: &str,
@@ -190,6 +235,7 @@ impl SqliteState {
             TxType::LoanRepay => "LoanRepay",
             TxType::BankJoin => "BankJoin",
             TxType::DevRegister => "DevRegister",
+            TxType::AgentApply => "AgentApply",
         };
 
         let conn = self.conn.lock().map_err(|_| SqliteStateError::Poisoned)?;

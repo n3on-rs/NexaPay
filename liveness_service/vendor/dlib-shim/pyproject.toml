@@ -1,0 +1,8 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dlib"
+version = "20.0.1"
+dependencies = ["dlib-bin==20.0.1"]

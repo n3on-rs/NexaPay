@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+setuptools<81
+opencv-python
+./liveness_service/vendor/dlib-shim
+face_recognition
+ffmpeg-python
+python-multipart
+numpy
+pydantic
+requests

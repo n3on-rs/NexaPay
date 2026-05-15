@@ -8,6 +8,9 @@ target/
 /portal/.next/
 node_modules/
 
+# KYC uploads (local dev)
+/data/
+
 # Env
 .env
 .env.*

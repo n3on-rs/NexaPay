@@ -21,25 +21,26 @@ services:
       NEXAPAY_SYSTEM_PRIVATE_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
       NEXAPAY_PORT: 8080
       NEXAPAY_PORTAL_URL: https://nexapay.space
+      NEXAPAY_PAYMENT_SESSION_MINUTES: 1440
       # Twilio credentials should be provided via environment or .env file in production
       TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-""}
       TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-""}
       TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER:-""}
       OTP_FALLBACK_CODE: ${OTP_FALLBACK_CODE:-""}
+      # Development helpers
+      APP_ENV: development
+      DEV_SHOW_OTP: "true"
+      NEXAPAY_STATE_DIR: /app/chain_state
+      NEXAPAY_CHAIN_DATA_DIR: /app/chain_data
+      KYC_DEV_OTP: "554433"
+      LIVENESS_MOCK_PASS: "true"
     depends_on:
       - postgres
-
-  portal:
-    build:
-      context: ./portal
-      args:
-        NEXT_PUBLIC_API_URL: https://backend.nexapay.space
-    ports:
-      - "3001:3000"
-    environment:
-      NEXT_PUBLIC_API_URL: https://backend.nexapay.space
-    depends_on:
-      - nexapay-node
+    volumes:
+      - nexapay_chain_data:/app/chain_data
+      - nexapay_chain_state:/app/chain_state
 
 volumes:
   pgdata:
+  nexapay_chain_data:
+  nexapay_chain_state:

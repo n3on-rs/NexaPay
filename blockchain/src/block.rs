@@ -7,6 +7,7 @@ pub enum TxType {
     LoanDisburse,
     LoanRepay,
     BankJoin,
+    AgentApply,
     DevRegister,
 }
 

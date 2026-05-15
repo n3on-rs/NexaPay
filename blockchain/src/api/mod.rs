@@ -1,35 +1,29 @@
 pub mod accounts;
 pub mod auth;
 pub mod chain;
+pub mod company;
 pub mod gateway;
 pub mod key_management;
-pub mod loans;
 pub mod middleware;
 pub mod network;
+pub mod kyc;
+pub mod agent;
+pub mod admin;
+pub mod fund;
+pub mod withdraw;
 
 use std::collections::HashMap;
+use std::env;
 use std::sync::Arc;
 
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post, put};
 use axum::Router;
 use jwt_simple::prelude::HS256Key;
-use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
-use tokio::sync::Mutex;
+use tokio::sync::{broadcast, Mutex};
 
 use crate::chain::Blockchain;
 use crate::db::sqlite::SqliteState;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LoanRecord {
-    pub loan_id: String,
-    pub borrower_address: String,
-    pub amount: u64,
-    pub status: String,
-    pub interest_rate: String,
-    pub due_date: String,
-    pub contract_hash: String,
-}
 
 #[derive(Clone)]
 pub struct AppState {
@@ -50,16 +44,52 @@ pub struct AppState {
     pub twilio_auth_token: Option<String>,
     pub twilio_phone_number: Option<String>,
     pub otp_fallback_code: Option<String>,
+    /// Per-address SSE broadcast senders for real-time events.
+    pub sse_broadcasters: Arc<std::sync::RwLock<HashMap<String, broadcast::Sender<String>>>>,
+    pub env: String,
+    pub payment_session_minutes: i64,
+}
+
+fn legacy_register_enabled() -> bool {
+    env::var("NEXAPAY_ALLOW_LEGACY_REGISTER").as_deref() == Ok("true")
+        || env::var("APP_ENV").as_deref() == Ok("development")
 }
 
 pub fn build_router(state: AppState) -> Router {
-    Router::new()
-        .route("/auth/register", post(auth::register))
-        .route("/auth/login", post(auth::login_with_password))
-        .route("/auth/login/password", post(auth::login_with_password))
-        .route("/auth/login/otp/request", post(auth::request_login_otp))
-        .route("/auth/login/otp/verify", post(auth::verify_login_otp))
+    let mut router = Router::new();
+    if legacy_register_enabled() {
+        router = router.route("/auth/register", post(auth::register));
+    }
+    router
+        // KYC multi-step routes
+        .route("/auth/register/init", post(crate::api::kyc::register_init))
+        .route("/auth/register/verify-phone", post(crate::api::kyc::verify_phone))
+        .route("/auth/register/upload-documents", post(crate::api::kyc::upload_documents))
+        .route("/auth/register/liveness", post(crate::api::kyc::liveness))
+        .route("/auth/register/set-pin", post(crate::api::kyc::register_set_pin))
+        .route("/auth/login", post(auth::login_with_pin))
+        .route("/auth/login/verify-otp", post(auth::verify_login_otp))
+        .route("/auth/me", get(auth::get_me))
+        .route("/auth/recover/verify-identity", post(auth::verify_identity))
+        .route("/auth/recover/verify-otp", post(auth::verify_recovery_otp))
+        .route("/auth/recover/reset-password", post(auth::reset_password))
+        .route("/auth/recover/reset-pin", post(auth::reset_pin))
+        .route("/auth/security-alert", post(auth::resolve_security_alert))
+        .route("/auth/change-pin", post(auth::change_pin))
         .route("/accounts/:address", get(accounts::get_account))
+        .route(
+            "/accounts/:address/notifications",
+            get(accounts::get_account_notifications),
+        )
+        .route(
+            "/accounts/:address/notifications/:id/read",
+            post(accounts::mark_notification_read),
+        )
+        .route(
+            "/accounts/:address/notifications/read-all",
+            post(accounts::mark_all_notifications_read),
+        )
+        .route("/accounts/:address/set-pin", post(accounts::set_transaction_pin))
         .route("/accounts/:address/public", get(accounts::get_public_account))
         .route("/accounts/:address/search", get(accounts::search_accounts))
         .route(
@@ -67,29 +97,58 @@ pub fn build_router(state: AppState) -> Router {
             get(accounts::get_account_transactions),
         )
         .route("/accounts/:address/transfer", post(accounts::transfer))
+        .route("/accounts/:address/transfer/request-otp", post(accounts::request_transfer_otp))
+        .route("/accounts/:address/transfer/verify-otp", post(accounts::verify_transfer_otp))
+        .route("/accounts/:address/bank-transfer", post(accounts::bank_transfer))
+        .route("/accounts/:address/bank-transfers", get(accounts::list_bank_transfers))
+        .route("/accounts/:address/saved-beneficiaries", get(accounts::list_saved_beneficiaries))
+        .route("/accounts/:address/saved-beneficiaries", post(accounts::add_saved_beneficiary))
+        .route("/accounts/:address/saved-beneficiaries/:id", delete(accounts::delete_saved_beneficiary))
+        .route("/accounts/:address/card/freeze", post(accounts::freeze_card))
+        .route("/accounts/:address/card/lost", post(accounts::report_lost_card))
+        .route("/accounts/:address/profile", post(accounts::update_profile))
+        .route("/accounts/:address/avatar", post(accounts::upload_avatar))
+        .route("/accounts/:address/events", get(accounts::account_events))
+        .route("/accounts/:address/fund", post(crate::api::fund::fund))
+        .route("/accounts/:address/withdraw-to-bank", post(crate::api::withdraw::withdraw_to_bank))
+        .route("/accounts/:address/settings", get(company::get_account_settings))
+        .route("/accounts/:address/settings", post(company::update_account_settings))
+        .route("/accounts/:address/company", get(company::get_company_workspace))
+        .route("/accounts/:address/company", post(company::create_company_workspace))
+        .route(
+            "/accounts/:address/company/request",
+            post(company::submit_vendor_request),
+        )
+        .route(
+            "/accounts/:address/company/settings",
+            post(company::update_company_settings),
+        )
+        .route(
+            "/accounts/:address/company/api-keys/create",
+            post(company::create_company_api_key),
+        )
+        .route(
+            "/accounts/:address/company/api-keys/rotate",
+            post(company::rotate_company_api_key),
+        )
+        .route(
+            "/accounts/:address/company/api-keys/revoke",
+            post(company::revoke_company_api_key),
+        )
+        .route(
+            "/accounts/:address/company/withdraw",
+            post(company::withdraw_company_balance),
+        )
         .route("/wallets/:address/pay-by-card", post(accounts::pay_wallet_by_card))
-        .route("/loans/request", post(loans::request_loan))
-        .route("/loans/:address", get(loans::get_loans))
-        .route("/loans/:loan_id/repay", post(loans::repay_loan))
-        .route("/network/banks/register", post(network::register_bank))
-        .route("/network/banks/accounts", get(network::bank_accounts))
-        .route(
-            "/network/banks/transactions",
-            get(network::bank_transactions),
-        )
-        .route("/network/stats", get(network::network_stats))
-        .route("/dev/register", post(network::register_developer))
-        .route("/dev/login", post(network::login_developer))
-        .route("/dev/portal/overview", get(network::developer_portal_overview))
-        .route(
-            "/dev/portal/merchants/register",
-            post(network::developer_portal_register_merchant),
-        )
-        .route(
-            "/dev/portal/api-keys/rotate",
-            post(network::developer_portal_rotate_key),
-        )
-        .route("/dev/repair_account", post(network::repair_account))
+        // Developer portal removed. Replace with Agent endpoints
+        .route("/accounts/:address/agent/apply", post(crate::api::agent::apply))
+        .route("/accounts/:address/agent/status", get(crate::api::agent::status))
+        .route("/accounts/:address/agent/dashboard", get(crate::api::agent::dashboard))
+        .route("/admin/agents/applications", get(crate::api::admin::list_applications))
+        .route("/admin/agents/applications/:id", get(crate::api::admin::get_application))
+        .route("/admin/agents/applications/:id/approve", post(crate::api::admin::approve))
+        .route("/admin/agents/applications/:id/reject", post(crate::api::admin::reject))
+        .route("/admin/withdrawals/:id/process", post(crate::api::admin::process_withdrawal))
         .route("/api-keys/rotate", post(key_management::rotate_api_key))
         .route("/api-keys/revoke", post(key_management::revoke_api_key))
         .route("/api-keys/usage", get(key_management::api_key_usage))
@@ -97,22 +156,25 @@ pub fn build_router(state: AppState) -> Router {
             "/api-keys/permissions",
             post(key_management::update_api_key_permissions),
         )
-        .route("/dev/docs/snippets", get(gateway::dev_docs_snippets))
-        .route(
-            "/gateway/v1/merchants/register",
-            post(gateway::register_merchant),
-        )
-        .route("/gateway/v1/merchants/stats", get(gateway::merchant_stats))
-        .route("/gateway/v1/intents", post(gateway::create_intent))
+        .route("/gateway/v1/intents", get(gateway::list_intents).post(gateway::create_intent))
         .route("/gateway/v1/intents/:intent_id", get(gateway::get_intent))
+        .route(
+            "/gateway/v1/intents/:intent_id",
+            axum::routing::delete(gateway::delete_intent),
+        )
         .route(
             "/gateway/v1/intents/:intent_id/public",
             get(gateway::get_intent_public),
         )
         .route(
+            "/gateway/v1/intents/:intent_id/session",
+            post(gateway::create_session),
+        )
+        .route(
             "/gateway/v1/intents/:intent_id/confirm",
             post(gateway::confirm_intent),
         )
+        .route("/gateway/v1/environment", get(gateway::get_environment))
         .route("/gateway/v1/refunds", post(gateway::create_refund))
         .route("/gateway/v1/balance", get(gateway::gateway_balance))
         .route(
@@ -134,6 +196,7 @@ pub fn build_router(state: AppState) -> Router {
             "/gateway/v1/webhooks/:id",
             axum::routing::delete(gateway::delete_webhook),
         )
+        .route("/municipalities", get(accounts::get_municipalities))
         .route("/chain/stats", get(chain::chain_stats))
         .route("/chain/blocks", get(chain::list_blocks))
         .route("/chain/blocks/:index", get(chain::get_block))
