@@ -14,9 +14,18 @@ use crate::api::middleware::{
     require_account_token,
 };
 use crate::api::AppState;
-use crate::crypto::sha256_hex;
+use crate::crypto::{sha256_hex, sign_hex};
+use crate::account::{AccountType, ChainAccount};
+use crate::block::{Transaction, TxType};
 
 const DEFAULT_COMPANY_CALL_LIMIT: i32 = 1_000_000;
+
+fn now_ts() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
 
 #[derive(Debug, Deserialize)]
 pub struct CreateCompanyWorkspaceRequest {
@@ -653,9 +662,100 @@ pub async fn withdraw_company_balance(
         &sha256_hex(format!("{}:{}", company.id, Utc::now().timestamp()).as_bytes())[..16]
     );
 
+    // Transfer funds on-chain from company developer wallet to owner personal wallet
+    let email_hash = sha256_hex(company.email.as_bytes());
+    let mut chain = state.chain.lock().await;
+
+    let company_wallet_addr = chain
+        .accounts
+        .values()
+        .find(|acc| acc.account_type == AccountType::Developer && acc.kyc_hash == email_hash)
+        .map(|acc| acc.address.clone());
+
+    let company_address = match company_wallet_addr {
+        Some(addr) => addr,
+        None => {
+            drop(chain);
+            return Err(api_error(StatusCode::NOT_FOUND, "Company wallet not found on chain"));
+        }
+    };
+
+    if chain.get_account(&owner.chain_address).is_none() {
+        chain.create_account(ChainAccount {
+            address: owner.chain_address.clone(),
+            public_key: String::new(),
+            balance: 0,
+            tx_count: 0,
+            account_type: AccountType::User,
+            created_at: now_ts(),
+            is_active: true,
+            kyc_hash: String::new(),
+        });
+    }
+
+    let from_balance = chain
+        .get_account(&company_address)
+        .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Company wallet not found"))?
+        .balance;
+
+    if from_balance < payload.amount {
+        drop(chain);
+        return Err(api_error(StatusCode::BAD_REQUEST, "Insufficient on-chain balance"));
+    }
+
+    let tx_hash = sha256_hex(
+        format!("{}{}{}{}", company_address, owner.chain_address, payload.amount, now_ts())
+            .as_bytes(),
+    );
+
+    let tx = Transaction {
+        id: Uuid::new_v4().to_string(),
+        tx_type: TxType::Transfer,
+        from: company_address.clone(),
+        to: owner.chain_address.clone(),
+        amount: payload.amount,
+        fee: 0,
+        timestamp: now_ts(),
+        signature: sign_hex(&state.system_private_key, &tx_hash).unwrap_or_default(),
+        memo: format!("Company withdrawal: {}", payout_id),
+        hash: tx_hash.clone(),
+    };
+
+    chain.add_pending_transaction(tx.clone());
+    let block = chain
+        .mine_block(
+            &state.validator_address,
+            &state.validator_private_key,
+            &state.validator_public_key,
+        )
+        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to mine transfer block"))?;
+
+    if let Some(from_acc) = chain.get_account(&company_address) {
+        let _ = state.sqlite_state.upsert_account(
+            &from_acc.address,
+            from_acc.balance,
+            from_acc.tx_count,
+            &from_acc.account_type,
+            from_acc.is_active,
+            now_ts(),
+        );
+    }
+    if let Some(to_acc) = chain.get_account(&owner.chain_address) {
+        let _ = state.sqlite_state.upsert_account(
+            &to_acc.address,
+            to_acc.balance,
+            to_acc.tx_count,
+            &to_acc.account_type,
+            to_acc.is_active,
+            now_ts(),
+        );
+    }
+    let _ = state.sqlite_state.record_transaction(&tx, block.index);
+
+    drop(chain);
+
     sqlx::query(
-        "INSERT INTO payouts (payout_id, merchant_id, amount, destination, status)
-         VALUES ($1, $2, $3, $4, 'queued')",
+        "INSERT INTO payouts (payout_id, merchant_id, amount, destination, status)\n         VALUES ($1, $2, $3, $4, 'paid')",
     )
     .bind(&payout_id)
     .bind(company.id)
@@ -663,14 +763,14 @@ pub async fn withdraw_company_balance(
     .bind(destination)
     .execute(&state.pg_pool)
     .await
-    .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to queue withdrawal"))?;
+    .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to record withdrawal"))?;
 
     log_api_call(&state, None, "/accounts/:address/company/withdraw", "POST", 200).await;
 
     Ok(Json(json!({
         "success": true,
         "payout_id": payout_id,
-        "status": "queued",
+        "status": "paid",
         "amount": payload.amount,
     })))
 }
