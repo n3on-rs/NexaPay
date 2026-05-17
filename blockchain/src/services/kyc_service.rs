@@ -46,7 +46,7 @@ impl KycService {
         phone: &str,
         email: &str,
         date_of_birth: &str,
-        cin_number: &str,
+        cin_number: Option<&str>,
     ) -> Result<Uuid, String> {
         let normalized_phone = normalize_phone_digits(phone).ok_or_else(|| {
             "phone must be 8 digits or start with 216".to_string()
@@ -56,14 +56,15 @@ impl KycService {
         // generate session id and store PENDING_PHONE_VERIFY
         let session_id = Uuid::new_v4();
         let now = Utc::now();
+        let cin = cin_number.unwrap_or(&normalized_phone);
         sqlx::query(
             "INSERT INTO kyc_sessions (id, full_name, phone, email, cin_number, date_of_birth, status, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, 'PENDING_PHONE_VERIFY', $7, $7)",
         )
             .bind(session_id)
             .bind(full_name)
-            .bind(phone)
+            .bind(&normalized_phone)
             .bind(email)
-            .bind(cin_number)
+            .bind(cin)
             .bind(dob)
             .bind(now)
             .execute(&self.pool)
@@ -123,8 +124,8 @@ impl KycService {
             let _ = sqlx::query("UPDATE kyc_sessions SET otp_attempts = $1 WHERE id=$2").bind(attempts+1).bind(sid).execute(&self.pool).await;
             return Err(sqlx::Error::RowNotFound);
         }
-        // mark verified
-        sqlx::query("UPDATE kyc_sessions SET status='PENDING_DOCUMENTS', otp_code_hash=NULL, otp_expires_at=NULL, otp_attempts=0, updated_at=NOW() WHERE id=$1").bind(sid).execute(&self.pool).await?;
+        // mark verified (auto-approved, skip document/liveness)
+        sqlx::query("UPDATE kyc_sessions SET status='APPROVED', otp_code_hash=NULL, otp_expires_at=NULL, otp_attempts=0, updated_at=NOW() WHERE id=$1").bind(sid).execute(&self.pool).await?;
         Ok(())
     }
 
