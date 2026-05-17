@@ -40,6 +40,16 @@ services:
       - nexapay_chain_data:/app/chain_data
       - nexapay_chain_state:/app/chain_state
 
+  nexapay-web:
+    build: ./nexapay-web
+    ports:
+      - "3001:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=https://backend.nexapay.space
+    depends_on:
+      - nexapay-node
+
 volumes:
   pgdata:
   nexapay_chain_data:
