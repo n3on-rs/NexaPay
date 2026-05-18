@@ -10,7 +10,7 @@ use chrono::{NaiveDate, Utc, Duration};
 use sqlx::Row;
 use rand::Rng;
 
-fn normalize_phone_digits(phone: &str) -> Option<String> {
+pub fn normalize_phone_digits(phone: &str) -> Option<String> {
     let digits: String = phone.chars().filter(|c| c.is_ascii_digit()).collect();
     if digits.len() == 8 {
         Some(format!("216{}", digits))

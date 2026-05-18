@@ -63,6 +63,7 @@ pub fn build_router(state: AppState) -> Router {
     router
         // KYC multi-step routes
         .route("/auth/register/init", post(crate::api::kyc::register_init))
+        .route("/auth/register/resend-otp", post(crate::api::kyc::resend_otp))
         .route("/auth/register/verify-phone", post(crate::api::kyc::verify_phone))
         .route("/auth/register/upload-documents", post(crate::api::kyc::upload_documents))
         .route("/auth/register/liveness", post(crate::api::kyc::liveness))
