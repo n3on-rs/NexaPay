@@ -45,6 +45,10 @@ pub async fn register_init(State(state): State<AppState>, Json(payload): Json<In
     let now = chrono::Utc::now();
     // Use today's date as CIN issue date (schema column is cin_expiry, but CIN has no expiry)
     let cin_issue_date = chrono::Utc::now().date_naive();
+    let dob = match chrono::NaiveDate::parse_from_str(&payload.date_of_birth, "%Y-%m-%d") {
+        Ok(d) => d,
+        Err(_) => return (axum::http::StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid date_of_birth format, expected YYYY-MM-DD"}))),
+    };
     match sqlx::query(
         "INSERT INTO kyc_sessions (id, full_name, phone, email, cin_number, cin_expiry, date_of_birth, status, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, 'APPROVED', $8, $8)")
@@ -54,7 +58,7 @@ pub async fn register_init(State(state): State<AppState>, Json(payload): Json<In
         .bind(&payload.email)
         .bind(&cin)
         .bind(cin_issue_date)
-        .bind(&payload.date_of_birth)
+        .bind(dob)
         .bind(now)
         .execute(&state.pg_pool)
         .await
