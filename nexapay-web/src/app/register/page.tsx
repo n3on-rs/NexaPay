@@ -336,7 +336,7 @@ export default function RegisterPage() {
                 <div className="bg-[#00FF88]/5 border border-[#00FF88]/20 rounded-xl p-3 flex items-start gap-3">
                   <Smartphone className="w-4 h-4 text-[#00FF88] shrink-0 mt-0.5" />
                   <p className="text-xs text-[#aaa] leading-relaxed">
-                    <span className="text-[#00FF88] font-bold">Instant Verification:</span> Your identity is verified automatically. No document upload needed.
+                    
                   </p>
                 </div>
 
