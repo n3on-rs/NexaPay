@@ -238,7 +238,10 @@ pub async fn admin_login(
     let admin_phone = std::env::var("NEXAPAY_ADMIN_PHONE").unwrap_or_default();
     if !admin_phone.is_empty() {
         let msg = format!("NexaPay Admin login code: {}. Valid for 5 minutes. Never share this code.", otp);
-        let _ = send_twilio_sms(&state, &admin_phone, &msg).await;
+        match send_twilio_sms(&state, &admin_phone, &msg).await {
+            Ok(_) => tracing::info!("[admin] OTP SMS sent to {}", admin_phone),
+            Err(e) => tracing::error!("[admin] Failed to send OTP SMS: {:?}", e),
+        }
     }
 
     sqlx::query(
@@ -267,8 +270,8 @@ pub async fn admin_login(
     .await;
 
     let dev_otp =
-        if state.env == "development" || std::env::var("DEV_SHOW_OTP").as_deref() == Ok("true") {
-            Some(otp)
+        if state.env == "development" || state.env == "demo" || std::env::var("DEV_SHOW_OTP").as_deref() == Ok("true") {
+            Some(otp.clone())
         } else {
             None
         };

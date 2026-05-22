@@ -11,6 +11,7 @@ export default function AdminLoginPage() {
   const [password, setPassword] = React.useState("");
   const [otp, setOtp] = React.useState("");
   const [step, setStep] = React.useState<"password" | "otp">("password");
+  const [devOtp, setDevOtp] = React.useState("");
   const [adminId, setAdminId] = React.useState("");
   const [error, setError] = React.useState("");
   const [loading, setLoading] = React.useState(false);
@@ -25,6 +26,7 @@ export default function AdminLoginPage() {
         const data = res.data as Record<string, unknown>;
         setAdminId(String(data.admin_id || ""));
         setStep("otp");
+        if (data.dev_otp) setDevOtp(String(data.dev_otp));
       } else {
         setError(String(res.data.error || "Invalid credentials"));
       }
@@ -126,6 +128,16 @@ export default function AdminLoginPage() {
                 <p className="mt-1 text-xs text-[#888]">
                   Enter the 6-digit code sent to your device
                 </p>
+                {devOtp && (
+                  <p className="mt-2 rounded-lg bg-amber-500/10 px-3 py-1.5 text-xs font-mono text-amber-400">
+                    Demo OTP: {devOtp}
+                  </p>
+                )}
+                {typeof window !== "undefined" && !localStorage.getItem("isDemoModeChecked") && (
+                  <p className="mt-2 text-xs font-mono text-amber-400">
+                    Demo mode — check the API response for the OTP code
+                  </p>
+                )}
               </div>
               <div>
                 <input
