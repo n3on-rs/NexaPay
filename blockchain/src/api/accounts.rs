@@ -1,25 +1,26 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::extract::{Multipart, Path, Query, State};
-use rand::Rng;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::Sse;
 use axum::Json;
-use tokio_stream::wrappers::UnboundedReceiverStream;
+use rand::Rng;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sqlx::Row;
+use tokio_stream::wrappers::UnboundedReceiverStream;
 use uuid::Uuid;
 
+use crate::account::{AccountType, ChainAccount};
 use crate::api::auth::login_phone_variants;
 use crate::api::middleware::{
     auth_error_response, log_api_call, require_account_token, try_api_key,
 };
+use crate::api::idempotency::IdempotencyGuard;
 use crate::api::AppState;
-use crate::account::{AccountType, ChainAccount};
 use crate::block::{Transaction, TxType};
-use crate::crypto::{decrypt_aes256_gcm, hash_transaction_pin, sha256_hex, sign_hex};
+use crate::crypto::{decrypt_aes256_gcm, decrypt_user_private_key, derive_user_key_encryption_key, hash_transaction_pin, sha256_hex, sign_hex, sign_transaction_with_user_key, verify_transaction_pin};
 
 #[derive(Debug, Serialize)]
 pub struct CardSummary {
@@ -149,7 +150,7 @@ pub struct CardWalletPayRequest {
     memo: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CardWalletPayResponse {
     success: bool,
     status: String,
@@ -162,11 +163,12 @@ pub struct CardWalletPayResponse {
     failure_reason: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct TransferResponse {
     pub success: bool,
     pub tx_hash: String,
-    pub block: u64,
+    pub status: String,
+    pub block: Option<u64>,
     pub new_balance: u64,
     pub to_name: String,
 }
@@ -211,7 +213,7 @@ pub struct BankTransferRequest {
     pub otp_code: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct BankTransferResponse {
     pub success: bool,
     pub transfer_id: String,
@@ -246,8 +248,14 @@ pub async fn get_public_account(
 
     Ok(Json(PublicAccountResponse {
         chain_address: address,
-        full_name: row.try_get::<String, _>("full_name").unwrap_or_else(|_| "Unknown".to_string()),
-        account_number_masked: mask_tail(&row.try_get::<String, _>("account_number").unwrap_or_default(), 4),
+        full_name: row
+            .try_get::<String, _>("full_name")
+            .unwrap_or_else(|_| "Unknown".to_string()),
+        account_number_masked: mask_tail(
+            &row.try_get::<String, _>("account_number")
+                .unwrap_or_default(),
+            4,
+        ),
         iban_masked: mask_tail(&row.try_get::<String, _>("iban").unwrap_or_default(), 4),
     }))
 }
@@ -283,7 +291,9 @@ pub async fn get_account(
         None => return Err(api_error(StatusCode::NOT_FOUND, "Account not found")),
     };
 
-    let full_name: String = row.try_get("full_name").unwrap_or_else(|_| "Unknown".to_string());
+    let full_name: String = row
+        .try_get("full_name")
+        .unwrap_or_else(|_| "Unknown".to_string());
     let created_at: chrono::DateTime<chrono::Utc> = row
         .try_get("created_at")
         .unwrap_or_else(|_| chrono::Utc::now());
@@ -303,15 +313,20 @@ pub async fn get_account(
     let mut card_last4: String = row.try_get("card_last4").unwrap_or_default();
     if card_last4.len() < 4 {
         let encrypted_card: String = row.try_get("card_number").unwrap_or_default();
-        let card_number = decrypt_aes256_gcm(&state.encryption_key, &encrypted_card).unwrap_or_default();
+        let card_number =
+            decrypt_aes256_gcm(&state.encryption_key, &encrypted_card).unwrap_or_default();
         card_last4 = if card_number.len() >= 4 {
             card_number[card_number.len() - 4..].to_string()
         } else {
             "0000".to_string()
         };
     }
-    let expiry_month: String = row.try_get("expiry_month").unwrap_or_else(|_| "01".to_string());
-    let expiry_year: String = row.try_get("expiry_year").unwrap_or_else(|_| "2029".to_string());
+    let expiry_month: String = row
+        .try_get("expiry_month")
+        .unwrap_or_else(|_| "01".to_string());
+    let expiry_year: String = row
+        .try_get("expiry_year")
+        .unwrap_or_else(|_| "2029".to_string());
     let y2 = if expiry_year.len() >= 2 {
         &expiry_year[expiry_year.len() - 2..]
     } else {
@@ -467,7 +482,14 @@ pub async fn mark_notification_read(
     .execute(&state.pg_pool)
     .await;
 
-    log_api_call(&state, principal.as_ref(), "/accounts/:address/notifications/:id/read", "POST", 200).await;
+    log_api_call(
+        &state,
+        principal.as_ref(),
+        "/accounts/:address/notifications/:id/read",
+        "POST",
+        200,
+    )
+    .await;
 
     Ok(Json(serde_json::json!({ "success": true })))
 }
@@ -488,7 +510,8 @@ pub async fn mark_all_notifications_read(
     // Collect all notification tx_ids for this user from the chain
     let tx_ids: Vec<String> = {
         let chain = state.chain.lock().await;
-        chain.blocks()
+        chain
+            .blocks()
             .iter()
             .flat_map(|b| &b.transactions)
             .filter(|tx| tx.to == address && tx.amount > 0)
@@ -507,7 +530,14 @@ pub async fn mark_all_notifications_read(
         .await;
     }
 
-    log_api_call(&state, principal.as_ref(), "/accounts/:address/notifications/read-all", "POST", 200).await;
+    log_api_call(
+        &state,
+        principal.as_ref(),
+        "/accounts/:address/notifications/read-all",
+        "POST",
+        200,
+    )
+    .await;
 
     Ok(Json(serde_json::json!({ "success": true })))
 }
@@ -547,7 +577,14 @@ pub async fn set_transaction_pin(
         ));
     }
 
-    log_api_call(&state, principal.as_ref(), "/accounts/:address/set-pin", "POST", 200).await;
+    log_api_call(
+        &state,
+        principal.as_ref(),
+        "/accounts/:address/set-pin",
+        "POST",
+        200,
+    )
+    .await;
 
     Ok(Json(json!({ "success": true })))
 }
@@ -603,8 +640,14 @@ pub async fn get_account_transactions(
             amount_display: format_millimes(tx.amount),
             from: tx.from.clone(),
             to: tx.to.clone(),
-            from_name: resolved.get(&tx.from).cloned().unwrap_or_else(|| tx.from.clone()),
-            to_name: resolved.get(&tx.to).cloned().unwrap_or_else(|| tx.to.clone()),
+            from_name: resolved
+                .get(&tx.from)
+                .cloned()
+                .unwrap_or_else(|| tx.from.clone()),
+            to_name: resolved
+                .get(&tx.to)
+                .cloned()
+                .unwrap_or_else(|| tx.to.clone()),
             memo: tx.memo,
             timestamp: ts_to_rfc3339(tx.timestamp),
             block: block_index,
@@ -612,7 +655,14 @@ pub async fn get_account_transactions(
         });
     }
 
-    log_api_call(&state, principal.as_ref(), "/accounts/:address/transactions", "GET", 200).await;
+    log_api_call(
+        &state,
+        principal.as_ref(),
+        "/accounts/:address/transactions",
+        "GET",
+        200,
+    )
+    .await;
 
     Ok(Json(TransactionListResponse { transactions }))
 }
@@ -664,14 +714,23 @@ pub async fn search_accounts(
     let results = rows
         .into_iter()
         .map(|row| SearchAccountItem {
-            chain_address: row.try_get::<String, _>("chain_address").unwrap_or_default(),
+            chain_address: row
+                .try_get::<String, _>("chain_address")
+                .unwrap_or_default(),
             full_name: row.try_get::<String, _>("full_name").unwrap_or_default(),
             cin: row.try_get::<String, _>("cin").unwrap_or_default(),
             phone: row.try_get::<String, _>("phone").unwrap_or_default(),
         })
         .collect::<Vec<_>>();
 
-    log_api_call(&state, principal.as_ref(), "/accounts/:address/search", "GET", 200).await;
+    log_api_call(
+        &state,
+        principal.as_ref(),
+        "/accounts/:address/search",
+        "GET",
+        200,
+    )
+    .await;
 
     Ok(Json(SearchAccountsResponse { results }))
 }
@@ -691,7 +750,10 @@ pub async fn transfer(
         .map_err(|_| api_error(StatusCode::UNAUTHORIZED, "Unauthorized"))?;
 
     if payload.amount == 0 {
-        return Err(api_error(StatusCode::BAD_REQUEST, "Amount must be positive"));
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            "Amount must be positive",
+        ));
     }
     if payload.pin.len() != 6 || !payload.pin.chars().all(|c| c.is_ascii_digit()) {
         return Err(api_error(StatusCode::BAD_REQUEST, "PIN must be 6 digits"));
@@ -711,9 +773,39 @@ pub async fn transfer(
             "Set your transaction PIN before transferring",
         )
     })?;
-    let provided_pin = hash_transaction_pin(&address, &payload.pin, &state.encryption_key);
-    if provided_pin != stored_pin {
+    let (pin_valid, pin_upgrade) = verify_transaction_pin(&address, &payload.pin, &state.encryption_key, &stored_pin);
+    if !pin_valid {
         return Err(api_error(StatusCode::UNAUTHORIZED, "Invalid PIN"));
+    }
+    if pin_upgrade {
+        let new_hash = hash_transaction_pin(&address, &payload.pin, &state.encryption_key);
+        let _ = sqlx::query("UPDATE cards SET pin_hash = $1 WHERE chain_address = $2")
+            .bind(&new_hash)
+            .bind(&address)
+            .execute(&state.pg_pool)
+            .await;
+    }
+
+    // ─── Idempotency check ───
+    let idem = IdempotencyGuard::extract(
+        &state.pg_pool,
+        &headers,
+        &address,
+        "/accounts/:address/transfer",
+    )
+    .await
+    .map_err(|s| api_error(s, "Idempotency error"))?;
+    if let Some(idem) = &idem {
+        if let Some((cached_status, cached_body)) = idem.check().await.map_err(|s| api_error(s, "Idempotency error"))? {
+            return Ok(Json(serde_json::from_value(cached_body).unwrap_or(TransferResponse {
+                success: true,
+                tx_hash: String::new(),
+                status: "cached".to_string(),
+                block: None,
+                new_balance: 0,
+                to_name: String::new(),
+            })));
+        }
     }
 
     let (to_address, to_name) = resolve_transfer_recipient(&state, &payload.to)
@@ -721,13 +813,15 @@ pub async fn transfer(
         .map_err(|msg| match msg {
             "recipient_not_found" => api_error(StatusCode::NOT_FOUND, "Recipient not found"),
             "db_error" => api_error(StatusCode::INTERNAL_SERVER_ERROR, "Database error"),
-            _ => api_error(StatusCode::BAD_REQUEST, "Invalid recipient (use NXP address, email, or phone)"),
+            _ => api_error(
+                StatusCode::BAD_REQUEST,
+                "Invalid recipient (use NXP address, email, or phone)",
+            ),
         })?;
 
     let fee = 10u64;
-    let tx_hash = sha256_hex(
-        format!("{}{}{}{}", address, to_address, payload.amount, now_ts()).as_bytes(),
-    );
+    let tx_hash =
+        sha256_hex(format!("{}{}{}{}", address, to_address, payload.amount, now_ts()).as_bytes());
 
     let mut chain = state.chain.lock().await;
     let from_balance = chain
@@ -735,13 +829,19 @@ pub async fn transfer(
         .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Sender account not found"))?
         .balance;
     if chain.get_account(&to_address).is_none() {
-        return Err(api_error(StatusCode::NOT_FOUND, "Recipient account not found"));
+        return Err(api_error(
+            StatusCode::NOT_FOUND,
+            "Recipient account not found",
+        ));
     }
     if from_balance < payload.amount.saturating_add(fee) {
         return Err(api_error(StatusCode::BAD_REQUEST, "Insufficient balance"));
     }
 
     let memo = payload.memo.clone().unwrap_or_default();
+
+    // ─── Sign with user's private key (non-repudiation) ───
+    let tx_signature = sign_with_user_key(&state, &address, &payload.pin, &tx_hash).await;
 
     let tx = Transaction {
         id: Uuid::new_v4().to_string(),
@@ -751,47 +851,59 @@ pub async fn transfer(
         amount: payload.amount,
         fee,
         timestamp: now_ts(),
-        signature: sign_hex(&state.system_private_key, &tx_hash).unwrap_or_default(),
+        signature: tx_signature,
         memo,
         hash: tx_hash.clone(),
     };
 
     chain.add_pending_transaction(tx.clone());
-    let block = chain
-        .mine_block(
-            &state.validator_address,
-            &state.validator_private_key,
-            &state.validator_public_key,
-        )
-        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to append block"))?;
 
-    let new_balance = chain
-        .get_account(&address)
-        .map(|a| a.balance)
-        .unwrap_or(from_balance);
+    let (block_index, status) = if state.is_multi_validator {
+        // Multi-validator: transaction goes to mempool, will be mined by consensus
+        (None, "pending".to_string())
+    } else {
+        // Single-validator: mine immediately for instant confirmation
+        let block = chain
+            .mine_block(
+                &state.validator_address,
+                &state.validator_private_key,
+                &state.validator_public_key,
+            )
+            .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to append block"))?;
 
-    if let Some(from_acc) = chain.get_account(&address) {
-        let _ = state.sqlite_state.upsert_account(
-            &from_acc.address,
-            from_acc.balance,
-            from_acc.tx_count,
-            &from_acc.account_type,
-            from_acc.is_active,
-            now_ts(),
-        );
-    }
-    if let Some(to_acc) = chain.get_account(&to_address) {
-        let _ = state.sqlite_state.upsert_account(
-            &to_acc.address,
-            to_acc.balance,
-            to_acc.tx_count,
-            &to_acc.account_type,
-            to_acc.is_active,
-            now_ts(),
-        );
-    }
+        if let Some(from_acc) = chain.get_account(&address) {
+            let _ = state.sqlite_state.upsert_account(
+                &from_acc.address,
+                from_acc.balance,
+                from_acc.tx_count,
+                &from_acc.account_type,
+                from_acc.is_active,
+                now_ts(),
+            );
+        }
+        if let Some(to_acc) = chain.get_account(&to_address) {
+            let _ = state.sqlite_state.upsert_account(
+                &to_acc.address,
+                to_acc.balance,
+                to_acc.tx_count,
+                &to_acc.account_type,
+                to_acc.is_active,
+                now_ts(),
+            );
+        }
+        let _ = state.sqlite_state.record_transaction(&tx, block.index);
+        (Some(block.index), "confirmed".to_string())
+    };
 
-    let _ = state.sqlite_state.record_transaction(&tx, block.index);
+    let new_balance = if state.is_multi_validator {
+        // In multi-validator mode, compute expected balance (not yet committed)
+        from_balance.saturating_sub(payload.amount.saturating_add(fee))
+    } else {
+        chain
+            .get_account(&address)
+            .map(|a| a.balance)
+            .unwrap_or(from_balance)
+    };
 
     // Notify connected SSE clients
     let from_name = lookup_display_name(&state, &address).await;
@@ -810,19 +922,34 @@ pub async fn transfer(
     broadcast_event(&state, &address, &event_str);
     broadcast_event(&state, &to_address, &event_str);
 
-    log_api_call(&state, principal.as_ref(), "/accounts/:address/transfer", "POST", 200).await;
+    log_api_call(
+        &state,
+        principal.as_ref(),
+        "/accounts/:address/transfer",
+        "POST",
+        200,
+    )
+    .await;
 
-    Ok(Json(TransferResponse {
+    let response = TransferResponse {
         success: true,
         tx_hash,
-        block: block.index,
+        status,
+        block: block_index,
         new_balance,
         to_name,
-    }))
+    };
+    if let Some(idem) = &idem {
+        let _ = idem.store(&serde_json::to_value(&response).unwrap_or_default(), StatusCode::OK).await;
+    }
+
+    Ok(Json(response))
 }
 
 fn is_valid_otp(otp: &str) -> bool {
-    Regex::new(r"^\d{6}$").map(|re| re.is_match(otp)).unwrap_or(false)
+    Regex::new(r"^\d{6}$")
+        .map(|re| re.is_match(otp))
+        .unwrap_or(false)
 }
 
 fn generate_otp_code() -> String {
@@ -843,13 +970,27 @@ async fn send_transfer_otp_sms(state: &AppState, to: &str, otp: &str) -> Result<
         (Some(sid), Some(token), Some(from)) => (sid, token, from),
         _ => return Err(()),
     };
-    let to_e164 = if to.starts_with('+') { to.to_string() } else { format!("+{}", to) };
-    let body = format!("Your NexaPay transfer code is: {}. Valid for 5 minutes. Never share this code.", otp);
+    let to_e164 = if to.starts_with('+') {
+        to.to_string()
+    } else {
+        format!("+{}", to)
+    };
+    let body = format!(
+        "Your NexaPay transfer code is: {}. Valid for 5 minutes. Never share this code.",
+        otp
+    );
     let response = state
         .http_client
-        .post(&format!("https://api.twilio.com/2010-04-01/Accounts/{}/Messages.json", sid))
+        .post(&format!(
+            "https://api.twilio.com/2010-04-01/Accounts/{}/Messages.json",
+            sid
+        ))
         .basic_auth(sid.clone(), Some(token.clone()))
-        .form(&[("To", to_e164.as_str()), ("From", from.as_str()), ("Body", body.as_str())])
+        .form(&[
+            ("To", to_e164.as_str()),
+            ("From", from.as_str()),
+            ("Body", body.as_str()),
+        ])
         .send()
         .await;
     match response {
@@ -873,7 +1014,10 @@ pub async fn request_transfer_otp(
         .map_err(|_| api_error(StatusCode::UNAUTHORIZED, "Unauthorized"))?;
 
     if payload.amount == 0 {
-        return Err(api_error(StatusCode::BAD_REQUEST, "Amount must be positive"));
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            "Amount must be positive",
+        ));
     }
     if payload.pin.len() != 6 || !payload.pin.chars().all(|c| c.is_ascii_digit()) {
         return Err(api_error(StatusCode::BAD_REQUEST, "PIN must be 6 digits"));
@@ -884,11 +1028,26 @@ pub async fn request_transfer_otp(
         .fetch_optional(&state.pg_pool)
         .await
         .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Database error"))?;
-    let stored_pin = pin_row.and_then(|r| r.try_get::<String, _>("pin_hash").ok()).filter(|s| !s.is_empty());
-    let stored_pin = stored_pin.ok_or_else(|| api_error(StatusCode::BAD_REQUEST, "Set your transaction PIN before transferring"))?;
-    let provided_pin = hash_transaction_pin(&address, &payload.pin, &state.encryption_key);
-    if provided_pin != stored_pin {
+    let stored_pin = pin_row
+        .and_then(|r| r.try_get::<String, _>("pin_hash").ok())
+        .filter(|s| !s.is_empty());
+    let stored_pin = stored_pin.ok_or_else(|| {
+        api_error(
+            StatusCode::BAD_REQUEST,
+            "Set your transaction PIN before transferring",
+        )
+    })?;
+    let (pin_valid, pin_upgrade) = verify_transaction_pin(&address, &payload.pin, &state.encryption_key, &stored_pin);
+    if !pin_valid {
         return Err(api_error(StatusCode::UNAUTHORIZED, "Invalid PIN"));
+    }
+    if pin_upgrade {
+        let new_hash = hash_transaction_pin(&address, &payload.pin, &state.encryption_key);
+        let _ = sqlx::query("UPDATE cards SET pin_hash = $1 WHERE chain_address = $2")
+            .bind(&new_hash)
+            .bind(&address)
+            .execute(&state.pg_pool)
+            .await;
     }
 
     // Check for existing locked OTP
@@ -903,7 +1062,10 @@ pub async fn request_transfer_otp(
         if let Some(until) = locked_until {
             if until > chrono::Utc::now() {
                 let mins = ((until - chrono::Utc::now()).num_seconds() / 60).max(1);
-                return Err(api_error(StatusCode::TOO_MANY_REQUESTS, &format!("Too many attempts. Try again in {} minutes.", mins)));
+                return Err(api_error(
+                    StatusCode::TOO_MANY_REQUESTS,
+                    &format!("Too many attempts. Try again in {} minutes.", mins),
+                ));
             }
         }
     }
@@ -947,7 +1109,14 @@ pub async fn request_transfer_otp(
         dev_otp = Some(otp.clone());
     }
 
-    log_api_call(&state, principal.as_ref(), "/accounts/:address/transfer/request-otp", "POST", 200).await;
+    log_api_call(
+        &state,
+        principal.as_ref(),
+        "/accounts/:address/transfer/request-otp",
+        "POST",
+        200,
+    )
+    .await;
 
     Ok(Json(RequestTransferOtpResponse {
         step: "otp_required".to_string(),
@@ -963,14 +1132,21 @@ async fn execute_transfer(
     to_address: &str,
     amount: u64,
     memo: &str,
+    pin: &str,
 ) -> Result<(String, u64, u64), (StatusCode, HeaderMap, Json<Value>)> {
     let fee = 10u64;
     let tx_hash = sha256_hex(format!("{}{}{}{}", address, to_address, amount, now_ts()).as_bytes());
 
     let mut chain = state.chain.lock().await;
-    let from_balance = chain.get_account(address).ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Sender account not found"))?.balance;
+    let from_balance = chain
+        .get_account(address)
+        .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Sender account not found"))?
+        .balance;
     if chain.get_account(to_address).is_none() {
-        return Err(api_error(StatusCode::NOT_FOUND, "Recipient account not found"));
+        return Err(api_error(
+            StatusCode::NOT_FOUND,
+            "Recipient account not found",
+        ));
     }
     if from_balance < amount.saturating_add(fee) {
         return Err(api_error(StatusCode::BAD_REQUEST, "Insufficient balance"));
@@ -984,26 +1160,57 @@ async fn execute_transfer(
         amount,
         fee,
         timestamp: now_ts(),
-        signature: sign_hex(&state.system_private_key, &tx_hash).unwrap_or_default(),
+        signature: sign_with_user_key(state, address, pin, &tx_hash).await,
         memo: memo.to_string(),
         hash: tx_hash.clone(),
     };
 
     chain.add_pending_transaction(tx.clone());
-    let block = chain.mine_block(&state.validator_address, &state.validator_private_key, &state.validator_public_key)
-        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to append block"))?;
 
-    let new_balance = chain.get_account(address).map(|a| a.balance).unwrap_or(from_balance);
+    let (new_balance, block_index) = if state.is_multi_validator {
+        // Multi-validator: tx goes to mempool, consensus will mine it
+        let expected = from_balance.saturating_sub(amount.saturating_add(fee));
+        (expected, 0u64)
+    } else {
+        // Single-validator: mine immediately
+        let block = chain
+            .mine_block(
+                &state.validator_address,
+                &state.validator_private_key,
+                &state.validator_public_key,
+            )
+            .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to append block"))?;
 
-    if let Some(from_acc) = chain.get_account(address) {
-        let _ = state.sqlite_state.upsert_account(&from_acc.address, from_acc.balance, from_acc.tx_count, &from_acc.account_type, from_acc.is_active, now_ts());
-    }
-    if let Some(to_acc) = chain.get_account(to_address) {
-        let _ = state.sqlite_state.upsert_account(&to_acc.address, to_acc.balance, to_acc.tx_count, &to_acc.account_type, to_acc.is_active, now_ts());
-    }
-    let _ = state.sqlite_state.record_transaction(&tx, block.index);
+        let new_bal = chain
+            .get_account(address)
+            .map(|a| a.balance)
+            .unwrap_or(from_balance);
 
-    Ok((tx_hash, new_balance, block.index))
+        if let Some(from_acc) = chain.get_account(address) {
+            let _ = state.sqlite_state.upsert_account(
+                &from_acc.address,
+                from_acc.balance,
+                from_acc.tx_count,
+                &from_acc.account_type,
+                from_acc.is_active,
+                now_ts(),
+            );
+        }
+        if let Some(to_acc) = chain.get_account(to_address) {
+            let _ = state.sqlite_state.upsert_account(
+                &to_acc.address,
+                to_acc.balance,
+                to_acc.tx_count,
+                &to_acc.account_type,
+                to_acc.is_active,
+                now_ts(),
+            );
+        }
+        let _ = state.sqlite_state.record_transaction(&tx, block.index);
+        (new_bal, block.index)
+    };
+
+    Ok((tx_hash, new_balance, block_index))
 }
 
 pub async fn verify_transfer_otp(
@@ -1039,12 +1246,24 @@ pub async fn verify_transfer_otp(
         None => return Err(api_error(StatusCode::UNAUTHORIZED, "OTP not found")),
     };
 
-    let stored_hash: String = otp_row.try_get("otp_hash").map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Invalid row"))?;
-    let amount: i64 = otp_row.try_get("amount").map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Invalid row"))?;
-    let recipient: String = otp_row.try_get("recipient_address").map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Invalid row"))?;
-    let memo: String = otp_row.try_get("memo").map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Invalid row"))?;
-    let expires: chrono::DateTime<chrono::Utc> = otp_row.try_get("expires_at").map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Invalid row"))?;
-    let used: bool = otp_row.try_get("used").map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Invalid row"))?;
+    let stored_hash: String = otp_row
+        .try_get("otp_hash")
+        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Invalid row"))?;
+    let amount: i64 = otp_row
+        .try_get("amount")
+        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Invalid row"))?;
+    let recipient: String = otp_row
+        .try_get("recipient_address")
+        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Invalid row"))?;
+    let memo: String = otp_row
+        .try_get("memo")
+        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Invalid row"))?;
+    let expires: chrono::DateTime<chrono::Utc> = otp_row
+        .try_get("expires_at")
+        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Invalid row"))?;
+    let used: bool = otp_row
+        .try_get("used")
+        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Invalid row"))?;
     let resend_count: i32 = otp_row.try_get("resend_count").unwrap_or(0);
     let locked_until: Option<chrono::DateTime<chrono::Utc>> = otp_row.try_get("locked_until").ok();
 
@@ -1057,7 +1276,10 @@ pub async fn verify_transfer_otp(
     if let Some(until) = locked_until {
         if until > chrono::Utc::now() {
             let mins = ((until - chrono::Utc::now()).num_seconds() / 60).max(1);
-            return Err(api_error(StatusCode::TOO_MANY_REQUESTS, &format!("Too many attempts. Try again in {} minutes.", mins)));
+            return Err(api_error(
+                StatusCode::TOO_MANY_REQUESTS,
+                &format!("Too many attempts. Try again in {} minutes.", mins),
+            ));
         }
     }
 
@@ -1067,13 +1289,18 @@ pub async fn verify_transfer_otp(
         let new_count = resend_count + 1;
         if new_count >= 3 {
             let locked = chrono::Utc::now() + chrono::Duration::hours(1);
-            let _ = sqlx::query("UPDATE transfer_otps SET resend_count = $1, locked_until = $2 WHERE id = $3")
-                .bind(new_count)
-                .bind(locked)
-                .bind(otp_uuid)
-                .execute(&state.pg_pool)
-                .await;
-            return Err(api_error(StatusCode::TOO_MANY_REQUESTS, "Too many failed attempts. Locked for 1 hour."));
+            let _ = sqlx::query(
+                "UPDATE transfer_otps SET resend_count = $1, locked_until = $2 WHERE id = $3",
+            )
+            .bind(new_count)
+            .bind(locked)
+            .bind(otp_uuid)
+            .execute(&state.pg_pool)
+            .await;
+            return Err(api_error(
+                StatusCode::TOO_MANY_REQUESTS,
+                "Too many failed attempts. Locked for 1 hour.",
+            ));
         } else {
             let _ = sqlx::query("UPDATE transfer_otps SET resend_count = $1 WHERE id = $2")
                 .bind(new_count)
@@ -1098,7 +1325,8 @@ pub async fn verify_transfer_otp(
             _ => api_error(StatusCode::BAD_REQUEST, "Invalid recipient"),
         })?;
 
-    let (tx_hash, new_balance, block_index) = execute_transfer(&state, &address, &to_address, amount as u64, &memo).await?;
+    let (tx_hash, new_balance, block_index) =
+        execute_transfer(&state, &address, &to_address, amount as u64, &memo, "").await?;
 
     // Notify connected SSE clients
     let from_name = lookup_display_name(&state, &address).await;
@@ -1112,16 +1340,26 @@ pub async fn verify_transfer_otp(
         "amount_display": format_millimes(amount as u64),
         "memo": memo,
         "timestamp": now_ts(),
-    }).to_string();
+    })
+    .to_string();
     broadcast_event(&state, &address, &event);
     broadcast_event(&state, &to_address, &event);
 
-    log_api_call(&state, principal.as_ref(), "/accounts/:address/transfer/verify-otp", "POST", 200).await;
+    log_api_call(
+        &state,
+        principal.as_ref(),
+        "/accounts/:address/transfer/verify-otp",
+        "POST",
+        200,
+    )
+    .await;
 
+    let status = if state.is_multi_validator { "pending" } else { "confirmed" };
     Ok(Json(TransferResponse {
         success: true,
         tx_hash,
-        block: block_index,
+        status: status.to_string(),
+        block: if state.is_multi_validator { None } else { Some(block_index) },
         new_balance,
         to_name,
     }))
@@ -1142,13 +1380,19 @@ pub async fn bank_transfer(
         .map_err(|_| api_error(StatusCode::UNAUTHORIZED, "Unauthorized"))?;
 
     if payload.amount == 0 {
-        return Err(api_error(StatusCode::BAD_REQUEST, "Amount must be positive"));
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            "Amount must be positive",
+        ));
     }
     if payload.rib.len() < 15 {
         return Err(api_error(StatusCode::BAD_REQUEST, "Invalid RIB"));
     }
     if payload.beneficiary_name.trim().is_empty() {
-        return Err(api_error(StatusCode::BAD_REQUEST, "Beneficiary name is required"));
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            "Beneficiary name is required",
+        ));
     }
     if !is_valid_otp(&payload.otp_code) {
         return Err(api_error(StatusCode::BAD_REQUEST, "OTP must be 6 digits"));
@@ -1160,11 +1404,42 @@ pub async fn bank_transfer(
         .fetch_optional(&state.pg_pool)
         .await
         .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Database error"))?;
-    let stored_pin = pin_row.and_then(|r| r.try_get::<String, _>("pin_hash").ok()).filter(|s| !s.is_empty());
-    let stored_pin = stored_pin.ok_or_else(|| api_error(StatusCode::BAD_REQUEST, "Set your transaction PIN first"))?;
-    let provided_pin = hash_transaction_pin(&address, &payload.pin, &state.encryption_key);
-    if provided_pin != stored_pin {
+    let stored_pin = pin_row
+        .and_then(|r| r.try_get::<String, _>("pin_hash").ok())
+        .filter(|s| !s.is_empty());
+    let stored_pin = stored_pin
+        .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, "Set your transaction PIN first"))?;
+    let (pin_valid, pin_upgrade) = verify_transaction_pin(&address, &payload.pin, &state.encryption_key, &stored_pin);
+    if !pin_valid {
         return Err(api_error(StatusCode::UNAUTHORIZED, "Invalid PIN"));
+    }
+    if pin_upgrade {
+        let new_hash = hash_transaction_pin(&address, &payload.pin, &state.encryption_key);
+        let _ = sqlx::query("UPDATE cards SET pin_hash = $1 WHERE chain_address = $2")
+            .bind(&new_hash)
+            .bind(&address)
+            .execute(&state.pg_pool)
+            .await;
+    }
+
+    // ─── Idempotency check ───
+    let idem_bt = IdempotencyGuard::extract(
+        &state.pg_pool,
+        &headers,
+        &address,
+        "/accounts/:address/bank-transfer",
+    )
+    .await
+    .map_err(|s| api_error(s, "Idempotency error"))?;
+    if let Some(idem_bt) = &idem_bt {
+        if let Some((cached_status, cached_body)) = idem_bt.check().await.map_err(|s| api_error(s, "Idempotency error"))? {
+            return Ok(Json(serde_json::from_value(cached_body).unwrap_or(BankTransferResponse {
+                success: true,
+                transfer_id: String::new(),
+                amount_display: String::new(),
+                status: "cached".to_string(),
+            })));
+        }
     }
 
     // Verify OTP
@@ -1183,9 +1458,15 @@ pub async fn bank_transfer(
         None => return Err(api_error(StatusCode::UNAUTHORIZED, "OTP not found")),
     };
 
-    let stored_hash: String = otp_row.try_get("otp_hash").map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Invalid row"))?;
-    let expires: chrono::DateTime<chrono::Utc> = otp_row.try_get("expires_at").map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Invalid row"))?;
-    let used: bool = otp_row.try_get("used").map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Invalid row"))?;
+    let stored_hash: String = otp_row
+        .try_get("otp_hash")
+        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Invalid row"))?;
+    let expires: chrono::DateTime<chrono::Utc> = otp_row
+        .try_get("expires_at")
+        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Invalid row"))?;
+    let used: bool = otp_row
+        .try_get("used")
+        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Invalid row"))?;
     let locked_until: Option<chrono::DateTime<chrono::Utc>> = otp_row.try_get("locked_until").ok();
 
     if used {
@@ -1197,7 +1478,10 @@ pub async fn bank_transfer(
     if let Some(until) = locked_until {
         if until > chrono::Utc::now() {
             let mins = ((until - chrono::Utc::now()).num_seconds() / 60).max(1);
-            return Err(api_error(StatusCode::TOO_MANY_REQUESTS, &format!("Too many attempts. Try again in {} minutes.", mins)));
+            return Err(api_error(
+                StatusCode::TOO_MANY_REQUESTS,
+                &format!("Too many attempts. Try again in {} minutes.", mins),
+            ));
         }
     }
 
@@ -1212,12 +1496,18 @@ pub async fn bank_transfer(
         .await;
 
     // Check if RIB belongs to a NexaPay user; if so, transfer directly to them
-    let memo = payload.memo.clone().unwrap_or_else(|| format!("Bank transfer to {} (RIB: {})", payload.beneficiary_name, payload.rib));
+    let memo = payload.memo.clone().unwrap_or_else(|| {
+        format!(
+            "Bank transfer to {} (RIB: {})",
+            payload.beneficiary_name, payload.rib
+        )
+    });
     let recipient_address = get_address_by_rib(&state, &payload.rib).await;
 
     let (_tx_hash, new_balance, _block_index) = if let Some(ref recv_addr) = recipient_address {
         let recv_memo = format!("Bank transfer from {} (RIB: {})", &address, &payload.rib);
-        let (h, nb, bi) = execute_transfer(&state, &address, recv_addr, payload.amount, &recv_memo).await?;
+        let (h, nb, bi) =
+            execute_transfer(&state, &address, recv_addr, payload.amount, &recv_memo, &payload.pin).await?;
 
         // Notify recipient via SSE
         let to_name = lookup_display_name(&state, &address).await;
@@ -1230,7 +1520,8 @@ pub async fn bank_transfer(
             "amount_display": format_millimes(payload.amount),
             "memo": recv_memo,
             "timestamp": now_ts(),
-        }).to_string();
+        })
+        .to_string();
         broadcast_event(&state, recv_addr, &recv_event);
         (h, nb, bi)
     } else {
@@ -1250,7 +1541,7 @@ pub async fn bank_transfer(
                 });
             }
         }
-        execute_transfer(&state, &address, "BANK", payload.amount, &memo).await?
+        execute_transfer(&state, &address, "BANK", payload.amount, &memo, &payload.pin).await?
     };
 
     let transfer_id = Uuid::new_v4();
@@ -1286,17 +1577,30 @@ pub async fn bank_transfer(
         "rib": payload.rib,
         "new_balance": new_balance,
         "timestamp": now_ts(),
-    }).to_string();
+    })
+    .to_string();
     broadcast_event(&state, &address, &event);
 
-    log_api_call(&state, principal.as_ref(), "/accounts/:address/bank-transfer", "POST", 200).await;
+    log_api_call(
+        &state,
+        principal.as_ref(),
+        "/accounts/:address/bank-transfer",
+        "POST",
+        200,
+    )
+    .await;
 
-    Ok(Json(BankTransferResponse {
+    let response = BankTransferResponse {
         success: true,
         transfer_id: transfer_id.to_string(),
         amount_display: format_millimes(payload.amount),
         status: "completed".to_string(),
-    }))
+    };
+    if let Some(idem_bt) = &idem_bt {
+        let _ = idem_bt.store(&serde_json::to_value(&response).unwrap_or_default(), StatusCode::OK).await;
+    }
+
+    Ok(Json(response))
 }
 
 // ─── Saved Beneficiaries ───
@@ -1338,7 +1642,10 @@ pub async fn list_saved_beneficiaries(
                 rib: r.try_get::<String, _>("rib").ok()?,
                 beneficiary_name: r.try_get::<String, _>("beneficiary_name").ok()?,
                 bank_name: r.try_get::<String, _>("bank_name").ok(),
-                created_at: r.try_get::<chrono::DateTime<chrono::Utc>, _>("created_at").ok()?.to_rfc3339(),
+                created_at: r
+                    .try_get::<chrono::DateTime<chrono::Utc>, _>("created_at")
+                    .ok()?
+                    .to_rfc3339(),
             })
         })
         .collect();
@@ -1372,7 +1679,10 @@ pub async fn add_saved_beneficiary(
         return Err(api_error(StatusCode::BAD_REQUEST, "Invalid RIB"));
     }
     if payload.beneficiary_name.trim().is_empty() {
-        return Err(api_error(StatusCode::BAD_REQUEST, "Beneficiary name is required"));
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            "Beneficiary name is required",
+        ));
     }
 
     let _ = sqlx::query(
@@ -1401,8 +1711,7 @@ pub async fn delete_saved_beneficiary(
         .await
         .map_err(|_| api_error(StatusCode::UNAUTHORIZED, "Unauthorized"))?;
 
-    let _ = sqlx::query(
-        "DELETE FROM saved_beneficiaries WHERE id = $1 AND user_address = $2")
+    let _ = sqlx::query("DELETE FROM saved_beneficiaries WHERE id = $1 AND user_address = $2")
         .bind(&beneficiary_id)
         .bind(&address)
         .execute(&state.pg_pool)
@@ -1461,8 +1770,14 @@ pub async fn list_bank_transfers(
                 memo: r.try_get::<String, _>("memo").ok(),
                 status: r.try_get::<String, _>("status").ok()?,
                 failure_reason: r.try_get::<String, _>("failure_reason").ok(),
-                created_at: r.try_get::<chrono::DateTime<chrono::Utc>, _>("created_at").ok()?.to_rfc3339(),
-                updated_at: r.try_get::<chrono::DateTime<chrono::Utc>, _>("updated_at").ok().map(|d| d.to_rfc3339()),
+                created_at: r
+                    .try_get::<chrono::DateTime<chrono::Utc>, _>("created_at")
+                    .ok()?
+                    .to_rfc3339(),
+                updated_at: r
+                    .try_get::<chrono::DateTime<chrono::Utc>, _>("updated_at")
+                    .ok()
+                    .map(|d| d.to_rfc3339()),
             })
         })
         .collect();
@@ -1473,44 +1788,76 @@ pub async fn list_bank_transfers(
 pub async fn pay_wallet_by_card(
     State(state): State<AppState>,
     Path(address): Path<String>,
+    headers: HeaderMap,
     Json(payload): Json<CardWalletPayRequest>,
 ) -> Result<Json<CardWalletPayResponse>, (StatusCode, HeaderMap, Json<Value>)> {
     if !is_valid_address(&address) {
-        return Err(api_error(StatusCode::BAD_REQUEST, "Invalid recipient address"));
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            "Invalid recipient address",
+        ));
     }
 
     if payload.amount == 0 {
-        return Err(api_error(StatusCode::BAD_REQUEST, "Amount must be greater than 0"));
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            "Amount must be greater than 0",
+        ));
+    }
+
+    // ─── Rate limiting: IP-based, 10 attempts per 15 minutes ───
+    let ip = crate::api::middleware::extract_client_ip(&headers);
+    const MAX_ATTEMPTS: i32 = 10;
+    const LOCKOUT_MINUTES: i32 = 15;
+    if let Err(crate::api::middleware::AuthError::TooManyRequests { retry_after_seconds }) =
+        crate::api::middleware::check_auth_rate_limit(&state, &ip, "/wallets/pay-by-card", MAX_ATTEMPTS, LOCKOUT_MINUTES).await
+    {
+        return Err(api_error(
+            StatusCode::TOO_MANY_REQUESTS,
+            &format!("Too many attempts. Try again in {}s.", retry_after_seconds),
+        ));
     }
 
     let card_number_clean = payload.card_number.replace(' ', "");
+
+    // ─── 6-digit PIN required ───
+    if payload.pin.len() != 6 || !payload.pin.chars().all(|c| c.is_ascii_digit()) {
+        crate::api::middleware::record_auth_attempt(&state, &ip, "/wallets/pay-by-card", false, MAX_ATTEMPTS, LOCKOUT_MINUTES).await;
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            "PIN must be exactly 6 digits",
+        ));
+    }
+
     let card_valid = is_luhn_valid(&card_number_clean)
         && payload.cvv.len() >= 3
-        && payload.pin.len() == 4
-        && payload.pin.chars().all(|c| c.is_ascii_digit());
+        && card_number_clean.len() >= 15
+        && payload.pin != "000000"
+        && payload
+            .expiry_month
+            .parse::<u32>()
+            .ok()
+            .map(|m| (1..=12).contains(&m))
+            .unwrap_or(false)
+        && payload.expiry_year.len() == 4
+        && payload
+            .card_holder_name
+            .clone()
+            .unwrap_or_default()
+            .trim()
+            .len()
+            >= 3;
 
-    let test_card_result = evaluate_test_card(&card_number_clean, &payload.pin);
-    let approved = test_card_result.unwrap_or(
-        card_valid
-            && card_number_clean.len() >= 15
-            && payload.pin != "0000"
-            && payload
-                .expiry_month
-                .parse::<u32>()
-                .ok()
-                .map(|m| (1..=12).contains(&m))
-                .unwrap_or(false)
-            && payload.expiry_year.len() == 4
-            && payload
-                .card_holder_name
-                .clone()
-                .unwrap_or_default()
-                .trim()
-                .len()
-                >= 3,
-    );
+    // Test cards: only allowed in non-production environments
+    let test_card_result = if state.env == "production" || state.env == "prod" {
+        None
+    } else {
+        evaluate_test_card(&card_number_clean, &payload.pin)
+    };
+    let approved = test_card_result.unwrap_or(card_valid);
 
     if !approved {
+        crate::api::middleware::record_auth_attempt(&state, &ip, "/wallets/pay-by-card", false, MAX_ATTEMPTS, LOCKOUT_MINUTES).await;
         return Ok(Json(CardWalletPayResponse {
             success: false,
             status: "failed".to_string(),
@@ -1528,8 +1875,42 @@ pub async fn pay_wallet_by_card(
         }));
     }
 
+    crate::api::middleware::record_auth_attempt(&state, &ip, "/wallets/pay-by-card", true, MAX_ATTEMPTS, LOCKOUT_MINUTES).await;
+
+    // ─── Idempotency check (scoped by IP for public endpoint) ───
+    let idem_pay = IdempotencyGuard::extract(
+        &state.pg_pool,
+        &headers,
+        &ip,
+        "/wallets/:address/pay-by-card",
+    )
+    .await
+    .map_err(|s| api_error(s, "Idempotency error"))?;
+    if let Some(idem_pay) = &idem_pay {
+        if let Some((cached_status, cached_body)) = idem_pay.check().await.map_err(|s| api_error(s, "Idempotency error"))? {
+            return Ok(Json(serde_json::from_value(cached_body).unwrap_or(CardWalletPayResponse {
+                success: false,
+                status: "cached".to_string(),
+                recipient: address.clone(),
+                amount: payload.amount,
+                amount_display: format_millimes(payload.amount),
+                tx_hash: None,
+                block: None,
+                recipient_balance: None,
+                failure_reason: None,
+            })));
+        }
+    }
+
     let tx_hash = sha256_hex(
-        format!("{}:{}:{}:{}", address, payload.amount, payload.pin, now_ts()).as_bytes(),
+        format!(
+            "{}:{}:{}:{}",
+            address,
+            payload.amount,
+            payload.pin,
+            now_ts()
+        )
+        .as_bytes(),
     );
 
     let tx = Transaction {
@@ -1549,45 +1930,61 @@ pub async fn pay_wallet_by_card(
 
     let mut chain = state.chain.lock().await;
     if chain.get_account(&address).is_none() {
-        return Err(api_error(StatusCode::NOT_FOUND, "Recipient account not found"));
+        return Err(api_error(
+            StatusCode::NOT_FOUND,
+            "Recipient account not found",
+        ));
     }
 
     chain.add_pending_transaction(tx.clone());
-    let block = chain
-        .mine_block(
-            &state.validator_address,
-            &state.validator_private_key,
-            &state.validator_public_key,
-        )
-        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to append block"))?;
 
-    let recipient_balance = chain.get_account(&address).map(|a| a.balance).unwrap_or(0);
+    let (block_index, final_status, recipient_balance) = if state.is_multi_validator {
+        // Multi-validator: tx goes to mempool, consensus mines it
+        (None, "pending".to_string(), None)
+    } else {
+        // Single-validator: mine immediately
+        let block = chain
+            .mine_block(
+                &state.validator_address,
+                &state.validator_private_key,
+                &state.validator_public_key,
+            )
+            .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to append block"))?;
 
-    if let Some(acc) = chain.get_account(&address) {
-        let _ = state.sqlite_state.upsert_account(
-            &acc.address,
-            acc.balance,
-            acc.tx_count,
-            &acc.account_type,
-            acc.is_active,
-            now_ts(),
-        );
-    }
-    let _ = state.sqlite_state.record_transaction(&tx, block.index);
+        let balance = chain.get_account(&address).map(|a| a.balance).unwrap_or(0);
+
+        if let Some(acc) = chain.get_account(&address) {
+            let _ = state.sqlite_state.upsert_account(
+                &acc.address,
+                acc.balance,
+                acc.tx_count,
+                &acc.account_type,
+                acc.is_active,
+                now_ts(),
+            );
+        }
+        let _ = state.sqlite_state.record_transaction(&tx, block.index);
+        (Some(block.index), "succeeded".to_string(), Some(balance))
+    };
 
     log_api_call(&state, None, "/wallets/:address/pay-by-card", "POST", 200).await;
 
-    Ok(Json(CardWalletPayResponse {
+    let response = CardWalletPayResponse {
         success: true,
-        status: "succeeded".to_string(),
+        status: final_status,
         recipient: address,
         amount: payload.amount,
         amount_display: format_millimes(payload.amount),
         tx_hash: Some(tx_hash),
-        block: Some(block.index),
-        recipient_balance: Some(recipient_balance),
+        block: block_index,
+        recipient_balance,
         failure_reason: None,
-    }))
+    };
+    if let Some(idem_pay) = &idem_pay {
+        let _ = idem_pay.store(&serde_json::to_value(&response).unwrap_or_default(), StatusCode::OK).await;
+    }
+
+    Ok(Json(response))
 }
 
 async fn lookup_display_name(state: &AppState, chain_address: &str) -> String {
@@ -1616,7 +2013,10 @@ async fn get_address_by_rib(state: &AppState, rib: &str) -> Option<String> {
         .filter(|s| !s.is_empty())
 }
 
-async fn resolve_transfer_recipient(state: &AppState, to_field: &str) -> Result<(String, String), &'static str> {
+async fn resolve_transfer_recipient(
+    state: &AppState,
+    to_field: &str,
+) -> Result<(String, String), &'static str> {
     let t = to_field.trim();
     if t.is_empty() {
         return Err("invalid_recipient");
@@ -1691,8 +2091,64 @@ fn format_millimes(amount: u64) -> String {
     format!("{}.{:03} TND", whole, frac)
 }
 
+/// Sign a transaction hash with the user's Ed25519 private key.
+/// Derives the encryption key from the PIN, decrypts the stored private key,
+/// signs, then drops the key from memory.
+/// Falls back to system key if the user has no keypair yet (legacy).
+async fn sign_with_user_key(
+    state: &AppState,
+    chain_address: &str,
+    pin: &str,
+    tx_hash: &str,
+) -> String {
+    // Try to get the user's encrypted private key
+    let row = sqlx::query(
+        "SELECT encrypted_user_sk FROM cards WHERE chain_address = $1",
+    )
+    .bind(chain_address)
+    .fetch_optional(&state.pg_pool)
+    .await
+    .ok()
+    .flatten();
+
+    let encrypted_sk: Option<String> = row.and_then(|r| r.try_get("encrypted_user_sk").ok());
+
+    match encrypted_sk {
+        Some(ref enc) if !enc.is_empty() => {
+            // Derive encryption key from PIN
+            match derive_user_key_encryption_key(chain_address, pin, &state.encryption_key) {
+                Ok(enc_key) => {
+                    // Decrypt the private key
+                    match decrypt_user_private_key(enc, &enc_key) {
+                        Ok(sk_hex) => {
+                            // Sign with user's key
+                            match sign_transaction_with_user_key(&sk_hex, tx_hash) {
+                                Ok(sig) => sig,
+                                Err(_) => sign_hex(&state.system_private_key, tx_hash)
+                                    .unwrap_or_default(),
+                            }
+                        }
+                        Err(_) => sign_hex(&state.system_private_key, tx_hash)
+                            .unwrap_or_default(),
+                    }
+                }
+                Err(_) => sign_hex(&state.system_private_key, tx_hash)
+                    .unwrap_or_default(),
+            }
+        }
+        _ => {
+            // Legacy user: sign with system key
+            sign_hex(&state.system_private_key, tx_hash).unwrap_or_default()
+        }
+    }
+}
+
 fn api_error(status: StatusCode, message: &str) -> (StatusCode, HeaderMap, Json<Value>) {
-    (status, HeaderMap::new(), Json(json!({ "success": false, "error": message })))
+    (
+        status,
+        HeaderMap::new(),
+        Json(json!({ "success": false, "error": message })),
+    )
 }
 
 fn now_ts() -> u64 {
@@ -1792,7 +2248,9 @@ pub async fn freeze_card(
         .await
         .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Database error"))?;
 
-    let current = row.and_then(|r| r.try_get::<bool, _>("frozen").ok()).unwrap_or(false);
+    let current = row
+        .and_then(|r| r.try_get::<bool, _>("frozen").ok())
+        .unwrap_or(false);
     let next = !current;
 
     sqlx::query("UPDATE cards SET frozen = $1 WHERE chain_address = $2")
@@ -1800,7 +2258,12 @@ pub async fn freeze_card(
         .bind(&address)
         .execute(&state.pg_pool)
         .await
-        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to update card status"))?;
+        .map_err(|_| {
+            api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to update card status",
+            )
+        })?;
 
     Ok(Json(CardStatusResponse {
         success: true,
@@ -1822,7 +2285,12 @@ pub async fn report_lost_card(
         .bind(&address)
         .execute(&state.pg_pool)
         .await
-        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to update card status"))?;
+        .map_err(|_| {
+            api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to update card status",
+            )
+        })?;
 
     Ok(Json(CardStatusResponse {
         success: true,
@@ -1867,7 +2335,12 @@ pub async fn upload_avatar(
 
     let upload_base = std::env::var("UPLOAD_BASE_PATH").unwrap_or_else(|_| "./uploads".to_string());
     let dir = format!("{}/avatars", upload_base);
-    std::fs::create_dir_all(&dir).map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to create upload directory"))?;
+    std::fs::create_dir_all(&dir).map_err(|_| {
+        api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to create upload directory",
+        )
+    })?;
 
     let mut saved_path = None;
     while let Some(field) = multipart.next_field().await.unwrap_or(None) {
@@ -1877,15 +2350,20 @@ pub async fn upload_avatar(
         }
         if let Some(fname) = field.file_name() {
             let ext = fname.split('.').last().unwrap_or("jpg");
-            let target = format!("{}/{}_{}.{}" , dir, address, uuid::Uuid::new_v4(), ext);
-            let data = field.bytes().await.map_err(|_| api_error(StatusCode::BAD_REQUEST, "Failed to read file"))?;
-            std::fs::write(&target, &data).map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to save file"))?;
+            let target = format!("{}/{}_{}.{}", dir, address, uuid::Uuid::new_v4(), ext);
+            let data = field
+                .bytes()
+                .await
+                .map_err(|_| api_error(StatusCode::BAD_REQUEST, "Failed to read file"))?;
+            std::fs::write(&target, &data)
+                .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to save file"))?;
             saved_path = Some(target);
             break;
         }
     }
 
-    let path = saved_path.ok_or_else(|| api_error(StatusCode::BAD_REQUEST, "No avatar file provided"))?;
+    let path =
+        saved_path.ok_or_else(|| api_error(StatusCode::BAD_REQUEST, "No avatar file provided"))?;
     let avatar_url = format!("/uploads/avatars/{}", path.split('/').last().unwrap_or(""));
 
     sqlx::query("UPDATE users SET avatar_url = $1 WHERE chain_address = $2")
@@ -1893,7 +2371,12 @@ pub async fn upload_avatar(
         .bind(&address)
         .execute(&state.pg_pool)
         .await
-        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to save avatar URL"))?;
+        .map_err(|_| {
+            api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to save avatar URL",
+            )
+        })?;
 
     Ok(Json(AvatarUploadResponse {
         success: true,
@@ -1904,14 +2387,24 @@ pub async fn upload_avatar(
 pub async fn get_municipalities(
     State(state): State<AppState>,
 ) -> Result<Json<Value>, (StatusCode, HeaderMap, Json<Value>)> {
-    let res = state.http_client
+    let res = state
+        .http_client
         .get("https://tn-municipality-api.vercel.app/api/municipalities")
         .send()
         .await
-        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch municipalities"))?;
+        .map_err(|_| {
+            api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to fetch municipalities",
+            )
+        })?;
 
-    let data: Value = res.json().await
-        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to parse municipalities"))?;
+    let data: Value = res.json().await.map_err(|_| {
+        api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to parse municipalities",
+        )
+    })?;
 
     Ok(Json(data))
 }
@@ -1923,8 +2416,17 @@ pub async fn account_events(
     Path(address): Path<String>,
     headers: HeaderMap,
     Query(params): Query<std::collections::HashMap<String, String>>,
-) -> Result<Sse<UnboundedReceiverStream<std::result::Result<axum::response::sse::Event, std::convert::Infallible>>>, (StatusCode, HeaderMap, Json<Value>)> {
-    let token = params.get("token").cloned()
+) -> Result<
+    Sse<
+        UnboundedReceiverStream<
+            std::result::Result<axum::response::sse::Event, std::convert::Infallible>,
+        >,
+    >,
+    (StatusCode, HeaderMap, Json<Value>),
+> {
+    let token = params
+        .get("token")
+        .cloned()
         .or_else(|| crate::api::middleware::extract_account_token(&headers));
     let token = token.ok_or_else(|| api_error(StatusCode::UNAUTHORIZED, "Unauthorized"))?;
     let claims = crate::api::middleware::verify_session_token(&state, &token)
@@ -1946,7 +2448,9 @@ pub async fn account_events(
         }
     };
 
-    let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<std::result::Result<axum::response::sse::Event, std::convert::Infallible>>();
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<
+        std::result::Result<axum::response::sse::Event, std::convert::Infallible>,
+    >();
     tokio::spawn(async move {
         loop {
             match bc_rx.recv().await {

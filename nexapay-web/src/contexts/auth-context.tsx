@@ -25,6 +25,7 @@ export interface AuthUser {
   governorate: string | null;
   avatarUrl: string | null;
   forcePinChange: boolean;
+  kycStatus: string;
 }
 
 interface AuthContextValue {
@@ -70,6 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         governorate: res.data.governorate ? String(res.data.governorate) : null,
         avatarUrl: res.data.avatar_url ? String(res.data.avatar_url) : null,
         forcePinChange,
+        kycStatus: String(res.data.kyc_status || "verified"),
       });
       if (forcePinChange && typeof window !== "undefined" && window.location.pathname !== "/change-pin") {
         router.push("/change-pin");
@@ -119,6 +121,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         governorate: null,
         avatarUrl: null,
         forcePinChange: false,
+        kycStatus: "unverified",
       });
       // Immediately fetch fresh user data
       fetchUser(token);

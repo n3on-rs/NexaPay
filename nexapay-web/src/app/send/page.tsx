@@ -94,6 +94,9 @@ function SendInner() {
   const [otpLoading, setOtpLoading] = React.useState(false);
   const [otpShake, setOtpShake] = React.useState(false);
 
+  // Idempotency key (generated once per transfer attempt)
+  const [idempotencyKey] = React.useState(() => crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2));
+
   // Bank transfer mode
   const [isBankTransfer, setIsBankTransfer] = React.useState(false);
   const [rib, setRib] = React.useState("");
@@ -206,7 +209,7 @@ function SendInner() {
           rib: isBankTransfer ? rib : undefined,
           beneficiary_name: isBankTransfer ? beneficiaryName : undefined,
         },
-        { "X-Account-Token": token }
+        { "X-Account-Token": token, "X-Idempotency-Key": idempotencyKey }
       );
       if (res.ok) {
         setOtpId(String((res.data as any).otp_id || ""));
@@ -251,7 +254,7 @@ function SendInner() {
             otp_code: otpCode,
             memo: memo || undefined,
           },
-          { "X-Account-Token": token }
+          { "X-Account-Token": token, "X-Idempotency-Key": idempotencyKey }
         );
         if (res.ok) {
           setTxHash(String((res.data as any).transfer_id || ""));
@@ -272,7 +275,7 @@ function SendInner() {
         const res = await postJson(
           `/accounts/${address}/transfer/verify-otp`,
           { otp_id: otpId, otp_code: otpCode },
-          { "X-Account-Token": token }
+          { "X-Account-Token": token, "X-Idempotency-Key": idempotencyKey }
         );
         if (res.ok) {
           setTxHash(String((res.data as any).tx_hash || ""));

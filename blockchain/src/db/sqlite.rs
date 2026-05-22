@@ -236,6 +236,11 @@ impl SqliteState {
             TxType::BankJoin => "BankJoin",
             TxType::DevRegister => "DevRegister",
             TxType::AgentApply => "AgentApply",
+            TxType::EsignAccount => "EsignAccount",
+            TxType::EsignTransfer => "EsignTransfer",
+            TxType::InvoiceAnchor => "InvoiceAnchor",
+            TxType::ValidatorJoin => "ValidatorJoin",
+            TxType::ValidatorLeave => "ValidatorLeave",
         };
 
         let conn = self.conn.lock().map_err(|_| SqliteStateError::Poisoned)?;

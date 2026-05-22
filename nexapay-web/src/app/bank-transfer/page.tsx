@@ -4,7 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { ProtectedRoute } from "@/components/protected-route";
 import { getSessionToken, getSessionAddress } from "@/lib/auth-utils";
-import { getJson, postJson, fetchSavedBeneficiaries, deleteSavedBeneficiary } from "@/lib/api";
+import { getJson, postJson, fetchSavedBeneficiaries, deleteSavedBeneficiary, generateInvoice } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { ArrowLeft, Check, Home, RotateCcw, ArrowUpRight, Plus, Clock, User, Trash2 } from "lucide-react";
@@ -20,6 +20,7 @@ function formatMillimes(value: number): string {
 
 function BankTransferInner() {
   const router = useRouter();
+  const [idempotencyKey] = React.useState(() => crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2));
   const [step, setStep] = React.useState<1 | 2 | 3 | 4 | "success">(1);
   const [error, setError] = React.useState("");
   const [loading, setLoading] = React.useState(false);
@@ -108,7 +109,7 @@ function BankTransferInner() {
           rib,
           beneficiary_name: beneficiaryName,
         },
-        { "X-Account-Token": token }
+        { "X-Account-Token": token, "X-Idempotency-Key": idempotencyKey }
       );
       if (res.ok) {
         setOtpId(String((res.data as any).otp_id || ""));
@@ -151,10 +152,22 @@ function BankTransferInner() {
           otp_code: otpCode,
           memo: memo || undefined,
         },
-        { "X-Account-Token": token }
+        { "X-Account-Token": token, "X-Idempotency-Key": idempotencyKey }
       );
       if (res.ok) {
-        setTxHash(String((res.data as any).transfer_id || ""));
+        const transferId = String((res.data as any).transfer_id || "");
+        setTxHash(transferId);
+        // Generate invoice asynchronously (don't block UI)
+        if (address && token) {
+          generateInvoice(address, token, {
+            transaction_id: transferId,
+            amount: rawAmount / 1000,
+            currency: "TND",
+            buyer_name: beneficiaryName,
+            buyer_address: address,
+            description: memo || `Bank transfer to ${beneficiaryName}`,
+          }).catch(() => {});
+        }
         setStep("success");
       } else {
         const msg = String((res.data as any).error || (res.data as any).message || "");
@@ -477,7 +490,7 @@ function BankTransferInner() {
             <div className="mb-6 rounded-2xl border border-[#00FF88]/20 bg-[#111] p-5 text-center">
               <p className="text-[12px] text-[#888]">Enter the 6-digit code sent to your phone</p>
               <p className="mt-2 text-[14px] font-semibold text-white">{formatMillimes(rawAmount)} to {beneficiaryName}</p>
-              {devOtp && (
+              {!isDemoMode && devOtp && (
                 <div className="mt-3 rounded-full bg-[#00FF88]/10 px-4 py-2">
                   <p className="text-[11px] text-[#888]">Dev OTP (no SMS)</p>
                   <p className="font-space-grotesk text-[18px] font-bold tracking-[0.3em] text-[#00FF88]">{devOtp}</p>
@@ -614,6 +627,8 @@ function BankTransferInner() {
     </div>
   );
 }
+
+const isDemoMode = typeof window !== "undefined" ? false : process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 
 export default function BankTransferPage() {
   return (

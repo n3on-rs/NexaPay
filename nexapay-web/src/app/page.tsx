@@ -1,6 +1,9 @@
 import { LandingHero } from "@/components/landing/landing-hero";
 import { LandingLower } from "@/components/landing/landing-lower";
 import { LandingNav } from "@/components/landing/landing-nav";
+import { HowItWorks } from "@/components/landing/how-it-works";
+import { UserFlow } from "@/components/landing/user-flow";
+import { AgentFlow } from "@/components/landing/agent-flow";
 
 export default function Home() {
   return (
@@ -8,6 +11,9 @@ export default function Home() {
       <LandingNav />
       <main>
         <LandingHero />
+        <HowItWorks />
+        <UserFlow />
+        <AgentFlow />
         <LandingLower />
       </main>
     </div>

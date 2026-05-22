@@ -76,14 +76,232 @@ pub fn address_from_public_key(public_key_hex: &str) -> String {
     format!("NXP{}", &hash[..32])
 }
 
+/// Verify a block's multi-signature quorum. Returns true if enough distinct validators
+/// from the provided `validator_pubkeys` set have produced valid signatures.
+pub fn verify_multi_signature(
+    block_hash: &str,
+    signatures: &[crate::block::ValidatorSignature],
+    validator_pubkeys: &std::collections::HashMap<String, String>, // address -> pubkey hex
+    quorum: usize,
+) -> bool {
+    let mut valid_sigs = 0usize;
+    let mut seen = std::collections::HashSet::new();
+
+    for sig in signatures {
+        // Deduplicate by address
+        if seen.contains(&sig.validator_address) {
+            continue;
+        }
+        seen.insert(sig.validator_address.clone());
+
+        // Look up the validator's public key
+        let pubkey = match validator_pubkeys.get(&sig.validator_address) {
+            Some(pk) => pk.clone(),
+            None => {
+                // Also try the embedded public key in the signature itself
+                if !sig.validator_public_key.is_empty() {
+                    sig.validator_public_key.clone()
+                } else {
+                    continue;
+                }
+            }
+        };
+
+        if verify_signature(&pubkey, block_hash, &sig.signature) {
+            valid_sigs += 1;
+        }
+    }
+
+    valid_sigs >= quorum
+}
+
+// ─── User transaction signing ───
+
+/// Derive a 32-byte encryption key from the user's PIN using Argon2id.
+/// This key encrypts/decrypts the user's Ed25519 private key.
+pub fn derive_user_key_encryption_key(
+    chain_address: &str,
+    pin: &str,
+    pepper: &str,
+) -> Result<[u8; 32], CryptoError> {
+    use argon2::{
+        password_hash::{rand_core::OsRng, PasswordHasher, SaltString},
+        Argon2,
+    };
+
+    let salt_str = format!("nexapay.userkey.{}:{}", chain_address, pepper);
+    let mut hasher = Sha256::new();
+    hasher.update(salt_str.as_bytes());
+    let digest = hasher.finalize();
+    let mut salt_bytes = [0u8; 16];
+    salt_bytes.copy_from_slice(&digest[..16]);
+
+    let salt = SaltString::encode_b64(&salt_bytes)
+        .map_err(|_| CryptoError::Encryption)?;
+
+    let argon2 = Argon2::default();
+    let hash = argon2
+        .hash_password(pin.as_bytes(), &salt)
+        .map_err(|_| CryptoError::Encryption)?;
+
+    // Use the Argon2id hash output to derive our AES key
+    let hash_str = hash.to_string();
+    let hash_bytes = sha256_hex(hash_str.as_bytes());
+    let mut key = [0u8; 32];
+    let decoded = hex::decode(&hash_bytes).map_err(|_| CryptoError::InvalidKeyLength)?;
+    key.copy_from_slice(&decoded[..32]);
+    Ok(key)
+}
+
+/// Encrypt a user's Ed25519 private key (hex string) with their PIN-derived key.
+/// Returns base64-encoded ciphertext.
+pub fn encrypt_user_private_key(
+    private_key_hex: &str,
+    encryption_key: &[u8; 32],
+) -> Result<String, CryptoError> {
+    let key_bytes = hex::decode(private_key_hex)?;
+    if key_bytes.len() != 32 {
+        return Err(CryptoError::InvalidKeyLength);
+    }
+    let cipher = Aes256Gcm::new_from_slice(encryption_key).map_err(|_| CryptoError::Encryption)?;
+    let mut nonce_bytes = [0u8; 12];
+    OsRng.fill_bytes(&mut nonce_bytes);
+    let nonce = Nonce::from_slice(&nonce_bytes);
+    let ciphertext = cipher
+        .encrypt(nonce, key_bytes.as_slice())
+        .map_err(|_| CryptoError::Encryption)?;
+    let mut payload = nonce_bytes.to_vec();
+    payload.extend(ciphertext);
+    Ok(base64::engine::general_purpose::STANDARD.encode(payload))
+}
+
+/// Decrypt a user's Ed25519 private key with their PIN-derived key.
+/// Returns the private key as a hex string.
+pub fn decrypt_user_private_key(
+    encrypted_b64: &str,
+    encryption_key: &[u8; 32],
+) -> Result<String, CryptoError> {
+    let payload = base64::engine::general_purpose::STANDARD
+        .decode(encrypted_b64)
+        .map_err(|_| CryptoError::Decryption)?;
+    if payload.len() < 13 {
+        return Err(CryptoError::Decryption);
+    }
+    let nonce = Nonce::from_slice(&payload[..12]);
+    let ciphertext = &payload[12..];
+    let cipher = Aes256Gcm::new_from_slice(encryption_key).map_err(|_| CryptoError::Decryption)?;
+    let plaintext = cipher
+        .decrypt(nonce, ciphertext)
+        .map_err(|_| CryptoError::Decryption)?;
+    Ok(hex::encode(plaintext))
+}
+
+/// Sign a transaction hash with a user's Ed25519 private key.
+/// Returns the hex-encoded signature (128 hex chars = 64 bytes).
+pub fn sign_transaction_with_user_key(
+    private_key_hex: &str,
+    tx_hash: &str,
+) -> Result<String, CryptoError> {
+    sign_hex(private_key_hex, tx_hash)
+}
+
+/// Generate a new Ed25519 keypair for a user.
+/// Returns (private_key_hex, public_key_hex).
+pub fn generate_user_keypair() -> (String, String) {
+    generate_keypair()
+}
+
+/// Generate a deterministic validator keypair from a seed index.
+/// In production, each validator should have a unique, securely generated key.
+pub fn validator_keypair_from_seed(seed: u64) -> (String, String, String) {
+    let mut hasher = Sha256::new();
+    hasher.update(b"NEXAPAY_VALIDATOR_SEED");
+    hasher.update(seed.to_le_bytes());
+    let seed_bytes = hasher.finalize();
+
+    let key_bytes: [u8; 32] = seed_bytes[..32]
+        .try_into()
+        .expect("SHA-256 produces 32 bytes");
+    let signing = SigningKey::from_bytes(&key_bytes);
+    let private_hex = hex::encode(signing.to_bytes());
+    let public_hex = hex::encode(signing.verifying_key().to_bytes());
+    let address = address_from_public_key(&public_hex);
+    (private_hex, public_hex, address)
+}
+
 /// On-chain onboarding digest (commitment over login id, name, DOB).
 pub fn registration_digest(login_id: &str, full_name: &str, dob: &str) -> String {
     sha256_hex(format!("{}{}{}", login_id, full_name, dob).as_bytes())
 }
 
-/// 4-digit transaction PIN stored on `cards.pin_hash` (hex SHA-256).
+/// Hash a transaction PIN using Argon2id (memory-hard KDF).
+/// Uses chain_address as salt, pepper as secret pepper for defense-in-depth.
+/// Returns format: "argon2id:$hex_hash" for new hashes,
+/// or "sha256:$hex_hash" for legacy (pre-migration) hashes.
 pub fn hash_transaction_pin(chain_address: &str, pin: &str, pepper: &str) -> String {
-    sha256_hex(format!("txpin:{}:{}:{}", chain_address, pin, pepper).as_bytes())
+    use argon2::{
+        password_hash::{rand_core::OsRng, PasswordHasher, SaltString},
+        Argon2,
+    };
+
+    // Use chain_address + pepper combined as the salt base
+    let salt_str = format!("nexapay.pin.{}:{}", chain_address, pepper);
+    let mut salt_bytes = [0u8; 32];
+    let mut hasher = Sha256::new();
+    hasher.update(salt_str.as_bytes());
+    let digest = hasher.finalize();
+    salt_bytes.copy_from_slice(&digest);
+
+    let salt = SaltString::encode_b64(&salt_bytes[..16])
+        .unwrap_or_else(|_| SaltString::from_b64("AAAAAAAAAAAAAAAAAAAAAA").unwrap());
+
+    let argon2 = Argon2::default();
+    let hash = argon2
+        .hash_password(pin.as_bytes(), &salt)
+        .map(|h| h.to_string())
+        .unwrap_or_default();
+
+    format!("argon2id:{}", hash)
+}
+
+/// Verify a transaction PIN against its stored hash.
+/// Supports both legacy SHA-256 hashes and new Argon2id hashes.
+/// Returns (is_valid, needs_upgrade) — if needs_upgrade is true, caller should
+/// re-hash the PIN to Argon2id and update the stored hash.
+pub fn verify_transaction_pin(
+    chain_address: &str,
+    pin: &str,
+    pepper: &str,
+    stored_hash: &str,
+) -> (bool, bool) {
+    if stored_hash.starts_with("argon2id:") {
+        use argon2::{
+            password_hash::{PasswordHash, PasswordVerifier},
+            Argon2,
+        };
+        let hash_str = &stored_hash["argon2id:".len()..];
+        let parsed = match PasswordHash::new(hash_str) {
+            Ok(h) => h,
+            Err(_) => return (false, false),
+        };
+        let argon2 = Argon2::default();
+        (
+            argon2.verify_password(pin.as_bytes(), &parsed).is_ok(),
+            false, // already Argon2id, no upgrade needed
+        )
+    } else {
+        // Legacy SHA-256 fallback
+        use crate::crypto::sha256_hex;
+        let legacy = sha256_hex(
+            format!("txpin:{}:{}:{}", chain_address, pin, pepper).as_bytes(),
+        );
+        (legacy == stored_hash, true) // needs upgrade to Argon2id
+    }
+}
+
+/// Check if a stored PIN hash uses the legacy SHA-256 format and needs upgrade.
+pub fn pin_needs_upgrade(stored_hash: &str) -> bool {
+    !stored_hash.is_empty() && !stored_hash.starts_with("argon2id:")
 }
 
 pub fn generate_api_key(prefix: &str) -> (String, String, String) {

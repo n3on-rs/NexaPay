@@ -40,6 +40,8 @@ const PillInput = ({ icon: Icon, error, label, rightElement, ...props }: any) =>
   </div>
 );
 
+const isDemoMode = typeof window !== "undefined" ? false : process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+
 export default function LoginPage() {
   const router = useRouter();
   const { setAuth } = useAuth();
@@ -247,7 +249,7 @@ export default function LoginPage() {
 
             {step === 2 && (
               <form onSubmit={onStep2} className="flex flex-col gap-5">
-                {devOtp && (
+                {!isDemoMode && devOtp && (
                   <p className="text-center text-xs text-[#00FF88] font-mono bg-[#00FF88]/10 py-2 rounded-lg border border-[#00FF88]/20">
                     Dev OTP: {devOtp}
                   </p>

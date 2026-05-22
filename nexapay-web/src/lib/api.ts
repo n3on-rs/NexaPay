@@ -7,6 +7,7 @@ export function getApiBase(): string {
 export interface ApiHeaders extends Record<string, string | undefined> {
   "X-Account-Token"?: string;
   "X-API-Key"?: string;
+  "X-Idempotency-Key"?: string;
 }
 
 export async function parseResponseJson(res: Response): Promise<Record<string, unknown>> {
@@ -287,11 +288,12 @@ export async function requestTransferOtp(
   amount: number,
   pin: string,
   memo?: string,
+  idempotencyKey?: string,
 ): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> {
   return postJson(
     `/accounts/${address}/transfer/request-otp`,
     { to, amount, memo, pin },
-    { "X-Account-Token": token },
+    { "X-Account-Token": token, "X-Idempotency-Key": idempotencyKey },
   );
 }
 
@@ -300,11 +302,12 @@ export async function verifyTransferOtp(
   token: string,
   otpId: string,
   otpCode: string,
+  idempotencyKey?: string,
 ): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> {
   return postJson(
     `/accounts/${address}/transfer/verify-otp`,
     { otp_id: otpId, otp_code: otpCode },
-    { "X-Account-Token": token },
+    { "X-Account-Token": token, "X-Idempotency-Key": idempotencyKey },
   );
 }
 
@@ -318,11 +321,12 @@ export async function bankTransfer(
   otpId: string,
   otpCode: string,
   memo?: string,
+  idempotencyKey?: string,
 ): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> {
   return postJson(
     `/accounts/${address}/bank-transfer`,
     { rib, beneficiary_name: beneficiaryName, amount, pin, otp_id: otpId, otp_code: otpCode, memo },
-    { "X-Account-Token": token },
+    { "X-Account-Token": token, "X-Idempotency-Key": idempotencyKey },
   );
 }
 
@@ -478,4 +482,152 @@ export async function createPayout(
   body: { amount: number; destination: string },
 ): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> {
   return postJson("/gateway/v1/payout", body, { "X-API-Key": apiKey });
+}
+
+// ─── E-Signature ───
+
+export async function signAccountContract(
+  address: string,
+  token: string,
+  signatureImageBase64: string,
+  signatureType = "draw",
+  termsAccepted = false,
+): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> {
+  return postJson(
+    `/accounts/${address}/esign/account`,
+    { signature_image_base64: signatureImageBase64, signature_type: signatureType, terms_accepted: termsAccepted },
+    { "X-Account-Token": token },
+  );
+}
+
+export async function getAccountContract(
+  address: string,
+  token: string,
+): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> {
+  return getJson(`/accounts/${address}/esign/contract`, { "X-Account-Token": token });
+}
+
+export async function downloadSignedContract(
+  address: string,
+  docId: string,
+  token: string,
+): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> {
+  return getJson(`/accounts/${address}/esign/account/${docId}/download`, { "X-Account-Token": token });
+}
+
+export async function signTransferAuthorization(
+  address: string,
+  token: string,
+  transferId: string,
+  amount: number,
+  destinationHash: string,
+  signatureImageBase64: string,
+  signatureType = "draw",
+): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> {
+  return postJson(
+    `/accounts/${address}/esign/transfer`,
+    {
+      transfer_id: transferId,
+      amount,
+      destination_hash: destinationHash,
+      signature_image_base64: signatureImageBase64,
+      signature_type: signatureType,
+    },
+    { "X-Account-Token": token },
+  );
+}
+
+export async function listSignedDocuments(
+  address: string,
+  token: string,
+): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> {
+  return getJson(`/accounts/${address}/esign/documents`, { "X-Account-Token": token });
+}
+
+// ─── Invoices ───
+
+export async function generateInvoice(
+  address: string,
+  token: string,
+  body: Record<string, unknown>,
+): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> {
+  return postJson(`/accounts/${address}/invoices/generate`, body, { "X-Account-Token": token });
+}
+
+export async function listInvoices(
+  address: string,
+  token: string,
+): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> {
+  return getJson(`/accounts/${address}/invoices`, { "X-Account-Token": token });
+}
+
+export async function verifyInvoice(
+  invoiceId?: string,
+  docHash?: string,
+): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> {
+  const params = new URLSearchParams();
+  if (invoiceId) params.append("invoice_id", invoiceId);
+  if (docHash) params.append("doc_hash", docHash);
+  return getJson(`/verify/invoice?${params.toString()}`);
+}
+
+// ─── KYC Verification ───
+
+export async function startKyc(
+  address: string,
+  token: string,
+  frontImage: File,
+  backImage: File,
+): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> {
+  const form = new FormData();
+  form.append("front", frontImage);
+  form.append("back", backImage);
+  return postFormData(`/accounts/${address}/kyc/start`, form, { "X-Account-Token": token });
+}
+
+export async function finalizeKyc(
+  address: string,
+  token: string,
+  sessionId: string,
+): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> {
+  return postJson(`/accounts/${address}/kyc/finalize`, { session_id: sessionId }, { "X-Account-Token": token });
+}
+
+export async function getKycStatus(
+  address: string,
+  token: string,
+): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> {
+  return getJson(`/accounts/${address}/kyc/status`, { "X-Account-Token": token });
+}
+
+export async function skipKyc(
+  address: string,
+  token: string,
+): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> {
+  return postJson(`/accounts/${address}/kyc/skip`, {}, { "X-Account-Token": token });
+}
+
+export async function uploadFacePhoto(
+  address: string,
+  token: string,
+  photo: File,
+): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> {
+  const form = new FormData();
+  form.append("face", photo);
+  return postFormData(`/accounts/${address}/kyc/face`, form, { "X-Account-Token": token });
+}
+
+export async function verifyRegistrationOtp(
+  sessionId: string,
+  otpCode: string,
+): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> {
+  return postJson("/auth/register/verify-otp", { session_id: sessionId, otp_code: otpCode });
+}
+
+export async function submitCin(
+  address: string,
+  token: string,
+  cin: string,
+): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> {
+  return postJson(`/accounts/${address}/cin`, { cin }, { "X-Account-Token": token });
 }

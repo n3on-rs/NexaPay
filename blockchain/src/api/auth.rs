@@ -13,13 +13,14 @@ use uuid::Uuid;
 
 use crate::account::{AccountType, ChainAccount};
 use crate::api::middleware::{
-    api_principal_kind, api_principal_prefix, extract_account_token, issue_session_token, log_api_call, try_api_key,
-    verify_session_token, AuthError,
+    api_principal_kind, api_principal_prefix, audit_log, check_auth_rate_limit, extract_account_token,
+    extract_client_ip, issue_session_token, log_api_call, record_auth_attempt, try_api_key, verify_session_token,
+    AuthError,
 };
 use crate::api::AppState;
 use crate::block::{Transaction, TxType};
 use crate::crypto::{
-    address_from_public_key, encrypt_aes256_gcm, generate_keypair, hash_transaction_pin, registration_digest, sha256_hex,
+    address_from_public_key, encrypt_aes256_gcm, generate_keypair, hash_transaction_pin, registration_digest, sha256_hex, verify_transaction_pin,
     sign_hex,
 };
 use crate::generator::{
@@ -224,13 +225,16 @@ async fn run_registration(
     let created_by_api_key_prefix = principal.map(api_principal_prefix);
     let created_by_principal_type = principal.map(|p| api_principal_kind(p).to_string());
 
+    // Do NOT store phone as CIN. CIN will be extracted during KYC verification.
+    let cin_value: Option<String> = None;
+
     sqlx::query(
-        "INSERT INTO users (chain_address, full_name, cin, date_of_birth, phone, email, address_line, city, governorate, created_by_api_key_prefix, created_by_principal_type)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
+        "INSERT INTO users (chain_address, full_name, cin, date_of_birth, phone, email, address_line, city, governorate, created_by_api_key_prefix, created_by_principal_type, kyc_status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'unverified')",
     )
     .bind(&chain_address)
     .bind(&payload.full_name)
-    .bind(&login_id)
+    .bind(&cin_value)
     .bind(dob)
     .bind(&normalized_phone)
     .bind(&payload.email)
@@ -340,10 +344,10 @@ async fn run_registration(
          SET otp_code_hash = $1,
              otp_expires_at = NOW() + INTERVAL '5 minutes',
              otp_attempts = 0
-         WHERE cin = $2",
+         WHERE phone = $2",
     )
     .bind(&otp_hash)
-    .bind(&login_id)
+    .bind(&normalized_phone)
     .execute(&state.pg_pool)
     .await;
 
@@ -353,9 +357,8 @@ async fn run_registration(
         Err(_) => {
             let app_env = std::env::var("APP_ENV").unwrap_or_default();
             let dev_show = std::env::var("DEV_SHOW_OTP").unwrap_or_default();
-            if app_env == "development" || dev_show == "true" {
+            if (app_env == "development" || dev_show == "true") && app_env != "demo" {
                 dev_otp = Some(otp.clone());
-                println!("[dev] registration OTP for login_id {} is {}", login_id, otp);
             }
         }
     }
@@ -394,7 +397,7 @@ pub async fn provision_kyc_session_if_needed(
         .map_err(|_| api_error(StatusCode::BAD_REQUEST, "Invalid session_id"))?;
 
     let row = sqlx::query(
-        "SELECT full_name, phone, email, cin_number, date_of_birth, documents, provisioned_chain_address, status
+        "SELECT full_name, phone, email, cin_number, cin_expiry, date_of_birth, address_line, delegation, governorate, documents, provisioned_chain_address, status
          FROM kyc_sessions WHERE id = $1",
     )
     .bind(sid)
@@ -420,24 +423,34 @@ pub async fn provision_kyc_session_if_needed(
     let full_name: String = row.try_get("full_name").unwrap_or_default();
     let session_phone: String = row.try_get("phone").unwrap_or_default();
     let email: Option<String> = row.try_get("email").ok();
-    let cin_number: String = row.try_get("cin_number").unwrap_or_default();
-    eprintln!("[provision] cin_number from kyc session: '{}'", cin_number);
+    let cin_number: Option<String> = row.try_get("cin_number").ok();
+    let cin_issue_date: Option<chrono::NaiveDate> = row.try_get("cin_expiry").ok();
+    if std::env::var("APP_ENV").as_deref() != Ok("demo") {
+        eprintln!("[provision] cin_number from kyc session: {:?}", cin_number);
+    }
     let date_of_birth: chrono::NaiveDate = row
         .try_get("date_of_birth")
         .map_err(|_| api_error(StatusCode::BAD_REQUEST, "Invalid session date_of_birth"))?;
 
-    let documents: Option<Value> = row.try_get("documents").ok();
+    let _documents: Option<Value> = row.try_get("documents").ok();
 
     let normalized_phone = normalize_phone(&session_phone)
         .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, "Invalid phone on KYC session"))?;
-    let login_id = cin_number.clone();
 
-    let existing = sqlx::query("SELECT chain_address FROM users WHERE cin = $1 OR phone = $2 LIMIT 1")
-        .bind(&login_id)
-        .bind(&normalized_phone)
-        .fetch_optional(&state.pg_pool)
-        .await
-        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Database error"))?;
+    // Only check duplicates by phone when CIN is not known yet
+    let existing = if let Some(ref cin) = cin_number {
+        sqlx::query("SELECT chain_address FROM users WHERE cin = $1 OR phone = $2 LIMIT 1")
+            .bind(cin)
+            .bind(&normalized_phone)
+            .fetch_optional(&state.pg_pool)
+            .await
+    } else {
+        sqlx::query("SELECT chain_address FROM users WHERE phone = $1 LIMIT 1")
+            .bind(&normalized_phone)
+            .fetch_optional(&state.pg_pool)
+            .await
+    }
+    .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Database error"))?;
     if existing.is_some() {
         return Err(api_error(
             StatusCode::CONFLICT,
@@ -445,23 +458,12 @@ pub async fn provision_kyc_session_if_needed(
         ));
     }
 
-    let address_line = documents
-        .as_ref()
-        .and_then(|d| d.get("address_line"))
-        .and_then(|v| v.as_str())
-        .map(String::from);
-    let delegation = documents
-        .as_ref()
-        .and_then(|d| d.get("delegation"))
-        .and_then(|v| v.as_str())
-        .map(String::from);
-    let governorate = documents
-        .as_ref()
-        .and_then(|d| d.get("governorate"))
-        .and_then(|v| v.as_str())
-        .map(String::from);
+    let address_line: Option<String> = row.try_get("address_line").ok();
+    let delegation: Option<String> = row.try_get("delegation").ok();
+    let governorate: Option<String> = row.try_get("governorate").ok();
 
     let dob_str = date_of_birth.format("%Y-%m-%d").to_string();
+    let login_id = cin_number.as_ref().unwrap_or(&normalized_phone).clone();
 
     let (private_key, public_key) = generate_keypair();
     let _ = private_key;
@@ -497,12 +499,13 @@ pub async fn provision_kyc_session_if_needed(
         .collect::<String>();
 
     sqlx::query(
-        "INSERT INTO users (chain_address, full_name, cin, date_of_birth, phone, email, address_line, city, governorate, delegation, created_by_api_key_prefix, created_by_principal_type)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NULL, NULL)",
+        "INSERT INTO users (chain_address, full_name, cin, cin_issue_date, date_of_birth, phone, email, address_line, city, governorate, delegation, created_by_api_key_prefix, created_by_principal_type, kyc_status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NULL, NULL, 'unverified')",
     )
     .bind(&chain_address)
     .bind(&full_name)
     .bind(&cin_number)
+    .bind(cin_issue_date)
     .bind(date_of_birth)
     .bind(&normalized_phone)
     .bind(&email)
@@ -709,8 +712,8 @@ pub(crate) async fn verify_pin(
         _ => return Err(api_error(StatusCode::BAD_REQUEST, "PIN not set for this account")),
     };
 
-    let provided_hash = hash_transaction_pin(chain_address, provided_pin, &state.encryption_key);
-    if provided_hash != stored_hash {
+    let (pin_valid, _pin_upgrade) = verify_transaction_pin(chain_address, provided_pin, &state.encryption_key, &stored_hash);
+    if !pin_valid {
         let attempts: i32 = row.try_get("pin_attempts").unwrap_or(0);
         let new_attempts = attempts + 1;
         if new_attempts >= 5 {
@@ -762,18 +765,33 @@ pub(crate) async fn verify_pin(
 /// Step 1 of login: verify PIN, then send OTP via SMS.
 pub async fn login_with_pin(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(payload): Json<PinLoginRequest>,
 ) -> Result<Json<PinLoginStep1Response>, (StatusCode, Json<Value>)> {
+    let ip = extract_client_ip(&headers);
+    const MAX_ATTEMPTS: i32 = 5;
+    const LOCKOUT_MINUTES: i32 = 15;
+
+    if let Err(AuthError::TooManyRequests { retry_after_seconds }) = check_auth_rate_limit(&state, &ip, "/auth/login", MAX_ATTEMPTS, LOCKOUT_MINUTES).await {
+        return Err((StatusCode::TOO_MANY_REQUESTS, Json(json!({ "error": format!("Too many attempts. Try again in {}s.", retry_after_seconds) }))));
+    }
+
     if payload.phone.trim().is_empty() || payload.pin.trim().is_empty() {
+        record_auth_attempt(&state, &ip, "/auth/login", false, MAX_ATTEMPTS, LOCKOUT_MINUTES).await;
         return Err(api_error(StatusCode::BAD_REQUEST, "Phone and PIN are required"));
     }
     if payload.pin.len() != 6 || !payload.pin.chars().all(|c| c.is_ascii_digit()) {
+        record_auth_attempt(&state, &ip, "/auth/login", false, MAX_ATTEMPTS, LOCKOUT_MINUTES).await;
         return Err(api_error(StatusCode::BAD_REQUEST, "PIN must be exactly 6 digits"));
     }
 
-    let (n11, n8) = login_phone_variants(&payload.phone).ok_or_else(|| {
-        api_error(StatusCode::BAD_REQUEST, "Invalid phone (8 digits or +216 / 216 prefix)")
-    })?;
+    let (n11, n8) = match login_phone_variants(&payload.phone) {
+        Some(v) => v,
+        None => {
+            record_auth_attempt(&state, &ip, "/auth/login", false, MAX_ATTEMPTS, LOCKOUT_MINUTES).await;
+            return Err(api_error(StatusCode::BAD_REQUEST, "Invalid phone (8 digits or +216 / 216 prefix)"));
+        }
+    };
 
     let row = sqlx::query(
         "SELECT chain_address, cin, full_name, phone FROM users WHERE phone = $1 OR phone = $2 LIMIT 1",
@@ -786,7 +804,10 @@ pub async fn login_with_pin(
 
     let row = match row {
         Some(r) => r,
-        None => return Err(api_error(StatusCode::UNAUTHORIZED, "Invalid credentials")),
+        None => {
+            record_auth_attempt(&state, &ip, "/auth/login", false, MAX_ATTEMPTS, LOCKOUT_MINUTES).await;
+            return Err(api_error(StatusCode::UNAUTHORIZED, "Invalid credentials"));
+        }
     };
 
     let chain_address: String = row
@@ -800,7 +821,10 @@ pub async fn login_with_pin(
         .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Invalid row data"))?;
 
     // Verify PIN (with lockout logic)
-    verify_pin(&state, &chain_address, &payload.pin).await?;
+    if let Err(e) = verify_pin(&state, &chain_address, &payload.pin).await {
+        record_auth_attempt(&state, &ip, "/auth/login", false, MAX_ATTEMPTS, LOCKOUT_MINUTES).await;
+        return Err(e);
+    }
 
     // Generate login OTP
     let otp = generate_otp_code();
@@ -824,11 +848,12 @@ pub async fn login_with_pin(
     }
     let app_env = std::env::var("APP_ENV").unwrap_or_default();
     let dev_show = std::env::var("DEV_SHOW_OTP").unwrap_or_default();
-    if app_env == "development" || dev_show == "true" {
+    if (app_env == "development" || dev_show == "true") && app_env != "demo" {
         dev_otp = Some(otp.clone());
-        println!("[dev] login OTP for {} is {}", stored_login_id, otp);
     }
 
+    record_auth_attempt(&state, &ip, "/auth/login", true, MAX_ATTEMPTS, LOCKOUT_MINUTES).await;
+    audit_log(&state, Some(&chain_address), "login_pin", "user", None, &ip, headers.get("user-agent").and_then(|v| v.to_str().ok()), "success", json!({"phone_hint": mask_phone_hint(&phone)})).await;
     log_api_call(&state, None, "/auth/login", "POST", 200).await;
 
     Ok(Json(PinLoginStep1Response {
@@ -1100,9 +1125,8 @@ pub async fn verify_identity(
     }
     let app_env = std::env::var("APP_ENV").unwrap_or_default();
     let dev_show = std::env::var("DEV_SHOW_OTP").unwrap_or_default();
-    if app_env == "development" || dev_show == "true" {
+    if (app_env == "development" || dev_show == "true") && app_env != "demo" {
         dev_otp = Some(otp.clone());
-        println!("[dev] recovery OTP for {} is {}", cin, otp);
     }
 
     Ok(Json(VerifyIdentityResponse {
@@ -1465,6 +1489,7 @@ pub struct MeResponse {
     governorate: Option<String>,
     avatar_url: Option<String>,
     force_pin_change: bool,
+    kyc_status: String,
 }
 
 pub async fn get_me(
@@ -1477,7 +1502,7 @@ pub async fn get_me(
         .map_err(|_| api_error(StatusCode::UNAUTHORIZED, "Invalid or expired session"))?;
 
     let row = sqlx::query(
-        "SELECT full_name, phone, email, chain_address, cin, address_line, delegation, governorate, avatar_url, force_pin_change FROM users WHERE chain_address = $1 LIMIT 1",
+        "SELECT full_name, phone, email, chain_address, cin, address_line, delegation, governorate, avatar_url, force_pin_change, kyc_status FROM users WHERE chain_address = $1 LIMIT 1",
     )
     .bind(&claims.address)
     .fetch_optional(&state.pg_pool)
@@ -1496,6 +1521,7 @@ pub async fn get_me(
     let governorate: Option<String> = row.try_get("governorate").ok();
     let avatar_url: Option<String> = row.try_get("avatar_url").ok();
     let force_pin_change: bool = row.try_get("force_pin_change").unwrap_or(false);
+    let kyc_status: String = row.try_get("kyc_status").unwrap_or_else(|_| "unverified".to_string());
 
     Ok(Json(MeResponse {
         full_name,
@@ -1509,6 +1535,7 @@ pub async fn get_me(
         governorate,
         avatar_url,
         force_pin_change,
+        kyc_status,
     }))
 }
 
@@ -1602,8 +1629,8 @@ pub async fn change_pin(
         .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Database error"))?;
     let stored_pin = row.and_then(|r| r.try_get::<String, _>("pin_hash").ok()).filter(|s| !s.is_empty());
     let stored_pin = stored_pin.ok_or_else(|| api_error(StatusCode::BAD_REQUEST, "No PIN set"))?;
-    let provided_hash = hash_transaction_pin(&address, &payload.current_pin, &state.encryption_key);
-    if provided_hash != stored_pin {
+    let (pin_valid, _pin_upgrade) = verify_transaction_pin(&address, &payload.current_pin, &state.encryption_key, &stored_pin);
+    if !pin_valid {
         return Err(api_error(StatusCode::UNAUTHORIZED, "Incorrect current PIN"));
     }
 

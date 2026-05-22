@@ -279,8 +279,8 @@ pub async fn status(
             (StatusCode::OK, Json(response))
         }
         Ok(None) => (
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({ "error": "No application found for this address" })),
+            StatusCode::OK,
+            Json(serde_json::json!({ "status": "none" })),
         ),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,

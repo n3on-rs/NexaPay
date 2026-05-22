@@ -41,6 +41,8 @@ const PillInput = ({ icon: Icon, error, label, rightElement, ...props }: any) =>
   </div>
 );
 
+const isDemoMode = typeof window !== "undefined" ? false : process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+
 export default function ForgotPasswordPage() {
   const router = useRouter();
   const [step, setStep] = React.useState<1 | 2 | 3>(1);
@@ -188,7 +190,7 @@ export default function ForgotPasswordPage() {
             {step === 2 && (
               <form onSubmit={onStep2} className="flex flex-col gap-5">
                 <p className="text-[#888] text-sm text-center">A code was sent to <span className="text-white font-bold">{phoneHint || maskPhone(phone)}</span></p>
-                {devOtp && <p className="text-center text-xs text-[#00FF88] font-mono bg-[#00FF88]/10 py-2 rounded-lg border border-[#00FF88]/20">Dev OTP: {devOtp}</p>}
+                {!isDemoMode && devOtp && <p className="text-center text-xs text-[#00FF88] font-mono bg-[#00FF88]/10 py-2 rounded-lg border border-[#00FF88]/20">Dev OTP: {devOtp}</p>}
                 <label className="text-[11px] uppercase tracking-wider text-[#888] font-bold text-center">Enter the 6-digit code</label>
                 <div className="flex justify-between gap-2">
                   {Array.from({ length: 6 }).map((_, i) => (

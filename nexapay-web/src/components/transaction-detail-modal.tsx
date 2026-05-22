@@ -57,6 +57,30 @@ function formatTime(ts: string): string {
   return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
 }
 
+function parseTransactionMemo(memo: string): { label: string; isSystem: boolean; docHash?: string } {
+  if (!memo) return { label: "Transfer", isSystem: false };
+  try {
+    const parsed = JSON.parse(memo);
+    const txType = parsed.type || parsed.payload?.type || "";
+    const docHash = parsed.doc_hash || parsed.payload?.doc_hash;
+    switch (txType) {
+      case "EsignAccount":
+      case "esign_account":
+        return { label: "Contract signed", isSystem: true, docHash };
+      case "EsignTransfer":
+      case "esign_transfer":
+        return { label: "Transfer authorization", isSystem: true, docHash };
+      case "InvoiceAnchor":
+      case "invoice_anchor":
+        return { label: "Invoice anchored", isSystem: true, docHash };
+      default:
+        return { label: memo, isSystem: false };
+    }
+  } catch {
+    return { label: memo, isSystem: false };
+  }
+}
+
 export function TransactionDetailModal({ tx, onClose }: TransactionDetailModalProps) {
   const [copiedKey, setCopiedKey] = React.useState("");
 
@@ -107,7 +131,7 @@ export function TransactionDetailModal({ tx, onClose }: TransactionDetailModalPr
               {isCredit ? <ArrowDownLeft className="h-5 w-5" /> : <ArrowUpLeft className="h-5 w-5" />}
             </div>
             <div>
-              <h3 className="text-lg font-bold text-white">{isCredit ? "Money received" : "Money sent"}</h3>
+              <h3 className="text-lg font-bold text-white">{parseTransactionMemo(tx.memo).isSystem ? parseTransactionMemo(tx.memo).label : (isCredit ? "Money received" : "Money sent")}</h3>
               <p className="text-[13px] text-[#888]">{formatDate(tx.timestamp)}</p>
             </div>
           </div>
@@ -168,9 +192,20 @@ export function TransactionDetailModal({ tx, onClose }: TransactionDetailModalPr
           {tx.memo && (
             <div className="flex items-start gap-3">
               <FileText className="mt-0.5 h-4 w-4 shrink-0 text-[#888]" />
-              <div>
-                <p className="text-[12px] text-[#888]">Memo</p>
-                <p className="text-[14px] font-medium text-white">{tx.memo}</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-[12px] text-[#888]">{parseTransactionMemo(tx.memo).isSystem ? "Type" : "Memo"}</p>
+                <p className="text-[14px] font-medium text-white">{parseTransactionMemo(tx.memo).label}</p>
+                {parseTransactionMemo(tx.memo).docHash && (
+                  <div className="mt-1 flex items-center gap-2">
+                    <code className="truncate text-[11px] text-[#555]">Doc: {parseTransactionMemo(tx.memo).docHash!.slice(0, 16)}...</code>
+                    <button
+                      onClick={() => handleCopy(parseTransactionMemo(tx.memo).docHash!, "docHash")}
+                      className="text-[#888] hover:text-[#00FF88] transition-colors shrink-0"
+                    >
+                      {copiedKey === "docHash" ? <Check className="h-3 w-3 text-[#00FF88]" /> : <Copy className="h-3 w-3" />}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}

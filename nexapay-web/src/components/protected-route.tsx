@@ -3,8 +3,14 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
+import { VerificationGate } from "./verification-gate";
 
-export function ProtectedRoute({ children }: { children: React.ReactNode }) {
+interface ProtectedRouteProps {
+  children: React.ReactNode;
+  requireVerification?: boolean;
+}
+
+export function ProtectedRoute({ children, requireVerification = true }: ProtectedRouteProps) {
   const router = useRouter();
   const { isAuthenticated, isLoading } = useAuth();
 
@@ -24,6 +30,10 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   if (!isAuthenticated) {
     return null;
+  }
+
+  if (requireVerification) {
+    return <VerificationGate>{children}</VerificationGate>;
   }
 
   return <>{children}</>;

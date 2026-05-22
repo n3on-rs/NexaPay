@@ -49,6 +49,29 @@ function getInitials(name: string): string {
 
 type FilterType = "all" | "sent" | "received";
 
+function parseTransactionMemo(memo: string): { label: string; isSystem: boolean } {
+  if (!memo) return { label: "Transfer", isSystem: false };
+  try {
+    const parsed = JSON.parse(memo);
+    const txType = parsed.type || parsed.payload?.type || "";
+    switch (txType) {
+      case "EsignAccount":
+      case "esign_account":
+        return { label: "Contract signed", isSystem: true };
+      case "EsignTransfer":
+      case "esign_transfer":
+        return { label: "Transfer authorization", isSystem: true };
+      case "InvoiceAnchor":
+      case "invoice_anchor":
+        return { label: "Invoice anchored", isSystem: true };
+      default:
+        return { label: memo, isSystem: false };
+    }
+  } catch {
+    return { label: memo, isSystem: false };
+  }
+}
+
 function HistoryInner() {
   const [loading, setLoading] = React.useState(true);
   const [transactions, setTransactions] = React.useState<TransactionView[]>([]);
@@ -192,7 +215,7 @@ function HistoryInner() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="truncate text-[14px] font-semibold text-white">{name}</p>
-                    <p className="text-[12px] text-[#888]">{relativeTime(tx.timestamp)} · {tx.memo || "Transfer"}</p>
+                    <p className="text-[12px] text-[#888]">{relativeTime(tx.timestamp)} · {parseTransactionMemo(tx.memo).label}</p>
                   </div>
                   <div className="text-right">
                     <p className={cn("text-[14px] font-semibold", isCredit ? "text-[#00FF88]" : "text-red-400")}>

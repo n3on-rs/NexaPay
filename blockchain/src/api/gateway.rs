@@ -1803,7 +1803,22 @@ async fn send_webhook(
     payload: &Value,
 ) -> Value {
     let body = serde_json::to_string(payload).unwrap_or_else(|_| "{}".to_string());
-    let signature = sha256_hex(format!("{}.{}", secret, body).as_bytes());
+    let timestamp = chrono::Utc::now().timestamp().to_string();
+
+    // HMAC-SHA256 signature: t=timestamp,v1=hex_hmac
+    let signature = {
+        use hmac::{Hmac, Mac};
+        use sha2::Sha256;
+        type HmacSha256 = Hmac<Sha256>;
+        let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
+            .expect("HMAC can take any key size");
+        mac.update(timestamp.as_bytes());
+        mac.update(b".");
+        mac.update(body.as_bytes());
+        let result = mac.finalize();
+        let code_bytes = result.into_bytes();
+        format!("t={},v1={}", timestamp, hex::encode(code_bytes))
+    };
 
     let result = state
         .http_client

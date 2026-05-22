@@ -47,6 +47,8 @@ interface TestCard {
   description: string;
 }
 
+const isDemoMode = typeof window !== "undefined" ? false : process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+
 export default function CheckoutPage() {
   const params = useParams();
   const intentId = String(params?.intentId || "");
@@ -67,7 +69,10 @@ export default function CheckoutPage() {
 
   const loadIntent = async () => {
     // Create a fresh session from the link template
-    const sessionRes = await postJson(`/gateway/v1/intents/${intentId}/session`, {});
+    const sessionRes = await postJson(
+      `/gateway/v1/intents/${intentId}/session`,
+      {},
+    );
     if (sessionRes.ok && sessionRes.data.success) {
       const data = sessionRes.data as Record<string, unknown>;
       const intentData: IntentData = {
@@ -141,8 +146,18 @@ export default function CheckoutPage() {
 
   if (loading) {
     return (
-      <div className={cn("flex min-h-screen items-center justify-center", isDark ? "bg-[#080808]" : "bg-[#F5F5F5]")}>
-        <Loader2 className={cn("h-8 w-8 animate-spin", isDark ? "text-[#00FF88]" : "text-[#00AA55]")} />
+      <div
+        className={cn(
+          "flex min-h-screen items-center justify-center",
+          isDark ? "bg-[#080808]" : "bg-[#F5F5F5]",
+        )}
+      >
+        <Loader2
+          className={cn(
+            "h-8 w-8 animate-spin",
+            isDark ? "text-[#00FF88]" : "text-[#00AA55]",
+          )}
+        />
       </div>
     );
   }
@@ -159,7 +174,10 @@ export default function CheckoutPage() {
     return <AlreadyPaidScreen intent={intent} isDark={isDark} />;
   }
 
-  if (intent.status === "expired" || (intent.expiry && new Date(intent.expiry) < new Date())) {
+  if (
+    intent.status === "expired" ||
+    (intent.expiry && new Date(intent.expiry) < new Date())
+  ) {
     return <ExpiredScreen agentName={intent.agent_name} isDark={isDark} />;
   }
 
@@ -192,14 +210,16 @@ function CheckoutActive({
   onRefresh: () => void;
 }) {
   const [activeMethod, setActiveMethod] = React.useState<string>(
-    intent.accepted_methods[0] || "wallet"
+    intent.accepted_methods[0] || "wallet",
   );
   const [enteredAmount, setEnteredAmount] = React.useState("");
   const [firstName, setFirstName] = React.useState("");
   const [lastName, setLastName] = React.useState("");
   const [phoneNumber, setPhoneNumber] = React.useState("");
   const [processing, setProcessing] = React.useState(false);
-  const [result, setResult] = React.useState<"success" | "declined" | "insufficient_funds" | "error" | null>(null);
+  const [result, setResult] = React.useState<
+    "success" | "declined" | "insufficient_funds" | "error" | null
+  >(null);
   const [debugError, setDebugError] = React.useState("");
 
   const sessionMinutes = 10;
@@ -228,14 +248,31 @@ function CheckoutActive({
   };
 
   return (
-    <div className={cn("min-h-screen pb-8", isDark ? "bg-[#080808] text-white" : "bg-[#F5F5F5] text-[#111]")}>
+    <div
+      className={cn(
+        "min-h-screen pb-8",
+        isDark ? "bg-[#080808] text-white" : "bg-[#F5F5F5] text-[#111]",
+      )}
+    >
       {/* Header */}
       <div className="flex items-center justify-center py-6">
         <div className="flex items-center gap-2">
-          <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center text-sm font-bold", isDark ? "bg-[#00FF88] text-black" : "bg-[#00AA55] text-white")}>
+          <div
+            className={cn(
+              "h-8 w-8 rounded-lg flex items-center justify-center text-sm font-bold",
+              isDark ? "bg-[#00FF88] text-black" : "bg-[#00AA55] text-white",
+            )}
+          >
             N
           </div>
-          <span className={cn("text-lg font-bold", isDark ? "text-white" : "text-[#111]")}>NexaPay</span>
+          <span
+            className={cn(
+              "text-lg font-bold",
+              isDark ? "text-white" : "text-[#111]",
+            )}
+          >
+            NexaPay
+          </span>
         </div>
       </div>
 
@@ -253,16 +290,34 @@ function CheckoutActive({
         <div className="text-center">
           <h1 className="text-base font-semibold">{intent.agent_name}</h1>
           {intent.description && (
-            <p className={cn("mt-1 text-sm", isDark ? "text-[#888]" : "text-gray-500")}>{intent.description}</p>
+            <p
+              className={cn(
+                "mt-1 text-sm",
+                isDark ? "text-[#888]" : "text-gray-500",
+              )}
+            >
+              {intent.description}
+            </p>
           )}
           {intent.order_id && (
-            <p className={cn("mt-1 text-xs", isDark ? "text-[#555]" : "text-gray-400")}>Order #{intent.order_id}</p>
+            <p
+              className={cn(
+                "mt-1 text-xs",
+                isDark ? "text-[#555]" : "text-gray-400",
+              )}
+            >
+              Order #{intent.order_id}
+            </p>
           )}
         </div>
 
         {/* Session timer */}
         {!result && (
-          <SessionTimer createdAt={effectiveCreatedAt} minutes={sessionMinutes} isDark={isDark} />
+          <SessionTimer
+            createdAt={effectiveCreatedAt}
+            minutes={sessionMinutes}
+            isDark={isDark}
+          />
         )}
 
         {/* Expiry countdown for payment link */}
@@ -271,10 +326,22 @@ function CheckoutActive({
         )}
 
         {/* Amount */}
-        <div className={cn("rounded-2xl p-6 text-center", isDark ? "bg-[#111] border border-white/[0.06]" : "bg-white border border-gray-200")}>
+        <div
+          className={cn(
+            "rounded-2xl p-6 text-center",
+            isDark
+              ? "bg-[#111] border border-white/[0.06]"
+              : "bg-white border border-gray-200",
+          )}
+        >
           {intent.variable_amount ? (
             <div className="space-y-3">
-              <label className={cn("block text-sm font-medium", isDark ? "text-[#ccc]" : "text-gray-700")}>
+              <label
+                className={cn(
+                  "block text-sm font-medium",
+                  isDark ? "text-[#ccc]" : "text-gray-700",
+                )}
+              >
                 Enter amount
               </label>
               <div className="relative">
@@ -289,29 +356,59 @@ function CheckoutActive({
                     "w-full rounded-xl px-4 py-3 text-center text-2xl font-bold outline-none transition-colors",
                     isDark
                       ? "bg-[#0a0a0a] border border-white/[0.06] text-white placeholder-[#444] focus:border-[#00FF88]/50"
-                      : "bg-gray-50 border border-gray-200 text-[#111] placeholder-gray-300 focus:border-[#00AA55]/50"
+                      : "bg-gray-50 border border-gray-200 text-[#111] placeholder-gray-300 focus:border-[#00AA55]/50",
                   )}
                 />
-                <span className={cn("absolute right-4 top-1/2 -translate-y-1/2 text-sm font-medium", isDark ? "text-[#666]" : "text-gray-400")}>
+                <span
+                  className={cn(
+                    "absolute right-4 top-1/2 -translate-y-1/2 text-sm font-medium",
+                    isDark ? "text-[#666]" : "text-gray-400",
+                  )}
+                >
                   TND
                 </span>
               </div>
             </div>
           ) : (
-            <div className="text-4xl font-extrabold" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-              <span className={isDark ? "text-[#00FF88]" : "text-[#00AA55]"}>{formatAmount(intent.amount)}</span>
+            <div
+              className="text-4xl font-extrabold"
+              style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+            >
+              <span className={isDark ? "text-[#00FF88]" : "text-[#00AA55]"}>
+                {formatAmount(intent.amount)}
+              </span>
             </div>
           )}
         </div>
 
-
         {/* Customer info — card only */}
         {activeMethod !== "wallet" && (
-          <div className={cn("rounded-2xl p-5 space-y-4", isDark ? "bg-[#111] border border-white/[0.06]" : "bg-white border border-gray-200")}>
-            <p className={cn("text-sm font-medium", isDark ? "text-[#ccc]" : "text-gray-700")}>Your Information</p>
+          <div
+            className={cn(
+              "rounded-2xl p-5 space-y-4",
+              isDark
+                ? "bg-[#111] border border-white/[0.06]"
+                : "bg-white border border-gray-200",
+            )}
+          >
+            <p
+              className={cn(
+                "text-sm font-medium",
+                isDark ? "text-[#ccc]" : "text-gray-700",
+              )}
+            >
+              Your Information
+            </p>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className={cn("mb-1.5 block text-xs font-medium", isDark ? "text-[#888]" : "text-gray-500")}>First Name</label>
+                <label
+                  className={cn(
+                    "mb-1.5 block text-xs font-medium",
+                    isDark ? "text-[#888]" : "text-gray-500",
+                  )}
+                >
+                  First Name
+                </label>
                 <input
                   type="text"
                   value={firstName}
@@ -321,12 +418,19 @@ function CheckoutActive({
                     "w-full rounded-xl px-4 py-3 text-sm outline-none transition-colors",
                     isDark
                       ? "bg-[#0a0a0a] border border-white/[0.06] text-white placeholder-[#444] focus:border-[#00FF88]/50"
-                      : "bg-gray-50 border border-gray-200 text-[#111] placeholder-gray-300 focus:border-[#00AA55]/50"
+                      : "bg-gray-50 border border-gray-200 text-[#111] placeholder-gray-300 focus:border-[#00AA55]/50",
                   )}
                 />
               </div>
               <div>
-                <label className={cn("mb-1.5 block text-xs font-medium", isDark ? "text-[#888]" : "text-gray-500")}>Last Name</label>
+                <label
+                  className={cn(
+                    "mb-1.5 block text-xs font-medium",
+                    isDark ? "text-[#888]" : "text-gray-500",
+                  )}
+                >
+                  Last Name
+                </label>
                 <input
                   type="text"
                   value={lastName}
@@ -336,26 +440,42 @@ function CheckoutActive({
                     "w-full rounded-xl px-4 py-3 text-sm outline-none transition-colors",
                     isDark
                       ? "bg-[#0a0a0a] border border-white/[0.06] text-white placeholder-[#444] focus:border-[#00FF88]/50"
-                      : "bg-gray-50 border border-gray-200 text-[#111] placeholder-gray-300 focus:border-[#00AA55]/50"
+                      : "bg-gray-50 border border-gray-200 text-[#111] placeholder-gray-300 focus:border-[#00AA55]/50",
                   )}
                 />
               </div>
             </div>
             <div>
-              <label className={cn("mb-1.5 block text-xs font-medium", isDark ? "text-[#888]" : "text-gray-500")}>Phone Number</label>
+              <label
+                className={cn(
+                  "mb-1.5 block text-xs font-medium",
+                  isDark ? "text-[#888]" : "text-gray-500",
+                )}
+              >
+                Phone Number
+              </label>
               <div className="relative">
-                <span className={cn("absolute left-3 top-1/2 -translate-y-1/2 text-sm", isDark ? "text-[#666]" : "text-gray-400")}>+216</span>
+                <span
+                  className={cn(
+                    "absolute left-3 top-1/2 -translate-y-1/2 text-sm",
+                    isDark ? "text-[#666]" : "text-gray-400",
+                  )}
+                >
+                  +216
+                </span>
                 <input
                   type="tel"
                   value={phoneNumber}
-                  onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ""))}
+                  onChange={(e) =>
+                    setPhoneNumber(e.target.value.replace(/\D/g, ""))
+                  }
                   placeholder="12345678"
                   maxLength={8}
                   className={cn(
                     "w-full rounded-xl pl-14 pr-4 py-3 text-sm outline-none transition-colors",
                     isDark
                       ? "bg-[#0a0a0a] border border-white/[0.06] text-white placeholder-[#444] focus:border-[#00FF88]/50"
-                      : "bg-gray-50 border border-gray-200 text-[#111] placeholder-gray-300 focus:border-[#00AA55]/50"
+                      : "bg-gray-50 border border-gray-200 text-[#111] placeholder-gray-300 focus:border-[#00AA55]/50",
                   )}
                 />
               </div>
@@ -377,17 +497,28 @@ function CheckoutActive({
                     : "bg-[#00AA55] text-white"
                   : isDark
                     ? "bg-[#111] text-[#888] border border-white/[0.06]"
-                    : "bg-white text-gray-500 border border-gray-200"
+                    : "bg-white text-gray-500 border border-gray-200",
               )}
             >
-              {method === "wallet" ? <Smartphone className="h-4 w-4" /> : <CreditCard className="h-4 w-4" />}
+              {method === "wallet" ? (
+                <Smartphone className="h-4 w-4" />
+              ) : (
+                <CreditCard className="h-4 w-4" />
+              )}
               {method === "wallet" ? "NexaPay Wallet" : "Bank Card"}
             </button>
           ))}
         </div>
 
         {/* Payment form */}
-        <div className={cn("rounded-2xl p-5", isDark ? "bg-[#111] border border-white/[0.06]" : "bg-white border border-gray-200")}>
+        <div
+          className={cn(
+            "rounded-2xl p-5",
+            isDark
+              ? "bg-[#111] border border-white/[0.06]"
+              : "bg-white border border-gray-200",
+          )}
+        >
           {activeMethod === "wallet" ? (
             <WalletForm
               intent={intent}
@@ -419,18 +550,40 @@ function CheckoutActive({
         </div>
 
         {/* Security footer */}
-        <div className="flex items-center justify-center gap-1 pt-4 text-xs" style={{ color: isDark ? "#555" : "#999" }}>
+        <div
+          className="flex items-center justify-center gap-1 pt-4 text-xs"
+          style={{ color: isDark ? "#555" : "#999" }}
+        >
           <Shield className="h-3 w-3" />
           Secured by NexaPay
         </div>
       </div>
 
       {/* Result overlays */}
-      {result === "success" && <SuccessOverlay intent={intent} isDark={isDark} amount={amount} />}
-      {(result === "declined" || result === "insufficient_funds") && (
-        <DeclinedOverlay reason={result} isDark={isDark} onRetry={() => { setResult(null); setProcessing(false); }} />
+      {result === "success" && (
+        <SuccessOverlay intent={intent} isDark={isDark} amount={amount} />
       )}
-      {result === "error" && <ErrorOverlay isDark={isDark} debug={debugError} onRetry={() => { setResult(null); setProcessing(false); setDebugError(""); }} />}
+      {(result === "declined" || result === "insufficient_funds") && (
+        <DeclinedOverlay
+          reason={result}
+          isDark={isDark}
+          onRetry={() => {
+            setResult(null);
+            setProcessing(false);
+          }}
+        />
+      )}
+      {result === "error" && (
+        <ErrorOverlay
+          isDark={isDark}
+          debug={debugError}
+          onRetry={() => {
+            setResult(null);
+            setProcessing(false);
+            setDebugError("");
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -452,7 +605,9 @@ function WalletForm({
   processing: boolean;
   phoneNumber: string;
   onPhoneChange: (v: string) => void;
-  onResult: (r: "success" | "declined" | "insufficient_funds" | "error") => void;
+  onResult: (
+    r: "success" | "declined" | "insufficient_funds" | "error",
+  ) => void;
   onProcessing: (p: boolean) => void;
   onSetError: (msg: string) => void;
 }) {
@@ -467,12 +622,15 @@ function WalletForm({
   const handleRequestOtp = async () => {
     onProcessing(true);
     onSetError("");
-    const res = await postJson(`/gateway/v1/intents/${intent.intent_id}/confirm`, {
-      method: "wallet",
-      phone: walletPhone,
-      pin,
-      customer_phone: walletPhone,
-    });
+    const res = await postJson(
+      `/gateway/v1/intents/${intent.intent_id}/confirm`,
+      {
+        method: "wallet",
+        phone: walletPhone,
+        pin,
+        customer_phone: walletPhone,
+      },
+    );
     onProcessing(false);
 
     if (res.ok && res.data.success && res.data.step === "otp_required") {
@@ -492,13 +650,16 @@ function WalletForm({
   const handleVerifyOtp = async () => {
     onProcessing(true);
     onSetError("");
-    const res = await postJson(`/gateway/v1/intents/${intent.intent_id}/confirm`, {
-      method: "wallet",
-      phone: walletPhone,
-      pin,
-      otp,
-      customer_phone: walletPhone,
-    });
+    const res = await postJson(
+      `/gateway/v1/intents/${intent.intent_id}/confirm`,
+      {
+        method: "wallet",
+        phone: walletPhone,
+        pin,
+        otp,
+        customer_phone: walletPhone,
+      },
+    );
     onProcessing(false);
 
     if (res.ok && res.data.success) {
@@ -524,43 +685,77 @@ function WalletForm({
   if (step === "otp") {
     return (
       <div className="space-y-4">
-        <div className={cn("rounded-xl p-4 text-center", isDark ? "bg-[#00FF88]/5 border border-[#00FF88]/10" : "bg-[#00AA55]/5 border border-[#00AA55]/10")}>
-          <p className={cn("text-sm font-medium", isDark ? "text-[#00FF88]" : "text-[#00AA55]")}>Verification code sent</p>
-          <p className={cn("mt-1 text-xs", isDark ? "text-[#888]" : "text-gray-500")}>Enter the 6-digit code sent to {phoneHint || "your phone"}</p>
-          {devOtp && (
-            <p className="mt-1 text-xs font-mono text-amber-400">Dev OTP: {devOtp}</p>
+        <div
+          className={cn(
+            "rounded-xl p-4 text-center",
+            isDark
+              ? "bg-[#00FF88]/5 border border-[#00FF88]/10"
+              : "bg-[#00AA55]/5 border border-[#00AA55]/10",
+          )}
+        >
+          <p
+            className={cn(
+              "text-sm font-medium",
+              isDark ? "text-[#00FF88]" : "text-[#00AA55]",
+            )}
+          >
+            Verification code sent
+          </p>
+          <p
+            className={cn(
+              "mt-1 text-xs",
+              isDark ? "text-[#888]" : "text-gray-500",
+            )}
+          >
+            Enter the 6-digit code sent to {phoneHint || "your phone"}
+          </p>
+          {!isDemoMode && devOtp && (
+            <p className="mt-1 text-xs font-mono text-amber-400">
+              Dev OTP: {devOtp}
+            </p>
           )}
         </div>
 
         <div>
-          <label className={cn("mb-1.5 block text-sm font-medium", isDark ? "text-[#ccc]" : "text-gray-700")}>
+          <label
+            className={cn(
+              "mb-1.5 block text-sm font-medium",
+              isDark ? "text-[#ccc]" : "text-gray-700",
+            )}
+          >
             Verification Code
           </label>
           <input
             type="text"
             inputMode="numeric"
             value={otp}
-            onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            onChange={(e) =>
+              setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))
+            }
             placeholder="000000"
             maxLength={6}
             className={cn(
               "w-full rounded-xl px-4 py-3 text-sm outline-none transition-colors text-center tracking-[0.5em]",
               isDark
                 ? "bg-[#0a0a0a] border border-white/[0.06] text-white placeholder-[#444] focus:border-[#00FF88]/50"
-                : "bg-gray-50 border border-gray-200 text-[#111] placeholder-gray-300 focus:border-[#00AA55]/50"
+                : "bg-gray-50 border border-gray-200 text-[#111] placeholder-gray-300 focus:border-[#00AA55]/50",
             )}
           />
         </div>
 
         <div className="flex gap-2">
           <button
-            onClick={() => { setStep("pin"); setOtp(""); onSetError(""); }}
+            onClick={() => {
+              setStep("pin");
+              setOtp("");
+              onSetError("");
+            }}
             disabled={processing}
             className={cn(
               "flex-1 rounded-xl py-3 text-sm font-medium transition-all",
               isDark
                 ? "bg-[#111] text-[#888] border border-white/[0.06] hover:text-white"
-                : "bg-white text-gray-500 border border-gray-200 hover:text-[#111]"
+                : "bg-white text-gray-500 border border-gray-200 hover:text-[#111]",
             )}
           >
             Back
@@ -573,10 +768,14 @@ function WalletForm({
               processing || otp.length !== 6
                 ? "opacity-50 cursor-not-allowed"
                 : "hover:opacity-90 active:scale-[0.98]",
-              isDark ? "bg-[#00FF88] text-black" : "bg-[#00AA55] text-white"
+              isDark ? "bg-[#00FF88] text-black" : "bg-[#00AA55] text-white",
             )}
           >
-            {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronRight className="h-4 w-4" />}
+            {processing ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <ChevronRight className="h-4 w-4" />
+            )}
             Verify & Pay {formatAmount(amount)} TND
           </button>
         </div>
@@ -587,11 +786,23 @@ function WalletForm({
   return (
     <div className="space-y-4">
       <div>
-        <label className={cn("mb-1.5 block text-sm font-medium", isDark ? "text-[#ccc]" : "text-gray-700")}>
+        <label
+          className={cn(
+            "mb-1.5 block text-sm font-medium",
+            isDark ? "text-[#ccc]" : "text-gray-700",
+          )}
+        >
           Phone Number
         </label>
         <div className="relative">
-          <span className={cn("absolute left-3 top-1/2 -translate-y-1/2 text-sm", isDark ? "text-[#666]" : "text-gray-400")}>+216</span>
+          <span
+            className={cn(
+              "absolute left-3 top-1/2 -translate-y-1/2 text-sm",
+              isDark ? "text-[#666]" : "text-gray-400",
+            )}
+          >
+            +216
+          </span>
           <input
             type="tel"
             value={phoneNumber}
@@ -602,14 +813,19 @@ function WalletForm({
               "w-full rounded-xl pl-14 pr-4 py-3 text-sm outline-none transition-colors",
               isDark
                 ? "bg-[#0a0a0a] border border-white/[0.06] text-white placeholder-[#444] focus:border-[#00FF88]/50"
-                : "bg-gray-50 border border-gray-200 text-[#111] placeholder-gray-300 focus:border-[#00AA55]/50"
+                : "bg-gray-50 border border-gray-200 text-[#111] placeholder-gray-300 focus:border-[#00AA55]/50",
             )}
           />
         </div>
       </div>
 
       <div>
-        <label className={cn("mb-1.5 block text-sm font-medium", isDark ? "text-[#ccc]" : "text-gray-700")}>
+        <label
+          className={cn(
+            "mb-1.5 block text-sm font-medium",
+            isDark ? "text-[#ccc]" : "text-gray-700",
+          )}
+        >
           PIN
         </label>
         <input
@@ -622,23 +838,27 @@ function WalletForm({
             "w-full rounded-xl px-4 py-3 text-sm outline-none transition-colors text-center tracking-[0.5em]",
             isDark
               ? "bg-[#0a0a0a] border border-white/[0.06] text-white placeholder-[#444] focus:border-[#00FF88]/50"
-              : "bg-gray-50 border border-gray-200 text-[#111] placeholder-gray-300 focus:border-[#00AA55]/50"
+              : "bg-gray-50 border border-gray-200 text-[#111] placeholder-gray-300 focus:border-[#00AA55]/50",
           )}
         />
       </div>
 
       <button
         onClick={handleRequestOtp}
-        disabled={processing || phoneNumber.length < 8 || pin.length < 4}
+        disabled={processing || phoneNumber.length < 8 || pin.length < 6}
         className={cn(
           "flex w-full items-center justify-center gap-2 rounded-xl py-4 text-sm font-semibold transition-all",
-          processing || phoneNumber.length < 8 || pin.length < 4
+          processing || phoneNumber.length < 8 || pin.length < 6
             ? "opacity-50 cursor-not-allowed"
             : "hover:opacity-90 active:scale-[0.98]",
-          isDark ? "bg-[#00FF88] text-black" : "bg-[#00AA55] text-white"
+          isDark ? "bg-[#00FF88] text-black" : "bg-[#00AA55] text-white",
         )}
       >
-        {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronRight className="h-4 w-4" />}
+        {processing ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <ChevronRight className="h-4 w-4" />
+        )}
         Send Verification Code
       </button>
     </div>
@@ -668,7 +888,9 @@ function CardForm({
   firstName: string;
   lastName: string;
   phoneNumber: string;
-  onResult: (r: "success" | "declined" | "insufficient_funds" | "error") => void;
+  onResult: (
+    r: "success" | "declined" | "insufficient_funds" | "error",
+  ) => void;
   onProcessing: (p: boolean) => void;
   onSetError: (msg: string) => void;
 }) {
@@ -723,7 +945,10 @@ function CardForm({
     if (intent.variable_amount && amount > 0) {
       confirmPayload.amount = amount;
     }
-    const res = await postJson(`/gateway/v1/intents/${intent.intent_id}/confirm`, confirmPayload);
+    const res = await postJson(
+      `/gateway/v1/intents/${intent.intent_id}/confirm`,
+      confirmPayload,
+    );
     onProcessing(false);
 
     console.log("Card confirm response:", res.status, res.data);
@@ -733,8 +958,10 @@ function CardForm({
       const err = String(res.data.error || "");
       const msg = String(res.data.message || "");
       onSetError(msg || err || `HTTP ${res.status}`);
-      if (err === "INVALID_TEST_CARD" || msg.includes("insufficient")) onResult("insufficient_funds");
-      else if (msg.includes("declined") || err.includes("declined")) onResult("declined");
+      if (err === "INVALID_TEST_CARD" || msg.includes("insufficient"))
+        onResult("insufficient_funds");
+      else if (msg.includes("declined") || err.includes("declined"))
+        onResult("declined");
       else onResult("error");
     }
   };
@@ -757,12 +984,28 @@ function CardForm({
   return (
     <div className="space-y-4">
       {/* Card preview */}
-      <div className={cn("relative mx-auto w-full max-w-[260px] overflow-hidden rounded-xl p-5", isDark ? "bg-[#1a1a1a]" : "bg-gray-100")}>
+      <div
+        className={cn(
+          "relative mx-auto w-full max-w-[260px] overflow-hidden rounded-xl p-5",
+          isDark ? "bg-[#1a1a1a]" : "bg-gray-100",
+        )}
+      >
         <div className="flex items-center justify-between">
-          <div className={cn("text-xs font-medium", isDark ? "text-[#888]" : "text-gray-500")}>
-            {cardType === "visa" ? "VISA" : cardType === "mastercard" ? "MasterCard" : "Card"}
+          <div
+            className={cn(
+              "text-xs font-medium",
+              isDark ? "text-[#888]" : "text-gray-500",
+            )}
+          >
+            {cardType === "visa"
+              ? "VISA"
+              : cardType === "mastercard"
+                ? "MasterCard"
+                : "Card"}
           </div>
-          <CreditCard className={cn("h-5 w-5", isDark ? "text-[#666]" : "text-gray-400")} />
+          <CreditCard
+            className={cn("h-5 w-5", isDark ? "text-[#666]" : "text-gray-400")}
+          />
         </div>
         <div className="mt-4 text-lg font-mono tracking-wider">
           {cardNumber || "•••• •••• •••• ••••"}
@@ -772,14 +1015,21 @@ function CardForm({
             <div>{cardHolder || "CARDHOLDER"}</div>
           </div>
           <div className={cn(isDark ? "text-[#888]" : "text-gray-500")}>
-            <div>{expiryMonth || "MM"}/{expiryYear.slice(2) || "YY"}</div>
+            <div>
+              {expiryMonth || "MM"}/{expiryYear.slice(2) || "YY"}
+            </div>
           </div>
         </div>
       </div>
 
       <div className="space-y-3">
         <div>
-          <label className={cn("mb-1.5 block text-sm font-medium", isDark ? "text-[#ccc]" : "text-gray-700")}>
+          <label
+            className={cn(
+              "mb-1.5 block text-sm font-medium",
+              isDark ? "text-[#ccc]" : "text-gray-700",
+            )}
+          >
             Card Number
           </label>
           <input
@@ -792,13 +1042,18 @@ function CardForm({
               "w-full rounded-xl px-4 py-3 text-sm outline-none transition-colors",
               isDark
                 ? "bg-[#0a0a0a] border border-white/[0.06] text-white placeholder-[#444] focus:border-[#00FF88]/50"
-                : "bg-gray-50 border border-gray-200 text-[#111] placeholder-gray-300 focus:border-[#00AA55]/50"
+                : "bg-gray-50 border border-gray-200 text-[#111] placeholder-gray-300 focus:border-[#00AA55]/50",
             )}
           />
         </div>
 
         <div>
-          <label className={cn("mb-1.5 block text-sm font-medium", isDark ? "text-[#ccc]" : "text-gray-700")}>
+          <label
+            className={cn(
+              "mb-1.5 block text-sm font-medium",
+              isDark ? "text-[#ccc]" : "text-gray-700",
+            )}
+          >
             Cardholder Name
           </label>
           <input
@@ -810,60 +1065,76 @@ function CardForm({
               "w-full rounded-xl px-4 py-3 text-sm outline-none transition-colors uppercase",
               isDark
                 ? "bg-[#0a0a0a] border border-white/[0.06] text-white placeholder-[#444] focus:border-[#00FF88]/50"
-                : "bg-gray-50 border border-gray-200 text-[#111] placeholder-gray-300 focus:border-[#00AA55]/50"
+                : "bg-gray-50 border border-gray-200 text-[#111] placeholder-gray-300 focus:border-[#00AA55]/50",
             )}
           />
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className={cn("mb-1.5 block text-sm font-medium", isDark ? "text-[#ccc]" : "text-gray-700")}>
+            <label
+              className={cn(
+                "mb-1.5 block text-sm font-medium",
+                isDark ? "text-[#ccc]" : "text-gray-700",
+              )}
+            >
               Expiry (MM/YY)
             </label>
             <div className="flex gap-2">
               <input
                 type="text"
                 value={expiryMonth}
-                onChange={(e) => setExpiryMonth(e.target.value.replace(/\D/g, "").slice(0, 2))}
+                onChange={(e) =>
+                  setExpiryMonth(e.target.value.replace(/\D/g, "").slice(0, 2))
+                }
                 placeholder="MM"
                 maxLength={2}
                 className={cn(
                   "w-full rounded-xl px-4 py-3 text-sm text-center outline-none transition-colors",
                   isDark
                     ? "bg-[#0a0a0a] border border-white/[0.06] text-white placeholder-[#444] focus:border-[#00FF88]/50"
-                    : "bg-gray-50 border border-gray-200 text-[#111] placeholder-gray-300 focus:border-[#00AA55]/50"
+                    : "bg-gray-50 border border-gray-200 text-[#111] placeholder-gray-300 focus:border-[#00AA55]/50",
                 )}
               />
               <input
                 type="text"
                 value={expiryYear}
-                onChange={(e) => setExpiryYear(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                onChange={(e) =>
+                  setExpiryYear(e.target.value.replace(/\D/g, "").slice(0, 4))
+                }
                 placeholder="YYYY"
                 maxLength={4}
                 className={cn(
                   "w-full rounded-xl px-4 py-3 text-sm text-center outline-none transition-colors",
                   isDark
                     ? "bg-[#0a0a0a] border border-white/[0.06] text-white placeholder-[#444] focus:border-[#00FF88]/50"
-                    : "bg-gray-50 border border-gray-200 text-[#111] placeholder-gray-300 focus:border-[#00AA55]/50"
+                    : "bg-gray-50 border border-gray-200 text-[#111] placeholder-gray-300 focus:border-[#00AA55]/50",
                 )}
               />
             </div>
           </div>
           <div>
-            <label className={cn("mb-1.5 block text-sm font-medium", isDark ? "text-[#ccc]" : "text-gray-700")}>
+            <label
+              className={cn(
+                "mb-1.5 block text-sm font-medium",
+                isDark ? "text-[#ccc]" : "text-gray-700",
+              )}
+            >
               CVV
             </label>
             <input
               type="text"
               value={cvv}
-              onChange={(e) => setCvv(e.target.value.replace(/\D/g, "").slice(0, 4))}
+              onChange={(e) =>
+                setCvv(e.target.value.replace(/\D/g, "").slice(0, 4))
+              }
               placeholder="123"
               maxLength={4}
               className={cn(
                 "w-full rounded-xl px-4 py-3 text-sm text-center outline-none transition-colors",
                 isDark
                   ? "bg-[#0a0a0a] border border-white/[0.06] text-white placeholder-[#444] focus:border-[#00FF88]/50"
-                  : "bg-gray-50 border border-gray-200 text-[#111] placeholder-gray-300 focus:border-[#00AA55]/50"
+                  : "bg-gray-50 border border-gray-200 text-[#111] placeholder-gray-300 focus:border-[#00AA55]/50",
               )}
             />
           </div>
@@ -875,18 +1146,54 @@ function CardForm({
         <div className="mt-2">
           <button
             onClick={() => setShowTestCards(!showTestCards)}
-            className={cn("text-xs font-medium", isDark ? "text-[#FFB800] hover:text-[#FFB800]/80" : "text-amber-600 hover:text-amber-700")}
+            className={cn(
+              "text-xs font-medium",
+              isDark
+                ? "text-[#FFB800] hover:text-[#FFB800]/80"
+                : "text-amber-600 hover:text-amber-700",
+            )}
           >
             🧪 Test cards {showTestCards ? "▲" : "▼"}
           </button>
           {showTestCards && (
-            <div className={cn("mt-2 overflow-hidden rounded-xl", isDark ? "bg-[#0a0a0a]" : "bg-gray-50")}>
+            <div
+              className={cn(
+                "mt-2 overflow-hidden rounded-xl",
+                isDark ? "bg-[#0a0a0a]" : "bg-gray-50",
+              )}
+            >
               <table className="w-full text-xs">
                 <thead>
-                  <tr className={cn("border-b", isDark ? "border-white/[0.06]" : "border-gray-200")}>
-                    <th className={cn("px-3 py-2 text-left font-medium", isDark ? "text-[#888]" : "text-gray-500")}>Brand</th>
-                    <th className={cn("px-3 py-2 text-left font-medium", isDark ? "text-[#888]" : "text-gray-500")}>Number</th>
-                    <th className={cn("px-3 py-2 text-left font-medium", isDark ? "text-[#888]" : "text-gray-500")}>Result</th>
+                  <tr
+                    className={cn(
+                      "border-b",
+                      isDark ? "border-white/[0.06]" : "border-gray-200",
+                    )}
+                  >
+                    <th
+                      className={cn(
+                        "px-3 py-2 text-left font-medium",
+                        isDark ? "text-[#888]" : "text-gray-500",
+                      )}
+                    >
+                      Brand
+                    </th>
+                    <th
+                      className={cn(
+                        "px-3 py-2 text-left font-medium",
+                        isDark ? "text-[#888]" : "text-gray-500",
+                      )}
+                    >
+                      Number
+                    </th>
+                    <th
+                      className={cn(
+                        "px-3 py-2 text-left font-medium",
+                        isDark ? "text-[#888]" : "text-gray-500",
+                      )}
+                    >
+                      Result
+                    </th>
                     <th className="px-3 py-2"></th>
                   </tr>
                 </thead>
@@ -899,11 +1206,14 @@ function CardForm({
                         "cursor-pointer transition-colors",
                         isDark
                           ? "border-b border-white/[0.04] hover:bg-white/[0.04]"
-                          : "border-b border-gray-100 hover:bg-gray-100"
+                          : "border-b border-gray-100 hover:bg-gray-100",
                       )}
                     >
                       <td className="px-3 py-2">{tc.brand}</td>
-                      <td className="px-3 py-2 font-mono">{tc.number.slice(0, 4)} {tc.number.slice(4, 8)} {tc.number.slice(8, 12)} {tc.number.slice(12)}</td>
+                      <td className="px-3 py-2 font-mono">
+                        {tc.number.slice(0, 4)} {tc.number.slice(4, 8)}{" "}
+                        {tc.number.slice(8, 12)} {tc.number.slice(12)}
+                      </td>
                       <td className="px-3 py-2">
                         {tc.behavior === "success" ? (
                           <span className="text-[#00FF88]">✓</span>
@@ -913,7 +1223,14 @@ function CardForm({
                         {tc.behavior}
                       </td>
                       <td className="px-3 py-2">
-                        <span className={cn("text-[10px] font-medium", isDark ? "text-[#666]" : "text-gray-400")}>Autofill</span>
+                        <span
+                          className={cn(
+                            "text-[10px] font-medium",
+                            isDark ? "text-[#666]" : "text-gray-400",
+                          )}
+                        >
+                          Autofill
+                        </span>
                       </td>
                     </tr>
                   ))}
@@ -932,17 +1249,27 @@ function CardForm({
           processing || !cardValid
             ? "opacity-50 cursor-not-allowed"
             : "hover:opacity-90 active:scale-[0.98]",
-          isDark ? "bg-[#00FF88] text-black" : "bg-[#00AA55] text-white"
+          isDark ? "bg-[#00FF88] text-black" : "bg-[#00AA55] text-white",
         )}
       >
-        {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronRight className="h-4 w-4" />}
+        {processing ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <ChevronRight className="h-4 w-4" />
+        )}
         Pay {formatAmount(amount)} TND
       </button>
     </div>
   );
 }
 
-function ExpiryCountdown({ expiry, isDark }: { expiry: string; isDark: boolean }) {
+function ExpiryCountdown({
+  expiry,
+  isDark,
+}: {
+  expiry: string;
+  isDark: boolean;
+}) {
   const [left, setLeft] = React.useState("");
   const [urgent, setUrgent] = React.useState(false);
 
@@ -973,7 +1300,7 @@ function ExpiryCountdown({ expiry, isDark }: { expiry: string; isDark: boolean }
             ? "bg-red-500/10 text-red-500 border border-red-500/20"
             : isDark
               ? "bg-[#111] text-[#888] border border-white/[0.06]"
-              : "bg-white text-gray-500 border border-gray-200"
+              : "bg-white text-gray-500 border border-gray-200",
         )}
       >
         <Clock className="h-3 w-3" />
@@ -983,7 +1310,15 @@ function ExpiryCountdown({ expiry, isDark }: { expiry: string; isDark: boolean }
   );
 }
 
-function SuccessOverlay({ intent, isDark, amount }: { intent: IntentData; isDark: boolean; amount: number }) {
+function SuccessOverlay({
+  intent,
+  isDark,
+  amount,
+}: {
+  intent: IntentData;
+  isDark: boolean;
+  amount: number;
+}) {
   const formatAmount = (millimes: number) => {
     const tnd = (millimes / 1000).toLocaleString("en-US", {
       minimumFractionDigits: 3,
@@ -993,16 +1328,45 @@ function SuccessOverlay({ intent, isDark, amount }: { intent: IntentData; isDark
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center p-6" style={{ background: isDark ? "#080808" : "#F5F5F5" }}>
+    <div
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center p-6"
+      style={{ background: isDark ? "#080808" : "#F5F5F5" }}
+    >
       <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#00FF88]/10">
         <Check className="h-10 w-10 text-[#00FF88]" />
       </div>
-      <h2 className={cn("mt-6 text-2xl font-extrabold", isDark ? "text-white" : "text-[#111]")} style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+      <h2
+        className={cn(
+          "mt-6 text-2xl font-extrabold",
+          isDark ? "text-white" : "text-[#111]",
+        )}
+        style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+      >
         Payment Successful
       </h2>
-      <p className={cn("mt-2 text-3xl font-bold", isDark ? "text-[#00FF88]" : "text-[#00AA55]")}>{formatAmount(amount)}</p>
-      <p className={cn("mt-1 text-sm", isDark ? "text-[#888]" : "text-gray-500")}>To: {intent.agent_name}</p>
-      {intent.order_id && <p className={cn("mt-1 text-xs", isDark ? "text-[#555]" : "text-gray-400")}>Order #{intent.order_id}</p>}
+      <p
+        className={cn(
+          "mt-2 text-3xl font-bold",
+          isDark ? "text-[#00FF88]" : "text-[#00AA55]",
+        )}
+      >
+        {formatAmount(amount)}
+      </p>
+      <p
+        className={cn("mt-1 text-sm", isDark ? "text-[#888]" : "text-gray-500")}
+      >
+        To: {intent.agent_name}
+      </p>
+      {intent.order_id && (
+        <p
+          className={cn(
+            "mt-1 text-xs",
+            isDark ? "text-[#555]" : "text-gray-400",
+          )}
+        >
+          Order #{intent.order_id}
+        </p>
+      )}
 
       <div className="mt-8 flex w-full max-w-xs flex-col gap-3">
         <button
@@ -1030,7 +1394,7 @@ ${intent.order_id ? `<p><strong>Order:</strong> #${intent.order_id}</p>` : ""}
             "flex w-full items-center justify-center gap-2 rounded-xl border py-3 text-sm font-medium transition-all",
             isDark
               ? "border-white/[0.06] bg-[#111] text-white hover:bg-white/[0.04]"
-              : "border-gray-200 bg-white text-[#111] hover:bg-gray-50"
+              : "border-gray-200 bg-white text-[#111] hover:bg-gray-50",
           )}
         >
           <Download className="h-4 w-4" />
@@ -1041,7 +1405,9 @@ ${intent.order_id ? `<p><strong>Order:</strong> #${intent.order_id}</p>` : ""}
             href={intent.success_url}
             className={cn(
               "flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold transition-all",
-              isDark ? "bg-[#00FF88] text-black hover:bg-[#00FF88]/90" : "bg-[#00AA55] text-white hover:bg-[#00AA55]/90"
+              isDark
+                ? "bg-[#00FF88] text-black hover:bg-[#00FF88]/90"
+                : "bg-[#00AA55] text-white hover:bg-[#00AA55]/90",
             )}
           >
             <ExternalLink className="h-4 w-4" />
@@ -1053,7 +1419,15 @@ ${intent.order_id ? `<p><strong>Order:</strong> #${intent.order_id}</p>` : ""}
   );
 }
 
-function SessionTimer({ createdAt, minutes, isDark }: { createdAt: string; minutes: number; isDark: boolean }) {
+function SessionTimer({
+  createdAt,
+  minutes,
+  isDark,
+}: {
+  createdAt: string;
+  minutes: number;
+  isDark: boolean;
+}) {
   const [remaining, setRemaining] = React.useState(0);
   const totalMs = minutes * 60 * 1000;
 
@@ -1076,49 +1450,112 @@ function SessionTimer({ createdAt, minutes, isDark }: { createdAt: string; minut
   const urgent = remaining < 120000; // under 2 min
 
   return (
-    <div className={cn("rounded-xl border p-3", isDark ? "border-white/[0.06] bg-[#111]" : "border-gray-200 bg-white")}>
+    <div
+      className={cn(
+        "rounded-xl border p-3",
+        isDark ? "border-white/[0.06] bg-[#111]" : "border-gray-200 bg-white",
+      )}
+    >
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
-          <Clock className={cn("h-4 w-4", expired ? "text-red-500" : urgent ? "text-amber-400" : "text-[#00FF88]")} />
-          <span className={cn("text-xs font-semibold", expired ? "text-red-500" : urgent ? "text-amber-400" : isDark ? "text-[#ccc]" : "text-gray-700")}>
-            {expired ? "Session Expired" : `Session ends in ${m}m ${String(s).padStart(2, "0")}s`}
+          <Clock
+            className={cn(
+              "h-4 w-4",
+              expired
+                ? "text-red-500"
+                : urgent
+                  ? "text-amber-400"
+                  : "text-[#00FF88]",
+            )}
+          />
+          <span
+            className={cn(
+              "text-xs font-semibold",
+              expired
+                ? "text-red-500"
+                : urgent
+                  ? "text-amber-400"
+                  : isDark
+                    ? "text-[#ccc]"
+                    : "text-gray-700",
+            )}
+          >
+            {expired
+              ? "Session Expired"
+              : `Session ends in ${m}m ${String(s).padStart(2, "0")}s`}
           </span>
         </div>
-        <span className={cn("text-[10px] font-medium", isDark ? "text-[#555]" : "text-gray-400")}>
+        <span
+          className={cn(
+            "text-[10px] font-medium",
+            isDark ? "text-[#555]" : "text-gray-400",
+          )}
+        >
           {minutes} min limit
         </span>
       </div>
-      <div className={cn("h-1.5 w-full rounded-full overflow-hidden", isDark ? "bg-white/[0.04]" : "bg-gray-100")}>
+      <div
+        className={cn(
+          "h-1.5 w-full rounded-full overflow-hidden",
+          isDark ? "bg-white/[0.04]" : "bg-gray-100",
+        )}
+      >
         <div
           className={cn(
             "h-full rounded-full transition-all duration-1000",
-            expired ? "bg-red-500" : urgent ? "bg-amber-400" : "bg-[#00FF88]"
+            expired ? "bg-red-500" : urgent ? "bg-amber-400" : "bg-[#00FF88]",
           )}
           style={{ width: `${pct}%` }}
         />
       </div>
       {expired && (
-        <p className="mt-1.5 text-[10px] text-red-500">Refresh the page to start a new session.</p>
+        <p className="mt-1.5 text-[10px] text-red-500">
+          Refresh the page to start a new session.
+        </p>
       )}
     </div>
   );
 }
 
-function DeclinedOverlay({ reason, isDark, onRetry }: { reason: string; isDark: boolean; onRetry: () => void }) {
+function DeclinedOverlay({
+  reason,
+  isDark,
+  onRetry,
+}: {
+  reason: string;
+  isDark: boolean;
+  onRetry: () => void;
+}) {
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center p-6" style={{ background: isDark ? "#080808" : "#F5F5F5" }}>
+    <div
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center p-6"
+      style={{ background: isDark ? "#080808" : "#F5F5F5" }}
+    >
       <div className="flex h-20 w-20 items-center justify-center rounded-full bg-red-500/10">
         <X className="h-10 w-10 text-red-500" />
       </div>
-      <h2 className={cn("mt-6 text-2xl font-extrabold", isDark ? "text-white" : "text-[#111]")}>Payment Declined</h2>
-      <p className={cn("mt-2 text-sm", isDark ? "text-[#888]" : "text-gray-500")}>
-        {reason === "insufficient_funds" ? "Insufficient funds" : "Card declined"}
+      <h2
+        className={cn(
+          "mt-6 text-2xl font-extrabold",
+          isDark ? "text-white" : "text-[#111]",
+        )}
+      >
+        Payment Declined
+      </h2>
+      <p
+        className={cn("mt-2 text-sm", isDark ? "text-[#888]" : "text-gray-500")}
+      >
+        {reason === "insufficient_funds"
+          ? "Insufficient funds"
+          : "Card declined"}
       </p>
       <button
         onClick={onRetry}
         className={cn(
           "mt-6 flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold transition-all",
-          isDark ? "bg-[#00FF88] text-black hover:bg-[#00FF88]/90" : "bg-[#00AA55] text-white hover:bg-[#00AA55]/90"
+          isDark
+            ? "bg-[#00FF88] text-black hover:bg-[#00FF88]/90"
+            : "bg-[#00AA55] text-white hover:bg-[#00AA55]/90",
         )}
       >
         Try Another Card
@@ -1127,16 +1564,43 @@ function DeclinedOverlay({ reason, isDark, onRetry }: { reason: string; isDark: 
   );
 }
 
-function ErrorOverlay({ isDark, onRetry, debug }: { isDark: boolean; onRetry: () => void; debug?: string }) {
+function ErrorOverlay({
+  isDark,
+  onRetry,
+  debug,
+}: {
+  isDark: boolean;
+  onRetry: () => void;
+  debug?: string;
+}) {
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center p-6" style={{ background: isDark ? "#080808" : "#F5F5F5" }}>
+    <div
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center p-6"
+      style={{ background: isDark ? "#080808" : "#F5F5F5" }}
+    >
       <div className="flex h-20 w-20 items-center justify-center rounded-full bg-amber-500/10">
         <AlertCircle className="h-10 w-10 text-amber-500" />
       </div>
-      <h2 className={cn("mt-6 text-2xl font-extrabold", isDark ? "text-white" : "text-[#111]")}>Something went wrong</h2>
-      <p className={cn("mt-2 text-sm", isDark ? "text-[#888]" : "text-gray-500")}>Please try again.</p>
+      <h2
+        className={cn(
+          "mt-6 text-2xl font-extrabold",
+          isDark ? "text-white" : "text-[#111]",
+        )}
+      >
+        Something went wrong
+      </h2>
+      <p
+        className={cn("mt-2 text-sm", isDark ? "text-[#888]" : "text-gray-500")}
+      >
+        Please try again.
+      </p>
       {debug && (
-        <div className={cn("mt-3 max-w-xs rounded-lg p-3 text-xs font-mono", isDark ? "bg-[#111] text-red-400" : "bg-gray-100 text-red-600")}>
+        <div
+          className={cn(
+            "mt-3 max-w-xs rounded-lg p-3 text-xs font-mono",
+            isDark ? "bg-[#111] text-red-400" : "bg-gray-100 text-red-600",
+          )}
+        >
           {debug}
         </div>
       )}
@@ -1144,7 +1608,9 @@ function ErrorOverlay({ isDark, onRetry, debug }: { isDark: boolean; onRetry: ()
         onClick={onRetry}
         className={cn(
           "mt-6 flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold transition-all",
-          isDark ? "bg-[#00FF88] text-black hover:bg-[#00FF88]/90" : "bg-[#00AA55] text-white hover:bg-[#00AA55]/90"
+          isDark
+            ? "bg-[#00FF88] text-black hover:bg-[#00FF88]/90"
+            : "bg-[#00AA55] text-white hover:bg-[#00AA55]/90",
         )}
       >
         Retry
@@ -1155,17 +1621,32 @@ function ErrorOverlay({ isDark, onRetry, debug }: { isDark: boolean; onRetry: ()
 
 function NotFoundScreen({ isDark }: { isDark: boolean }) {
   return (
-    <div className={cn("flex min-h-screen flex-col items-center justify-center p-6", isDark ? "bg-[#080808] text-white" : "bg-[#F5F5F5] text-[#111]")}>
+    <div
+      className={cn(
+        "flex min-h-screen flex-col items-center justify-center p-6",
+        isDark ? "bg-[#080808] text-white" : "bg-[#F5F5F5] text-[#111]",
+      )}
+    >
       <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#333]">
         <AlertCircle className="h-10 w-10 text-[#666]" />
       </div>
       <h1 className="mt-6 text-2xl font-bold">Payment Link Not Found</h1>
-      <p className={cn("mt-2 text-sm", isDark ? "text-[#888]" : "text-gray-500")}>This payment link does not exist or has been removed.</p>
+      <p
+        className={cn("mt-2 text-sm", isDark ? "text-[#888]" : "text-gray-500")}
+      >
+        This payment link does not exist or has been removed.
+      </p>
     </div>
   );
 }
 
-function AlreadyPaidScreen({ intent, isDark }: { intent: IntentData; isDark: boolean }) {
+function AlreadyPaidScreen({
+  intent,
+  isDark,
+}: {
+  intent: IntentData;
+  isDark: boolean;
+}) {
   const formatAmount = (millimes: number) => {
     const tnd = (millimes / 1000).toLocaleString("en-US", {
       minimumFractionDigits: 3,
@@ -1175,56 +1656,116 @@ function AlreadyPaidScreen({ intent, isDark }: { intent: IntentData; isDark: boo
   };
 
   return (
-    <div className={cn("flex min-h-screen flex-col items-center justify-center p-6", isDark ? "bg-[#080808] text-white" : "bg-[#F5F5F5] text-[#111]")}>
+    <div
+      className={cn(
+        "flex min-h-screen flex-col items-center justify-center p-6",
+        isDark ? "bg-[#080808] text-white" : "bg-[#F5F5F5] text-[#111]",
+      )}
+    >
       <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#00FF88]/10">
         <Check className="h-10 w-10 text-[#00FF88]" />
       </div>
       <h1 className="mt-6 text-2xl font-bold">Already Paid</h1>
-      <p className={cn("mt-2 text-sm", isDark ? "text-[#888]" : "text-gray-500")}>This payment has already been completed.</p>
-      <p className="mt-4 text-xl font-bold text-[#00FF88]">{formatAmount(intent.amount)}</p>
-      <p className={cn("mt-1 text-sm", isDark ? "text-[#666]" : "text-gray-400")}>To: {intent.agent_name}</p>
+      <p
+        className={cn("mt-2 text-sm", isDark ? "text-[#888]" : "text-gray-500")}
+      >
+        This payment has already been completed.
+      </p>
+      <p className="mt-4 text-xl font-bold text-[#00FF88]">
+        {formatAmount(intent.amount)}
+      </p>
+      <p
+        className={cn("mt-1 text-sm", isDark ? "text-[#666]" : "text-gray-400")}
+      >
+        To: {intent.agent_name}
+      </p>
     </div>
   );
 }
 
-function ExpiredScreen({ agentName, isDark }: { agentName: string; isDark: boolean }) {
+function ExpiredScreen({
+  agentName,
+  isDark,
+}: {
+  agentName: string;
+  isDark: boolean;
+}) {
   return (
-    <div className={cn("flex min-h-screen flex-col items-center justify-center p-6", isDark ? "bg-[#080808] text-white" : "bg-[#F5F5F5] text-[#111]")}>
+    <div
+      className={cn(
+        "flex min-h-screen flex-col items-center justify-center p-6",
+        isDark ? "bg-[#080808] text-white" : "bg-[#F5F5F5] text-[#111]",
+      )}
+    >
       <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#333]">
         <Clock className="h-10 w-10 text-[#666]" />
       </div>
       <h1 className="mt-6 text-2xl font-bold">Link Expired</h1>
-      <p className={cn("mt-2 text-sm", isDark ? "text-[#888]" : "text-gray-500")}>This payment link has expired.</p>
-      <p className={cn("mt-1 text-sm", isDark ? "text-[#666]" : "text-gray-400")}>Contact {agentName} for a new link.</p>
+      <p
+        className={cn("mt-2 text-sm", isDark ? "text-[#888]" : "text-gray-500")}
+      >
+        This payment link has expired.
+      </p>
+      <p
+        className={cn("mt-1 text-sm", isDark ? "text-[#666]" : "text-gray-400")}
+      >
+        Contact {agentName} for a new link.
+      </p>
     </div>
   );
 }
 
 function CancelledScreen({ isDark }: { isDark: boolean }) {
   return (
-    <div className={cn("flex min-h-screen flex-col items-center justify-center p-6", isDark ? "bg-[#080808] text-white" : "bg-[#F5F5F5] text-[#111]")}>
+    <div
+      className={cn(
+        "flex min-h-screen flex-col items-center justify-center p-6",
+        isDark ? "bg-[#080808] text-white" : "bg-[#F5F5F5] text-[#111]",
+      )}
+    >
       <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#333]">
         <X className="h-10 w-10 text-[#666]" />
       </div>
       <h1 className="mt-6 text-2xl font-bold">Cancelled</h1>
-      <p className={cn("mt-2 text-sm", isDark ? "text-[#888]" : "text-gray-500")}>This payment has been cancelled.</p>
+      <p
+        className={cn("mt-2 text-sm", isDark ? "text-[#888]" : "text-gray-500")}
+      >
+        This payment has been cancelled.
+      </p>
     </div>
   );
 }
 
-function ErrorScreen({ isDark, onRetry }: { isDark: boolean; onRetry: () => void }) {
+function ErrorScreen({
+  isDark,
+  onRetry,
+}: {
+  isDark: boolean;
+  onRetry: () => void;
+}) {
   return (
-    <div className={cn("flex min-h-screen flex-col items-center justify-center p-6", isDark ? "bg-[#080808] text-white" : "bg-[#F5F5F5] text-[#111]")}>
+    <div
+      className={cn(
+        "flex min-h-screen flex-col items-center justify-center p-6",
+        isDark ? "bg-[#080808] text-white" : "bg-[#F5F5F5] text-[#111]",
+      )}
+    >
       <div className="flex h-20 w-20 items-center justify-center rounded-full bg-amber-500/10">
         <AlertCircle className="h-10 w-10 text-amber-500" />
       </div>
       <h1 className="mt-6 text-2xl font-bold">Something went wrong</h1>
-      <p className={cn("mt-2 text-sm", isDark ? "text-[#888]" : "text-gray-500")}>Please try again.</p>
+      <p
+        className={cn("mt-2 text-sm", isDark ? "text-[#888]" : "text-gray-500")}
+      >
+        Please try again.
+      </p>
       <button
         onClick={onRetry}
         className={cn(
           "mt-6 flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold transition-all",
-          isDark ? "bg-[#00FF88] text-black hover:bg-[#00FF88]/90" : "bg-[#00AA55] text-white hover:bg-[#00AA55]/90"
+          isDark
+            ? "bg-[#00FF88] text-black hover:bg-[#00FF88]/90"
+            : "bg-[#00AA55] text-white hover:bg-[#00AA55]/90",
         )}
       >
         Retry

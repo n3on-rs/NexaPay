@@ -149,7 +149,12 @@ pub fn validate_structured_api_key(raw_key: &str) -> bool {
     checksum == expected
 }
 
-pub fn issue_session_token(state: &AppState, address: &str, cin_hash: &str, session_id: &str) -> Result<String, StatusCode> {
+pub fn issue_session_token(
+    state: &AppState,
+    address: &str,
+    cin_hash: &str,
+    session_id: &str,
+) -> Result<String, StatusCode> {
     let claims = Claims::with_custom_claims(
         SessionClaims {
             address: address.to_string(),
@@ -199,7 +204,8 @@ pub async fn require_account_token(
     }
     // Check session revocation for tokens with session_id
     if !claims.session_id.is_empty() {
-        let session_uuid = Uuid::parse_str(&claims.session_id).map_err(|_| StatusCode::UNAUTHORIZED)?;
+        let session_uuid =
+            Uuid::parse_str(&claims.session_id).map_err(|_| StatusCode::UNAUTHORIZED)?;
         let row = sqlx::query(
             "SELECT is_revoked FROM user_sessions WHERE user_address = $1 AND id = $2 LIMIT 1",
         )
@@ -360,7 +366,10 @@ async fn resolve_api_key(state: &AppState, raw_key: &str) -> Result<ApiPrincipal
     Err(AuthError::Unauthorized)
 }
 
-pub async fn enforce_rate_limit(state: &AppState, principal: &ApiPrincipal) -> Result<(), AuthError> {
+pub async fn enforce_rate_limit(
+    state: &AppState,
+    principal: &ApiPrincipal,
+) -> Result<(), AuthError> {
     match principal {
         ApiPrincipal::Developer {
             prefix,
@@ -567,7 +576,9 @@ async fn touch_last_used(state: &AppState, principal: &ApiPrincipal) {
 
 pub fn can_manage_keys(principal: &ApiPrincipal) -> bool {
     match principal {
-        ApiPrincipal::Developer { permissions, .. } => permissions.iter().any(|p| p == "api_keys:manage"),
+        ApiPrincipal::Developer { permissions, .. } => {
+            permissions.iter().any(|p| p == "api_keys:manage")
+        }
     }
 }
 
@@ -575,4 +586,164 @@ fn sha256_hex(data: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(data);
     hex::encode(hasher.finalize())
+}
+
+// ─── IP-Based Auth Rate Limiting ───
+
+pub fn extract_client_ip(headers: &HeaderMap) -> String {
+    headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .map(|s| s.trim().to_string())
+        .or_else(|| {
+            headers
+                .get("x-real-ip")
+                .and_then(|v| v.to_str().ok())
+                .map(|s| s.trim().to_string())
+        })
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
+pub async fn check_auth_rate_limit(
+    state: &AppState,
+    ip: &str,
+    endpoint: &str,
+    max_attempts: i32,
+    lockout_minutes: i32,
+) -> Result<(), AuthError> {
+    let now = chrono::Utc::now();
+
+    let row = sqlx::query(
+        "SELECT attempt_count, locked_until FROM auth_rate_limits WHERE ip_address = $1 AND endpoint = $2 LIMIT 1"
+    )
+    .bind(ip)
+    .bind(endpoint)
+    .fetch_optional(&state.pg_pool)
+    .await
+    .map_err(|_| AuthError::Internal)?;
+
+    if let Some(r) = row {
+        let locked_until: Option<chrono::DateTime<chrono::Utc>> = r.try_get("locked_until").ok();
+        if let Some(until) = locked_until {
+            if until > now {
+                let secs = (until - now).num_seconds().max(1) as u64;
+                return Err(AuthError::TooManyRequests {
+                    retry_after_seconds: secs,
+                });
+            }
+        }
+    }
+
+    Ok(())
+}
+
+pub async fn record_auth_attempt(
+    state: &AppState,
+    ip: &str,
+    endpoint: &str,
+    success: bool,
+    max_attempts: i32,
+    lockout_minutes: i32,
+) {
+    let now = chrono::Utc::now();
+
+    if success {
+        let _ = sqlx::query("DELETE FROM auth_rate_limits WHERE ip_address = $1 AND endpoint = $2")
+            .bind(ip)
+            .bind(endpoint)
+            .execute(&state.pg_pool)
+            .await;
+        return;
+    }
+
+    let row = sqlx::query(
+        "SELECT attempt_count FROM auth_rate_limits WHERE ip_address = $1 AND endpoint = $2 LIMIT 1"
+    )
+    .bind(ip)
+    .bind(endpoint)
+    .fetch_optional(&state.pg_pool)
+    .await;
+
+    let attempts: i32 = match row {
+        Ok(Some(r)) => r.try_get("attempt_count").unwrap_or(0),
+        _ => 0,
+    };
+
+    let new_attempts = attempts + 1;
+    let locked_until = if new_attempts >= max_attempts {
+        Some(now + chrono::Duration::minutes(lockout_minutes as i64))
+    } else {
+        None
+    };
+
+    let _ = sqlx::query(
+        "INSERT INTO auth_rate_limits (ip_address, endpoint, attempt_count, locked_until, last_attempt_at)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (ip_address, endpoint) DO UPDATE SET
+         attempt_count = EXCLUDED.attempt_count,
+         locked_until = EXCLUDED.locked_until,
+         last_attempt_at = EXCLUDED.last_attempt_at"
+    )
+    .bind(ip)
+    .bind(endpoint)
+    .bind(new_attempts)
+    .bind(locked_until)
+    .bind(now)
+    .execute(&state.pg_pool)
+    .await;
+}
+
+// ─── Audit Logging ───
+
+pub async fn audit_log(
+    state: &AppState,
+    user_address: Option<&str>,
+    action: &str,
+    resource_type: &str,
+    resource_id: Option<Uuid>,
+    ip: &str,
+    user_agent: Option<&str>,
+    status: &str,
+    details: Value,
+) {
+    let _ = sqlx::query(
+        "INSERT INTO audit_logs (user_address, action, resource_type, resource_id, ip_address, user_agent, status, details)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
+    )
+    .bind(user_address)
+    .bind(action)
+    .bind(resource_type)
+    .bind(resource_id)
+    .bind(ip)
+    .bind(user_agent)
+    .bind(status)
+    .bind(details)
+    .execute(&state.pg_pool)
+    .await;
+}
+
+// ─── Request correlation ID ───
+
+/// Tower Layer that ensures every request has an X-Request-ID header.
+/// Inherits existing IDs or generates a new UUIDv4.
+/// Axum middleware that ensures every request/response has an X-Request-ID.
+pub async fn request_id_middleware(
+    req: axum::http::Request<axum::body::Body>,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    let request_id = req
+        .headers()
+        .get("x-request-id")
+        .and_then(|v| v.to_str().ok())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+
+    let mut response = next.run(req).await;
+    response.headers_mut().insert(
+        axum::http::HeaderName::from_static("x-request-id"),
+        axum::http::HeaderValue::from_str(&request_id).unwrap(),
+    );
+    response
 }

@@ -1,4 +1,0 @@
-Metadata-Version: 2.4
-Name: dlib
-Version: 20.0.1
-Requires-Dist: dlib-bin==20.0.1

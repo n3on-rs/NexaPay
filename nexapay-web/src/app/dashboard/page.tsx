@@ -64,6 +64,29 @@ function getInitials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
+function parseTransactionMemo(memo: string): { label: string; isSystem: boolean } {
+  if (!memo) return { label: "Transfer", isSystem: false };
+  try {
+    const parsed = JSON.parse(memo);
+    const txType = parsed.type || parsed.payload?.type || "";
+    switch (txType) {
+      case "EsignAccount":
+      case "esign_account":
+        return { label: "Contract signed", isSystem: true };
+      case "EsignTransfer":
+      case "esign_transfer":
+        return { label: "Transfer authorization", isSystem: true };
+      case "InvoiceAnchor":
+      case "invoice_anchor":
+        return { label: "Invoice anchored", isSystem: true };
+      default:
+        return { label: memo, isSystem: false };
+    }
+  } catch {
+    return { label: memo, isSystem: false };
+  }
+}
+
 // ─── Skeleton Loader ───
 
 function Skeleton({ className }: { className?: string }) {
@@ -339,12 +362,12 @@ function DashboardInner() {
 
           <div className="flex flex-1 flex-col gap-1">
             <NavItem icon={LayoutDashboard} label="Dashboard" href="/dashboard" active />
-            <NavItem icon={ArrowUpRight} label="Send Money" href="/send" />
-            <NavItem icon={Plus} label="Fund Wallet" href="/fund" />
-            <NavItem icon={Building2} label="Bank Transfer" href="/bank-transfer" />
+            <NavItem icon={ArrowUpRight} label="Send Money" href={user?.kycStatus === "verified" ? "/send" : "/verify"} />
+            <NavItem icon={Plus} label="Fund Wallet" href={user?.kycStatus === "verified" ? "/fund" : "/verify"} />
+            <NavItem icon={Building2} label="Bank Transfer" href={user?.kycStatus === "verified" ? "/bank-transfer" : "/verify"} />
             <NavItem icon={Clock} label="Transactions" href="/history" />
             <NavItem icon={Bell} label="Notifications" href="/notifications" badge={unreadCount || undefined} />
-            <NavItem icon={CreditCard} label="Virtual Card" href="/card" />
+            <NavItem icon={CreditCard} label="Virtual Card" href={user?.kycStatus === "verified" ? "/card" : "/verify"} />
             {agentApproved && (
               <NavItem icon={Briefcase} label="Agent Portal" href="/agent/dashboard" />
             )}
@@ -382,6 +405,37 @@ function DashboardInner() {
             </div>
           )}
 
+          {/* KYC Verification Banner */}
+          {user?.kycStatus !== "verified" && (
+            <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-5 py-4 md:flex-row md:items-center md:justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-500/20">
+                  <Shield className="h-4 w-4 text-amber-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-amber-400">
+                    {user?.kycStatus === "pending"
+                      ? "Identity verification in progress..."
+                      : "Verify your identity to unlock all features"}
+                  </p>
+                  <p className="text-xs text-amber-400/70">
+                    {user?.kycStatus === "pending"
+                      ? "We'll notify you when it's done. You can continue using the app."
+                      : "Send money, fund your wallet, and use your virtual card require CIN verification."}
+                  </p>
+                </div>
+              </div>
+              {user?.kycStatus !== "pending" && (
+                <Link
+                  href="/verify"
+                  className="rounded-full bg-amber-500/20 px-5 py-2 text-xs font-bold text-amber-400 transition-colors hover:bg-amber-500/30 text-center"
+                >
+                  Verify Now →
+                </Link>
+              )}
+            </div>
+          )}
+
           {/* ─── Section 1: Balance Hero ─── */}
           <section className="relative mb-6 overflow-hidden rounded-[24px] border border-[#00FF88]/15 bg-[#111111] p-7">
             <div className="pointer-events-none absolute -left-10 -top-10 h-40 w-40 rounded-full bg-[#00FF88]/10 blur-[60px]" />
@@ -398,8 +452,17 @@ function DashboardInner() {
                   {account ? <AnimatedBalance target={account.balance} suffix="TND" /> : "0.000 TND"}
                 </div>
                 <div className="mt-3 flex items-center gap-3">
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-[#00FF88]/10 px-3 py-1 text-[11px] font-bold text-[#00FF88] border border-[#00FF88]/20">
-                    Verified <Check className="h-3 w-3" />
+                  <span className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold border",
+                    user?.kycStatus === "verified"
+                      ? "bg-[#00FF88]/10 text-[#00FF88] border-[#00FF88]/20"
+                      : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                  )}>
+                    {user?.kycStatus === "verified" ? (
+                      <>Verified <Check className="h-3 w-3" /></>
+                    ) : (
+                      <>Unverified</>
+                    )}
                   </span>
                   <span className="text-sm text-[#888]">{displayName}</span>
                 </div>
@@ -418,21 +481,35 @@ function DashboardInner() {
           {/* ─── Section 2: Quick Actions ─── */}
           <section className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
             {[
-              { icon: ArrowUpRight, label: "Send Money", href: "/send" },
-              { icon: Plus, label: "Fund Wallet", href: "/fund" },
-              { icon: Building2, label: "Bank Transfer", href: "/bank-transfer" },
-              { icon: Clock, label: "History", href: "/history" },
+              { icon: ArrowUpRight, label: "Send Money", href: "/send", locked: user?.kycStatus !== "verified" },
+              { icon: Plus, label: "Fund Wallet", href: "/fund", locked: user?.kycStatus !== "verified" },
+              { icon: Building2, label: "Bank Transfer", href: "/bank-transfer", locked: user?.kycStatus !== "verified" },
+              { icon: Clock, label: "History", href: "/history", locked: false },
             ].map((a) => (
-              <Link
-                key={a.label}
-                href={a.href}
-                className="group flex flex-col items-center gap-3 rounded-2xl border border-white/[0.06] bg-[#161616] p-5 transition-all hover:scale-[1.02] hover:border-[#00FF88]/30"
-              >
-                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#00FF88]/10">
-                  <a.icon className="h-5 w-5 text-[#00FF88]" />
-                </div>
-                <span className="text-[12px] font-medium text-white/80">{a.label}</span>
-              </Link>
+              a.locked ? (
+                <Link
+                  key={a.label}
+                  href="/verify"
+                  className="group flex flex-col items-center gap-3 rounded-2xl border border-white/[0.06] bg-[#161616] p-5 transition-all hover:scale-[1.02] opacity-50"
+                >
+                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#555]/20">
+                    <a.icon className="h-5 w-5 text-[#555]" />
+                  </div>
+                  <span className="text-[12px] font-medium text-[#555]">{a.label}</span>
+                  <span className="text-[9px] text-amber-500/70">Verify to use</span>
+                </Link>
+              ) : (
+                <Link
+                  key={a.label}
+                  href={a.href}
+                  className="group flex flex-col items-center gap-3 rounded-2xl border border-white/[0.06] bg-[#161616] p-5 transition-all hover:scale-[1.02] hover:border-[#00FF88]/30"
+                >
+                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#00FF88]/10">
+                    <a.icon className="h-5 w-5 text-[#00FF88]" />
+                  </div>
+                  <span className="text-[12px] font-medium text-white/80">{a.label}</span>
+                </Link>
+              )
             ))}
           </section>
 
@@ -601,7 +678,7 @@ function DashboardInner() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="truncate text-[14px] font-semibold text-white">{name}</p>
-                        <p className="text-[12px] text-[#888]">{relativeTime(tx.timestamp)}</p>
+                        <p className="text-[12px] text-[#888]">{relativeTime(tx.timestamp)} · {parseTransactionMemo(tx.memo).label}</p>
                       </div>
                       <div className="text-right">
                         <p className={cn("text-[14px] font-semibold", isCredit ? "text-[#00FF88]" : "text-red-400")}>
@@ -631,9 +708,9 @@ function DashboardInner() {
       {/* ─── Mobile Bottom Tab Nav ─── */}
       <nav className="md:hidden fixed inset-x-0 bottom-0 z-40 flex h-16 items-center justify-around border-t border-white/[0.06] bg-[#0d0d0d] pb-[env(safe-area-inset-bottom)]">
         <TabItem icon={Home} label="Home" href="/dashboard" active />
-        <TabItem icon={ArrowUpRight} label="Send" href="/send" />
-        <TabItem icon={Plus} label="" href="/fund" center />
-        <TabItem icon={Building2} label="Bank" href="/bank-transfer" />
+        <TabItem icon={ArrowUpRight} label="Send" href={user?.kycStatus === "verified" ? "/send" : "/verify"} />
+        <TabItem icon={Plus} label="" href={user?.kycStatus === "verified" ? "/fund" : "/verify"} center />
+        <TabItem icon={Building2} label="Bank" href={user?.kycStatus === "verified" ? "/bank-transfer" : "/verify"} />
         {agentApproved && (
           <TabItem icon={Briefcase} label="Agent" href="/agent/dashboard" />
         )}
