@@ -54,6 +54,9 @@ export default function RegisterPage() {
   const [loading1, setLoading1] = React.useState(false);
   const [error1, setError1] = React.useState("");
   const [fieldErrors, setFieldErrors] = React.useState<Record<string, string>>({});
+  const [municipalities, setMunicipalities] = React.useState<any[]>([]);
+  const [delegations, setDelegations] = React.useState<any[]>([]);
+  const [municipalitiesLoading, setMunicipalitiesLoading] = React.useState(true);
 
   // Step 2 (PIN) State
   const [pin, setPin] = React.useState("");
@@ -319,16 +322,33 @@ export default function RegisterPage() {
                     <label className="text-[11px] font-bold text-[#888]">
                       Delegation <span className="text-white/40 font-normal">(المعتمدية)</span> <span className="text-red-500">*</span>
                     </label>
-                    <input type="text" required value={delegation} onChange={(e) => setDelegation(e.target.value)} placeholder="Tunis"
-                      className={cn("w-full h-12 rounded-xl bg-white/5 border border-white/10 outline-none px-4 text-base text-white font-inter placeholder:text-white/20 focus:border-[#00FF88] focus:ring-[3px] focus:ring-[#00FF88]/10 transition-all", fieldErrors.delegation ? "border-red-500" : "")} />
+                    <select value={delegation} onChange={(e) => setDelegation(e.target.value)}
+                      className={cn("w-full h-12 rounded-xl bg-white/5 border border-white/10 outline-none px-4 text-base text-white font-inter focus:border-[#00FF88] focus:ring-[3px] focus:ring-[#00FF88]/10 transition-all appearance-none", fieldErrors.delegation ? "border-red-500" : "")}
+                      style={{ colorScheme: "dark" }}>
+                      <option value="" className="bg-[#111] text-[#666]">Select delegation</option>
+                      {delegations.map((d: any) => (
+                        <option key={d.Value + d.Name} value={d.Value} className="bg-[#111] text-white">{d.Name}</option>
+                      ))}
+                    </select>
                     {fieldErrors.delegation && <p className="text-red-500 text-xs">{fieldErrors.delegation}</p>}
                   </div>
                   <div className="flex-1 flex flex-col gap-2 relative">
                     <label className="text-[11px] font-bold text-[#888]">
                       Governorate <span className="text-white/40 font-normal">(الولاية)</span> <span className="text-red-500">*</span>
                     </label>
-                    <input type="text" required value={governorate} onChange={(e) => setGovernorate(e.target.value)} placeholder="Tunis"
-                      className={cn("w-full h-12 rounded-xl bg-white/5 border border-white/10 outline-none px-4 text-base text-white font-inter placeholder:text-white/20 focus:border-[#00FF88] focus:ring-[3px] focus:ring-[#00FF88]/10 transition-all", fieldErrors.governorate ? "border-red-500" : "")} />
+                    <select value={governorate} onChange={(e) => {
+                      setGovernorate(e.target.value);
+                      setDelegation("");
+                      const gov = municipalities.find((m: any) => m.Value === e.target.value);
+                      setDelegations(gov?.Delegations || []);
+                    }}
+                      className={cn("w-full h-12 rounded-xl bg-white/5 border border-white/10 outline-none px-4 text-base text-white font-inter focus:border-[#00FF88] focus:ring-[3px] focus:ring-[#00FF88]/10 transition-all appearance-none", fieldErrors.governorate ? "border-red-500" : "")}
+                      style={{ colorScheme: "dark" }}>
+                      <option value="" className="bg-[#111] text-[#666]">{municipalitiesLoading ? "Loading..." : "Select governorate"}</option>
+                      {municipalities.map((m: any) => (
+                        <option key={m.Value} value={m.Value} className="bg-[#111] text-white">{m.Name} {m.NameAr}</option>
+                      ))}
+                    </select>
                     {fieldErrors.governorate && <p className="text-red-500 text-xs">{fieldErrors.governorate}</p>}
                   </div>
                 </div>
