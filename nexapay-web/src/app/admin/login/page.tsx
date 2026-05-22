@@ -10,8 +10,9 @@ export default function AdminLoginPage() {
   const [username, setUsername] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [otp, setOtp] = React.useState("");
-  const [step, setStep] = React.useState<"password" | "otp">("password");
+  const [step, setStep] = React.useState<"password" | "otp" | "totp_setup">("password");
   const [devOtp, setDevOtp] = React.useState("");
+  const [qrCodeUrl, setQrCodeUrl] = React.useState("");
   const [adminId, setAdminId] = React.useState("");
   const [error, setError] = React.useState("");
   const [loading, setLoading] = React.useState(false);
@@ -25,8 +26,10 @@ export default function AdminLoginPage() {
       if (res.ok) {
         const data = res.data as Record<string, unknown>;
         setAdminId(String(data.admin_id || ""));
-        setStep("otp");
+        const nextStep = data.totp_qr_url ? "totp_setup" : "otp";
+        setStep(nextStep);
         if (data.dev_otp) setDevOtp(String(data.dev_otp));
+        if (data.totp_qr_url) setQrCodeUrl(String(data.totp_qr_url));
       } else {
         setError(String(res.data.error || "Invalid credentials"));
       }
@@ -73,7 +76,39 @@ export default function AdminLoginPage() {
         </div>
 
         <div className="rounded-2xl border border-white/[0.06] bg-[#111] p-6">
-          {step === "password" ? (
+          {step === "totp_setup" ? (
+            <div className="space-y-4">
+              <div className="rounded-xl bg-[#00FF88]/5 p-4 text-center">
+                <p className="text-sm font-medium text-[#00FF88]">
+                  Set Up Two-Factor Authentication
+                </p>
+                <p className="mt-1 text-xs text-[#888]">
+                  Scan this QR code with Google Authenticator
+                </p>
+              </div>
+              {qrCodeUrl && (
+                <div className="flex justify-center rounded-xl bg-white p-4">
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrCodeUrl)}`}
+                    alt="TOTP QR Code"
+                    className="h-48 w-48"
+                  />
+                </div>
+              )}
+              {devOtp && (
+                <div className="rounded-lg bg-amber-500/10 px-3 py-2 text-center">
+                  <p className="text-[10px] text-amber-400/60">Manual setup code</p>
+                  <p className="font-mono text-xs text-amber-400">{devOtp}</p>
+                </div>
+              )}
+              <button
+                onClick={() => setStep("otp")}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#00FF88] py-3.5 text-sm font-semibold text-black transition-all hover:bg-[#00FF88]/90"
+              >
+                I've Scanned the QR Code — Continue
+              </button>
+            </div>
+          ) : step === "password" ? (
             <div className="space-y-4">
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-[#ccc]">
