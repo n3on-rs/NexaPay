@@ -357,7 +357,7 @@ async fn run_registration(
         Err(_) => {
             let app_env = std::env::var("APP_ENV").unwrap_or_default();
             let dev_show = std::env::var("DEV_SHOW_OTP").unwrap_or_default();
-            if (app_env == "development" || dev_show == "true") && app_env != "demo" {
+            if app_env == "development" || app_env == "demo" || dev_show == "true" {
                 dev_otp = Some(otp.clone());
             }
         }
@@ -848,7 +848,7 @@ pub async fn login_with_pin(
     }
     let app_env = std::env::var("APP_ENV").unwrap_or_default();
     let dev_show = std::env::var("DEV_SHOW_OTP").unwrap_or_default();
-    if (app_env == "development" || dev_show == "true") && app_env != "demo" {
+    if app_env == "development" || app_env == "demo" || dev_show == "true" {
         dev_otp = Some(otp.clone());
     }
 
@@ -1125,7 +1125,7 @@ pub async fn verify_identity(
     }
     let app_env = std::env::var("APP_ENV").unwrap_or_default();
     let dev_show = std::env::var("DEV_SHOW_OTP").unwrap_or_default();
-    if (app_env == "development" || dev_show == "true") && app_env != "demo" {
+    if app_env == "development" || app_env == "demo" || dev_show == "true" {
         dev_otp = Some(otp.clone());
     }
 
