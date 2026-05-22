@@ -8,6 +8,7 @@ export interface ApiHeaders extends Record<string, string | undefined> {
   "X-Account-Token"?: string;
   "X-API-Key"?: string;
   "X-Idempotency-Key"?: string;
+  "X-Admin-Token"?: string;
 }
 
 export async function parseResponseJson(res: Response): Promise<Record<string, unknown>> {
@@ -24,6 +25,8 @@ function buildHeaders(extra?: ApiHeaders): Record<string, string> {
   const h: Record<string, string> = {};
   if (extra?.["X-Account-Token"]) h["X-Account-Token"] = extra["X-Account-Token"];
   if (extra?.["X-API-Key"]) h["X-API-Key"] = extra["X-API-Key"];
+  if (extra?.["X-Admin-Token"]) h["X-Admin-Token"] = extra["X-Admin-Token"];
+  if (extra?.["X-Idempotency-Key"]) h["X-Idempotency-Key"] = extra["X-Idempotency-Key"];
   return h;
 }
 
