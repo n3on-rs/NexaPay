@@ -14,6 +14,7 @@ use crate::api::middleware::{
     audit_log, check_auth_rate_limit, extract_client_ip, record_auth_attempt,
 };
 use crate::api::AppState;
+use crate::api::auth::send_twilio_sms;
 use crate::api::auth::{generate_otp_code as gen_otp, is_valid_otp};
 use crate::crypto::sha256_hex;
 
@@ -232,6 +233,13 @@ pub async fn admin_login(
     let otp = gen_otp();
     let otp_hash = sha256_hex(format!("admin:{}:{}", admin_id, otp).as_bytes());
     let expires_at = Utc::now() + chrono::Duration::minutes(5);
+
+    // Send OTP via SMS to admin phone
+    let admin_phone = std::env::var("NEXAPAY_ADMIN_PHONE").unwrap_or_default();
+    if !admin_phone.is_empty() {
+        let msg = format!("NexaPay Admin login code: {}. Valid for 5 minutes. Never share this code.", otp);
+        let _ = send_twilio_sms(&state, &admin_phone, &msg).await;
+    }
 
     sqlx::query(
         "INSERT INTO admin_login_otps (admin_id, otp_hash, expires_at) VALUES ($1, $2, $3)",
