@@ -557,7 +557,7 @@ export default function RegisterPage() {
               </p>
 
               <p className="text-center text-[#888] mb-6 text-sm">
-                Your account is created. Complete identity verification to unlock all features and sign your account contract.
+                Your account is ready. You can now send and receive money.
               </p>
 
               {/* Virtual Card */}
