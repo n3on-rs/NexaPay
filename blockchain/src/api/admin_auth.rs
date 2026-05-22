@@ -29,6 +29,8 @@ pub struct AdminLoginResponse {
     pub step: String,
     pub admin_id: String,
     pub dev_otp: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub totp_qr_url: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -229,57 +231,109 @@ pub async fn admin_login(
         .unwrap_or_default();
     let role: String = row.try_get("role").unwrap_or_default();
 
-    // Generate OTP
-    let otp = gen_otp();
-    let otp_hash = sha256_hex(format!("admin:{}:{}", admin_id, otp).as_bytes());
-    let expires_at = Utc::now() + chrono::Duration::minutes(5);
+    let admin_uuid = Uuid::parse_str(&admin_id).unwrap_or_else(|_| Uuid::new_v4());
 
-    // Send OTP via SMS to admin phone
-    let admin_phone = std::env::var("NEXAPAY_ADMIN_PHONE").unwrap_or_default();
-    if !admin_phone.is_empty() {
-        let msg = format!("NexaPay Admin login code: {}. Valid for 5 minutes. Never share this code.", otp);
-        match send_twilio_sms(&state, &admin_phone, &msg).await {
-            Ok(_) => tracing::info!("[admin] OTP SMS sent to {}", admin_phone),
-            Err(e) => tracing::error!("[admin] Failed to send OTP SMS: {:?}", e),
-        }
+    // Check if admin has TOTP configured
+    let totp_secret: Option<String> = sqlx::query_scalar(
+        "SELECT otp_secret FROM admin_users WHERE id = $1"
+    )
+    .bind(admin_uuid)
+    .fetch_optional(&state.pg_pool)
+    .await
+    .unwrap_or(None)
+    .flatten();
+
+    let step: String;
+    let dev_otp: Option<String>;
+    let totp_qr_url: Option<String>;
+
+    if totp_secret.is_none() || totp_secret.as_deref() == Some("") {
+        // No TOTP configured — generate a secret and return QR code URL
+        use totp_rs::{Algorithm, TOTP, Secret};
+        let secret = Secret::generate_secret();
+        let secret_bytes = secret.to_bytes().unwrap();
+        
+        let totp = TOTP::new(
+            Algorithm::SHA1,
+            6,
+            1,
+            30,
+            secret_bytes,
+            Some("NexaPay Admin".to_string()),
+            payload.username.clone(),
+        ).unwrap();
+        
+        let qr_url = totp.get_url();
+        
+        // Store the secret as base32 string
+        let secret_str = secret.to_string();
+        let _ = sqlx::query("UPDATE admin_users SET otp_secret = $1 WHERE id = $2")
+            .bind(&secret_str)
+            .bind(admin_uuid)
+            .execute(&state.pg_pool)
+            .await;
+
+        let current_totp = totp.generate_current().unwrap_or_default();
+        dev_otp = if state.env == "development" || state.env == "demo" {
+            Some(format!("TOTP Secret: {} | Code: {}", secret_str, current_totp))
+        } else { None };
+        
+        step = "totp_setup".to_string();
+        totp_qr_url = Some(qr_url);
+        
+        record_auth_attempt(&state, &ip, "/admin/login", true, MAX_ATTEMPTS, LOCKOUT_MINUTES).await;
+        
+        return Ok(Json(AdminLoginResponse {
+            step,
+            admin_id: admin_id.clone(),
+            dev_otp,
+            totp_qr_url,
+        }));
+    } else {
+        // TOTP configured — use it
+        let secret_str = totp_secret.unwrap();
+        let secret = totp_rs::Secret::Encoded(secret_str.clone());
+        let secret_bytes = secret.to_bytes().unwrap();
+        let totp = totp_rs::TOTP::new(
+            totp_rs::Algorithm::SHA1,
+            6,
+            1,
+            30,
+            secret_bytes,
+            Some("NexaPay Admin".to_string()),
+            payload.username.clone(),
+        ).unwrap();
+        
+        let current_code = totp.generate_current().unwrap_or_default();
+        
+        // Also store as legacy OTP hash for backward compat
+        let otp_hash = sha256_hex(format!("admin:{}:{}", admin_id, current_code).as_bytes());
+        let expires_at = Utc::now() + chrono::Duration::minutes(5);
+        
+        let _ = sqlx::query(
+            "INSERT INTO admin_login_otps (admin_id, otp_hash, expires_at) VALUES ($1, $2, $3)",
+        )
+        .bind(admin_uuid)
+        .bind(&otp_hash)
+        .bind(expires_at)
+        .execute(&state.pg_pool)
+        .await;
+
+        dev_otp = if state.env == "development" || state.env == "demo" {
+            Some(format!("TOTP code: {}", current_code))
+        } else { None };
+        
+        step = "otp_required".to_string();
+        totp_qr_url = None;
+        
+        record_auth_attempt(&state, &ip, "/admin/login", true, MAX_ATTEMPTS, LOCKOUT_MINUTES).await;
     }
 
-    sqlx::query(
-        "INSERT INTO admin_login_otps (admin_id, otp_hash, expires_at) VALUES ($1, $2, $3)",
-    )
-    .bind(Uuid::parse_str(&admin_id).unwrap_or_else(|_| Uuid::new_v4()))
-    .bind(&otp_hash)
-    .bind(expires_at)
-    .execute(&state.pg_pool)
-    .await
-    .map_err(|_| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": "Failed to save OTP"})),
-        )
-    })?;
-
-    record_auth_attempt(
-        &state,
-        &ip,
-        "/admin/login",
-        true,
-        MAX_ATTEMPTS,
-        LOCKOUT_MINUTES,
-    )
-    .await;
-
-    let dev_otp =
-        if state.env == "development" || state.env == "demo" || std::env::var("DEV_SHOW_OTP").as_deref() == Ok("true") {
-            Some(otp.clone())
-        } else {
-            None
-        };
-
     Ok(Json(AdminLoginResponse {
-        step: "otp_required".to_string(),
-        admin_id,
+        step,
+        admin_id: admin_id.clone(),
         dev_otp,
+        totp_qr_url,
     }))
 }
 
