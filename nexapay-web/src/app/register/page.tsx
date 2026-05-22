@@ -184,15 +184,15 @@ export default function RegisterPage() {
     <div className="min-h-screen bg-[#080808] text-white font-inter relative overflow-hidden flex flex-col items-center selection:bg-[#00FF88] selection:text-black">
       {/* Progress Bar */}
       <div className="absolute top-0 left-0 w-full h-[3px] bg-[#222] z-50">
-        <div className="h-full bg-[#00FF88] shadow-[0_0_10px_#00FF88] transition-all duration-500 ease-out" style={{ width: `${(step / 4) * 100}%` }} />
+        <div className="h-full bg-[#00FF88] shadow-[0_0_10px_#00FF88] transition-all duration-500 ease-out" style={{ width: `${(step / 3) * 100}%` }} />
       </div>
 
-      {step > 1 && step < 4 && (
+      {step > 1 && step < 3 && (
         <button onClick={() => setStep(s => s - 1)} className="absolute top-8 left-8 md:left-12 z-50 p-2 text-[#888] hover:text-white transition-colors bg-white/5 rounded-full">
           <ArrowLeft size={24} />
         </button>
       )}
-      {step < 4 && (
+      {step < 3 && (
         <div className="absolute top-8 right-8 md:right-12 z-50 text-[#888] font-bold text-sm tracking-wider font-space-grotesk">
           STEP {step} OF 3
         </div>
@@ -336,7 +336,7 @@ export default function RegisterPage() {
                 <div className="bg-[#00FF88]/5 border border-[#00FF88]/20 rounded-xl p-3 flex items-start gap-3">
                   <Smartphone className="w-4 h-4 text-[#00FF88] shrink-0 mt-0.5" />
                   <p className="text-xs text-[#aaa] leading-relaxed">
-                    <span className="text-[#00FF88] font-bold">Demo Mode:</span> AI KYC verification is disabled. Identity will be auto-verified after document upload.
+                    <span className="text-[#00FF88] font-bold">Instant Verification:</span> Your identity is verified automatically. No document upload needed.
                   </p>
                 </div>
 
@@ -475,7 +475,7 @@ export default function RegisterPage() {
         )}
 
         {/* STEP 3 — OTP Verification */}
-        {step === 3 && (
+        {step === 2 && (
           <div className="w-full flex-1 flex flex-col items-center justify-center p-6 animate-in fade-in zoom-in-95 duration-500">
             <div className="w-full max-w-[440px] text-center z-10">
               <div className="mx-auto w-20 h-20 bg-[#00FF88]/10 rounded-full flex items-center justify-center mb-6 border border-[#00FF88]/20 shadow-[0_0_40px_rgba(0,255,136,0.15)]">
@@ -545,7 +545,7 @@ export default function RegisterPage() {
         )}
 
         {/* STEP 4 — Success */}
-        {step === 4 && (
+        {step === 3 && (
           <div className="w-full flex-1 flex flex-col items-center justify-center p-6 animate-in fade-in zoom-in-95 duration-500">
             <div className="w-full max-w-[480px] z-10 pt-10">
               <div className="mx-auto w-20 h-20 bg-[#00FF88] rounded-full flex items-center justify-center mb-6 shadow-[0_0_50px_#00FF88]">

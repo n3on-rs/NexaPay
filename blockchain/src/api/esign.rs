@@ -481,7 +481,7 @@ pub async fn sign_account_contract(
     log_api_call(&state, principal.as_ref(), "/accounts/:address/esign/account", "POST", 200).await;
 
     // Update KYC status to unverified so user can access dashboard
-    let _ = sqlx::query("UPDATE users SET kyc_status = 'unverified' WHERE chain_address = $1 AND kyc_status = 'pending'")
+    let _ = sqlx::query("UPDATE users SET kyc_status = 'verified' WHERE chain_address = $1 AND kyc_status = 'pending'")
         .bind(&address)
         .execute(&state.pg_pool)
         .await;

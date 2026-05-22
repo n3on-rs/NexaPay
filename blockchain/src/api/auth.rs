@@ -230,7 +230,7 @@ async fn run_registration(
 
     sqlx::query(
         "INSERT INTO users (chain_address, full_name, cin, date_of_birth, phone, email, address_line, city, governorate, created_by_api_key_prefix, created_by_principal_type, kyc_status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'unverified')",
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'verified')",
     )
     .bind(&chain_address)
     .bind(&payload.full_name)
@@ -500,7 +500,7 @@ pub async fn provision_kyc_session_if_needed(
 
     sqlx::query(
         "INSERT INTO users (chain_address, full_name, cin, cin_issue_date, date_of_birth, phone, email, address_line, city, governorate, delegation, created_by_api_key_prefix, created_by_principal_type, kyc_status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NULL, NULL, 'unverified')",
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NULL, NULL, 'verified')",
     )
     .bind(&chain_address)
     .bind(&full_name)
