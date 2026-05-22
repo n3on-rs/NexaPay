@@ -292,8 +292,14 @@ pub async fn admin_login(
     } else {
         // TOTP configured — use it
         let secret_str = totp_secret.unwrap();
-        let secret = totp_rs::Secret::Encoded(secret_str.clone());
-        let secret_bytes = secret.to_bytes().unwrap();
+        let secret_bytes = match totp_rs::Secret::Encoded(secret_str.clone()).to_bytes() {
+            Ok(b) => b,
+            Err(_) => {
+                // Old format: secret was stored as hex/raw
+                let raw = totp_rs::Secret::Raw(secret_str.as_bytes().to_vec());
+                raw.to_bytes().unwrap()
+            }
+        };
         let totp = totp_rs::TOTP::new(
             totp_rs::Algorithm::SHA1,
             6,
