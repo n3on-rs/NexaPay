@@ -468,6 +468,12 @@ pub async fn register_set_pin(
     .execute(&state.pg_pool)
     .await;
 
+    // Mark KYC as unverified so user can access dashboard
+    let _ = sqlx::query("UPDATE users SET kyc_status = 'unverified' WHERE chain_address = $1")
+        .bind(&address)
+        .execute(&state.pg_pool)
+        .await;
+
     // Generate session token
     let session_uuid = Uuid::new_v4();
     let session_id_str = session_uuid.to_string();
