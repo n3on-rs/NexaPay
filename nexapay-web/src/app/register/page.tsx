@@ -78,6 +78,19 @@ export default function RegisterPage() {
   const [otpError, setOtpError] = React.useState("");
   const [otpLoading, setOtpLoading] = React.useState(false);
 
+  // Fetch Tunisian municipalities for dropdown
+  React.useEffect(() => {
+    fetch("/api/municipalities")
+      .then(r => r.json())
+      .then(d => {
+        if (Array.isArray(d)) {
+          setMunicipalities(d);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setMunicipalitiesLoading(false));
+  }, []);
+
   const onStep1Submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const errs: Record<string, string> = {};
