@@ -23,7 +23,9 @@ export function middleware(request: NextRequest) {
     if (hasSession) {
       return NextResponse.redirect("https://sandbox.nexapay.space");
     }
-    return NextResponse.rewrite(new URL(`/auth${pathname}`, request.url));
+    // Default / to /login
+    const targetPath = pathname === "/" ? "/auth/login" : `/auth${pathname}`;
+    return NextResponse.rewrite(new URL(targetPath, request.url));
   }
 
   // ─── sandbox.nexapay.space — Dashboard (protected) ───
@@ -32,11 +34,15 @@ export function middleware(request: NextRequest) {
     if (!hasSession) {
       return NextResponse.redirect("https://auth.nexapay.space/login");
     }
-    return NextResponse.rewrite(new URL(`/sandbox${pathname}`, request.url));
+    // Default / to /dashboard
+    const targetPath = pathname === "/" ? "/sandbox/dashboard" : `/sandbox${pathname}`;
+    return NextResponse.rewrite(new URL(targetPath, request.url));
   }
 
   // ─── nexapay.space / www — Public landing ───
-  return NextResponse.rewrite(new URL(`/landing${pathname}`, request.url));
+  // Default / to the landing page
+  const landingPath = pathname === "/" ? "/landing" : `/landing${pathname}`;
+  return NextResponse.rewrite(new URL(landingPath, request.url));
 }
 
 export const config = {
