@@ -94,7 +94,7 @@ export function HeroCardStack() {
 
       {/* Floating CTA */}
       <a
-        href="/register"
+        href="https://auth.nexapay.space/register"
         className="absolute bottom-[8%] right-[-4%] z-20 flex items-center gap-2 rounded-full border border-white/10 bg-zinc-900/95 px-5 py-2.5 text-[13px] font-semibold text-[#00d4aa] shadow-[0_12px_40px_-12px_rgba(0,255,136,0.5)] backdrop-blur-md transition hover:border-[#00d4aa]/40 hover:bg-zinc-900 sm:bottom-[14%] sm:right-0 md:right-[-8%] lg:bottom-[20%]"
       >
         Get Started <span aria-hidden>↗</span>

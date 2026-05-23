@@ -28,7 +28,7 @@ export function LandingHero() {
 
           <div className="mt-8 flex items-center gap-4">
             <Link
-              href="/register"
+              href="https://auth.nexapay.space/register"
               className="inline-flex items-center gap-2 rounded-full bg-[#00d4aa] px-6 py-3 text-[14px] font-semibold text-black transition-all hover:bg-[#00d4aa]/90 hover:gap-3"
             >
               Open free account <ArrowRight className="h-4 w-4" />

@@ -67,7 +67,7 @@ export function AgentFlow() {
               Join businesses across Tunisia using NexaPay. Payment links, APIs, SDKs — everything you need.
             </p>
             <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-              <a href="/register" className="inline-flex items-center gap-2 rounded-full bg-[#00d4aa] px-6 py-3 text-[14px] font-semibold text-black transition-all hover:bg-[#00d4aa]/90">
+              <a href="https://auth.nexapay.space/register" className="inline-flex items-center gap-2 rounded-full bg-[#00d4aa] px-6 py-3 text-[14px] font-semibold text-black transition-all hover:bg-[#00d4aa]/90">
                 Register as Agent →
               </a>
               <a href="/nexapay-api-docs" className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.02] px-6 py-3 text-[14px] font-medium text-white transition-colors hover:bg-white/[0.04]">

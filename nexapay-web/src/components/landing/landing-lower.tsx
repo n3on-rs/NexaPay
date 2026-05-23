@@ -15,7 +15,7 @@ export function LandingLower() {
             No branches. No paperwork. Just your phone.
           </p>
           <Link
-            href="/register"
+            href="https://auth.nexapay.space/register"
             className="mt-8 inline-flex items-center gap-2 rounded-full bg-[#00d4aa] px-8 py-3.5 text-[15px] font-semibold text-black transition-all hover:bg-[#00d4aa]/90 hover:gap-3"
           >
             Get started free <ArrowRight className="h-4 w-4" />
@@ -25,8 +25,8 @@ export function LandingLower() {
             <div className="flex flex-col sm:flex-row items-center justify-between w-full gap-4">
               <p>NexaPay — Licensed financial institution, Tunisia</p>
               <div className="flex gap-6">
-                <Link href="/login" className="hover:text-white/50 transition-colors">Log in</Link>
-                <Link href="/register" className="hover:text-white/50 transition-colors">Sign up</Link>
+                <Link href="https://auth.nexapay.space/login" className="hover:text-white/50 transition-colors">Log in</Link>
+                <Link href="https://auth.nexapay.space/register" className="hover:text-white/50 transition-colors">Sign up</Link>
                 <a href="mailto:contact@backendglitch.com" className="hover:text-white/50 transition-colors">contact@backendglitch.com</a>
               </div>
             </div>

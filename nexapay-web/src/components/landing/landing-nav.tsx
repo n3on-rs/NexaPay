@@ -36,11 +36,11 @@ export function LandingNav() {
             </>
           ) : (
             <>
-              <Link href="/login" className="text-[13px] font-medium text-white/70 transition-colors hover:text-white">
+              <Link href="https://auth.nexapay.space/login" className="text-[13px] font-medium text-white/70 transition-colors hover:text-white">
                 Log in
               </Link>
               <Link
-                href="/register"
+                href="https://auth.nexapay.space/register"
                 className="rounded-full bg-white px-4 py-2 text-[13px] font-semibold text-black transition-all hover:bg-white/90"
               >
                 Get started

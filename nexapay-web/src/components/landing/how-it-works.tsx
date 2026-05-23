@@ -158,7 +158,7 @@ export function HowItWorks() {
               Join thousands of Tunisians banking with NexaPay. Free account, instant card, zero hidden fees.
             </p>
             <a
-              href="/register"
+              href="https://auth.nexapay.space/register"
               className="mt-8 inline-flex items-center gap-2 rounded-full bg-[#00d4aa] px-8 py-3.5 text-[14px] font-semibold text-black transition-all hover:bg-[#00d4aa]/90"
             >
               Open free account →
