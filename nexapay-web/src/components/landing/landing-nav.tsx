@@ -12,6 +12,7 @@ export function LandingNav() {
         <Link href="/" className="flex items-center gap-2.5">
           <img src="/logo.png" alt="" className="h-7 w-7" />
           <span className="text-lg font-semibold tracking-tight text-white">NexaPay</span>
+          <span className="hidden sm:inline text-[10px] text-white/20 font-normal -ml-1 mt-1">by Glitch Inc</span>
         </Link>
 
         <div className="hidden items-center gap-8 md:flex">

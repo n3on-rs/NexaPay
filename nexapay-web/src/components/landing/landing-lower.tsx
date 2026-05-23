@@ -21,12 +21,20 @@ export function LandingLower() {
             Get started free <ArrowRight className="h-4 w-4" />
           </Link>
 
-          <div className="mt-20 w-full border-t border-white/[0.06] pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-[12px] text-white/25">
-            <p>NexaPay — Licensed financial institution, Tunisia</p>
-            <div className="flex gap-6">
-              <Link href="/login" className="hover:text-white/50 transition-colors">Log in</Link>
-              <Link href="/register" className="hover:text-white/50 transition-colors">Sign up</Link>
-              <span>contact@nexapay.space</span>
+          <div className="mt-20 w-full border-t border-white/[0.06] pt-8 flex flex-col items-center gap-6 text-[12px] text-white/25">
+            <div className="flex flex-col sm:flex-row items-center justify-between w-full gap-4">
+              <p>NexaPay — Licensed financial institution, Tunisia</p>
+              <div className="flex gap-6">
+                <Link href="/login" className="hover:text-white/50 transition-colors">Log in</Link>
+                <Link href="/register" className="hover:text-white/50 transition-colors">Sign up</Link>
+                <a href="mailto:contact@backendglitch.com" className="hover:text-white/50 transition-colors">contact@backendglitch.com</a>
+              </div>
+            </div>
+            <div className="flex flex-col items-center gap-1 text-[11px]">
+              <p className="text-white/20">
+                A <a href="https://backendglitch.com" target="_blank" rel="noopener noreferrer" className="text-[#00d4aa]/60 hover:text-[#00d4aa] transition-colors underline underline-offset-2">Glitch Inc</a> / BackendGlitch Division Product
+              </p>
+              <a href="https://backendglitch.com" target="_blank" rel="noopener noreferrer" className="text-white/15 hover:text-white/30 transition-colors">backendglitch.com</a>
             </div>
           </div>
         </div>

@@ -10,6 +10,9 @@ export function AuthBrand({ className }: { className?: string }) {
           NexaPay
         </span>
       </div>
+      <p className="mt-1 text-[11px] text-white/20">
+        A <a href="https://backendglitch.com" target="_blank" rel="noopener noreferrer" className="hover:text-[#00d4aa]/60 transition-colors">Glitch Inc</a> / BackendGlitch Division Product
+      </p>
     </div>
   );
 }

@@ -21,9 +21,18 @@ const bebasNeue = Bebas_Neue({
 });
 
 export const metadata: Metadata = {
-  title: "NexaPay — New era of banking",
+  title: "NexaPay — Digital Banking for Tunisia",
   description:
-    "Open a full bank account in minutes. No branches. No paperwork.",
+    "Open a full bank account in minutes. No branches. No paperwork. Built by Glitch Inc.",
+  icons: {
+    icon: "/logo.png",
+    apple: "/logo.png",
+  },
+  openGraph: {
+    title: "NexaPay — Digital Banking for Tunisia",
+    description: "Open a full bank account in minutes. No branches. No paperwork.",
+    images: ["/logo.png"],
+  },
 };
 
 export default function RootLayout({

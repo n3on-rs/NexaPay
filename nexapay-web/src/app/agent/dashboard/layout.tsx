@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/auth-context";
 import { getSessionToken, getSessionAddress, getSessionFullName } from "@/lib/auth-utils";
 import { getAgentStatus, createApiKey, type AgentApplicationStatus } from "@/lib/api";
+import { SandboxBanner } from "@/components/sandbox-banner";
 
 const AGENT_API_KEY_STORAGE = "nexapay_agent_api_key";
 
@@ -298,6 +299,7 @@ export default function AgentDashboardLayout({ children }: { children: React.Rea
                 </button>
               </div>
             )}
+            <SandboxBanner />
             {children}
           </main>
         </div>
