@@ -15,7 +15,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
 
   React.useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      router.push("/login");
+      window.location.href = "https://auth.nexapay.space/login";
     }
   }, [isLoading, isAuthenticated, router]);
 

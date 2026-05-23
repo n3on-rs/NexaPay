@@ -256,6 +256,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         payment_session_minutes,
         validator_peers,
         is_multi_validator,
+        cookie_domain: std::env::var("COOKIE_DOMAIN")
+            .unwrap_or_else(|_| ".nexapay.space".to_string()),
     };
 
     let portal_url =
@@ -270,6 +272,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         allowed_origins.push("https://nexapay.space".parse().unwrap());
         allowed_origins.push("https://www.nexapay.space".parse().unwrap());
+        allowed_origins.push("https://sandbox.nexapay.space".parse().unwrap());
+        allowed_origins.push("https://auth.nexapay.space".parse().unwrap());
         allowed_origins.push("https://backend.nexapay.space".parse().unwrap());
     }
 
@@ -299,7 +303,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             http::header::HeaderName::from_static("x-api-key"),
             http::header::HeaderName::from_static("x-admin-token"),
             http::header::HeaderName::from_static("x-idempotency-key"),
-        ]);
+        ])
+        .allow_credentials(true);
 
     let app = build_router(state)
         .layer(axum::middleware::from_fn(crate::api::middleware::request_id_middleware))

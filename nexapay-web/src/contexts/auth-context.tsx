@@ -80,6 +80,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const validateSession = React.useCallback(async () => {
+    // Try cookie-first: /auth/me with credentials (browser sends cookie)
+    try {
+      const cookieRes = await getJson("/auth/me");
+      if (cookieRes.ok && cookieRes.data.full_name) {
+        await fetchUser(""); // fetchUser with empty token — will work since cookie is sent
+        setIsLoading(false);
+        return;
+      }
+    } catch { /* cookie failed, try localStorage */ }
+
+    // Fallback: localStorage token
     const token = getSessionToken();
     const address = getSessionAddress();
     if (!token || !address) {
@@ -96,11 +107,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(false);
   }, [fetchUser]);
 
-  const logout = React.useCallback(() => {
+  const logout = React.useCallback(async () => {
+    // Call backend to clear the httpOnly cookie
+    try {
+      await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+    } catch { /* ignore */ }
     clearSession();
     setUser(null);
-    router.push("/");
-  }, [router]);
+    // Redirect to auth subdomain login
+    window.location.href = "https://auth.nexapay.space/login";
+  }, []);
 
   const setAuth = React.useCallback(
     (token: string, address: string, fullName?: string, phone?: string) => {

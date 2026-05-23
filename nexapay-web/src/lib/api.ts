@@ -36,7 +36,7 @@ export async function getJson(
 ): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> {
   const fullUrl = `${getApiBase()}${path}`;
   const res = await fetch(fullUrl, {
-    method: "GET",
+    method: "GET", credentials: "include" as RequestCredentials,
     headers: buildHeaders(extraHeaders),
   });
   const data = await parseResponseJson(res);
@@ -49,7 +49,7 @@ export async function deleteJson(
 ): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> {
   const fullUrl = `${getApiBase()}${path}`;
   const headers = buildHeaders(extraHeaders);
-  const res = await fetch(fullUrl, { method: "DELETE", headers });
+  const res = await fetch(fullUrl, { method: "DELETE", credentials: "include" as RequestCredentials, headers });
   const data = await parseResponseJson(res);
   return { ok: res.ok, status: res.status, data };
 }
@@ -63,7 +63,7 @@ export async function postJson(
   const headers = buildHeaders(extraHeaders);
   headers["Content-Type"] = "application/json";
   const res = await fetch(fullUrl, {
-    method: "POST",
+    method: "POST", credentials: "include" as RequestCredentials,
     headers,
     body: JSON.stringify(body),
   });
@@ -80,7 +80,7 @@ export async function putJson(
   const headers = buildHeaders(extraHeaders);
   headers["Content-Type"] = "application/json";
   const res = await fetch(fullUrl, {
-    method: "PUT",
+    method: "PUT", credentials: "include" as RequestCredentials,
     headers,
     body: JSON.stringify(body),
   });
@@ -95,7 +95,7 @@ export async function postFormData(
 ): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> {
   const fullUrl = `${getApiBase()}${path}`;
   const res = await fetch(fullUrl, {
-    method: "POST",
+    method: "POST", credentials: "include" as RequestCredentials,
     headers: buildHeaders(extraHeaders),
     body: form,
   });

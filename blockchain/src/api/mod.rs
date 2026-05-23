@@ -53,6 +53,8 @@ pub struct AppState {
     pub validator_peers: Vec<String>,
     /// Whether we're running in multi-validator mode.
     pub is_multi_validator: bool,
+    /// Domain for session cookies (e.g. `.nexapay.space`) so they work across subdomains.
+    pub cookie_domain: String,
 }
 
 fn legacy_register_enabled() -> bool {
@@ -78,6 +80,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/auth/recover/reset-pin", post(auth::reset_pin))
         .route("/auth/security-alert", post(auth::resolve_security_alert))
         .route("/auth/change-pin", post(auth::change_pin))
+        .route("/auth/logout", post(auth::logout))
         .route("/accounts/:address", get(accounts::get_account))
         .route(
             "/accounts/:address/notifications",

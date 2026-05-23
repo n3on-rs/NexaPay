@@ -203,10 +203,23 @@ pub async fn verify_session_with_revocation_check(
 }
 
 pub fn extract_account_token(headers: &HeaderMap) -> Option<String> {
-    headers
+    // 1. Try X-Account-Token header first (API clients / mobile apps)
+    if let Some(token) = headers
         .get("X-Account-Token")
         .and_then(|v| v.to_str().ok())
-        .map(|v| v.to_string())
+    {
+        return Some(token.to_string());
+    }
+    // 2. Try Cookie header (browser clients with httpOnly cookies)
+    if let Some(cookie_header) = headers.get(http::header::COOKIE).and_then(|v| v.to_str().ok()) {
+        for part in cookie_header.split(';') {
+            let kv = part.trim();
+            if let Some(value) = kv.strip_prefix("nexapay_session=") {
+                return Some(value.to_string());
+            }
+        }
+    }
+    None
 }
 
 pub fn extract_api_key(headers: &HeaderMap) -> Option<String> {

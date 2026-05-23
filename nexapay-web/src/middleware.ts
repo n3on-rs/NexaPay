@@ -1,0 +1,44 @@
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+
+export function middleware(request: NextRequest) {
+  const hostname = request.headers.get("host") || "";
+  const url = request.nextUrl.clone();
+  const pathname = url.pathname;
+
+  // Pass through /api, /_next, /favicon.ico, /logo.png etc.
+  if (
+    pathname.startsWith("/api/") ||
+    pathname.startsWith("/_next/") ||
+    pathname === "/favicon.ico" ||
+    pathname === "/logo.png" ||
+    pathname.startsWith("/public/")
+  ) {
+    return NextResponse.next();
+  }
+
+  // ─── auth.nexapay.space — Login / Register ───
+  if (hostname.startsWith("auth.")) {
+    const hasSession = request.cookies.has("nexapay_session");
+    if (hasSession) {
+      return NextResponse.redirect("https://sandbox.nexapay.space");
+    }
+    return NextResponse.rewrite(new URL(`/auth${pathname}`, request.url));
+  }
+
+  // ─── sandbox.nexapay.space — Dashboard (protected) ───
+  if (hostname.startsWith("sandbox.")) {
+    const hasSession = request.cookies.has("nexapay_session");
+    if (!hasSession) {
+      return NextResponse.redirect("https://auth.nexapay.space/login");
+    }
+    return NextResponse.rewrite(new URL(`/sandbox${pathname}`, request.url));
+  }
+
+  // ─── nexapay.space / www — Public landing ───
+  return NextResponse.rewrite(new URL(`/landing${pathname}`, request.url));
+}
+
+export const config = {
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|logo.png).*)"],
+};

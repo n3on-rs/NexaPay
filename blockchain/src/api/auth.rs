@@ -292,7 +292,7 @@ pub struct RegisterSetPinRequest {
 pub async fn register_set_pin(
     State(state): State<AppState>,
     Json(payload): Json<RegisterSetPinRequest>,
-) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+) -> Result<(HeaderMap, Json<Value>), (StatusCode, Json<Value>)> {
     if payload.pin.len() != 6 || !payload.pin.chars().all(|c| c.is_ascii_digit()) {
         return Err(api_error(StatusCode::BAD_REQUEST, "PIN must be exactly 6 digits"));
     }
@@ -336,7 +336,47 @@ pub async fn register_set_pin(
 
     send_sms(&state, &phone, "Welcome to NexaPay! Your account has been created. PIN is set.").await;
 
-    Ok(Json(serde_json::json!({ "success": true, "address": address, "token": token })))
+    let mut headers = HeaderMap::new();
+    let cookie = format!(
+        "nexapay_session={}; Domain={}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=86400",
+        token, state.cookie_domain
+    );
+    headers.insert(http::header::SET_COOKIE, cookie.parse().unwrap());
+
+    Ok((headers, Json(serde_json::json!({ "success": true, "address": address, "token": token }))))
+}
+
+// ─── Logout ───
+
+pub async fn logout(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<(HeaderMap, Json<Value>), (StatusCode, Json<Value>)> {
+    let token = crate::api::middleware::extract_account_token(&headers);
+    if let Some(t) = token {
+        if let Ok(claims) = crate::api::middleware::verify_session_token(&state, &t) {
+            if !claims.session_id.is_empty() {
+                if let Ok(u) = Uuid::parse_str(&claims.session_id) {
+                    let _ = sqlx::query(
+                        "UPDATE user_sessions SET is_revoked = TRUE WHERE id = $1 AND user_address = $2",
+                    )
+                    .bind(u)
+                    .bind(&claims.address)
+                    .execute(&state.pg_pool)
+                    .await;
+                }
+            }
+        }
+    }
+
+    let mut resp_headers = HeaderMap::new();
+    let cookie = format!(
+        "nexapay_session=; Domain={}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0",
+        state.cookie_domain
+    );
+    resp_headers.insert(http::header::SET_COOKIE, cookie.parse().unwrap());
+
+    Ok((resp_headers, Json(serde_json::json!({"success": true}))))
 }
 
 #[derive(Debug, Deserialize)]
@@ -807,10 +847,11 @@ pub async fn login_with_pin(
 }
 
 /// Step 2 of login: verify OTP and issue JWT.
+/// Also sets httpOnly session cookie for cross-subdomain browser sessions.
 pub async fn verify_login_otp(
     State(state): State<AppState>,
     Json(payload): Json<VerifyLoginOtpRequest>,
-) -> Result<Json<LoginResponse>, (StatusCode, Json<Value>)> {
+) -> Result<(HeaderMap, Json<LoginResponse>), (StatusCode, Json<Value>)> {
     if !is_valid_otp(&payload.otp_code) {
         return Err(api_error(StatusCode::BAD_REQUEST, "OTP must be 6 digits"));
     }
@@ -923,12 +964,19 @@ pub async fn verify_login_otp(
 
     log_api_call(&state, None, "/auth/login/verify-otp", "POST", 200).await;
 
-    Ok(Json(LoginResponse {
+    let mut headers = HeaderMap::new();
+    let cookie = format!(
+        "nexapay_session={}; Domain={}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=86400",
+        token, state.cookie_domain
+    );
+    headers.insert(http::header::SET_COOKIE, cookie.parse().unwrap());
+
+    Ok((headers, Json(LoginResponse {
         token: token.clone(),
         address: chain_address.clone(),
         chain_address,
         full_name,
-    }))
+    })))
 }
 
 pub async fn verify_identity(
