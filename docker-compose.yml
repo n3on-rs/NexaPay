@@ -1,116 +1,47 @@
-# NexaPay — Multi-Validator BFT Mode
+# NexaPay — Docker Compose (3-validator BFT)
 #
-# Two profiles are available:
-#   docker compose --profile single up    (default, backward compat)
-#   docker compose --profile multi up     (3-validator BFT consensus)
-#
-# Multi-validator: 3 nodes require 3 signatures (2/3+1 quorum) to commit blocks.
-#   docker compose --profile demo up      (polished demo for investors)
-# Single-validator: 1 node, legacy mode (backward compatible).
+#   docker compose up -d --build
+#   → PostgreSQL + 3 validator nodes + load balancer + frontend
+#   → Ports: 5433 (PG) / 8088 (LB) / 3001 (web)
 
 services:
   postgres:
     image: postgres:16
     environment:
       POSTGRES_DB: nexapay
-      POSTGRES_USER: nexapay
-      POSTGRES_PASSWORD: nexapay_secret
-    ports:
-      - "5433:5432"
+      POSTGRES_USER: ${POSTGRES_USER:-nexapay}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nexapay_secret}
     volumes:
       - pgdata:/var/lib/postgresql/data
-    profiles: ["single", "multi"]
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1'
+    # Database port NOT exposed to host in production — use internal Docker network
 
-  # ─── Demo node (polished, no dev artifacts) ───
-  nexapay-demo:
-    build: ./blockchain
-    ports:
-      - "8088:8080"
-    environment:
-      NEXAPAY_DATABASE_URL: postgresql://nexapay:nexapay_secret@postgres:5432/nexapay
-      NEXAPAY_JWT_SECRET: nexapay-demo-jwt-secret-change-in-real-deploy!!
-      NEXAPAY_ENCRYPTION_KEY: d0e1f2a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7
-      NEXAPAY_SYSTEM_PRIVATE_KEY: f0e1d2c3b4a5968778695a4b3c2d1e0f102938475665748392a1b2c3d4e5f6
-      NEXAPAY_PORT: 8080
-      NEXAPAY_PORTAL_URL: https://nexapay.space
-      NEXAPAY_PAYMENT_SESSION_MINUTES: 1440
-      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-""}
-      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-""}
-      TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER:-""}
-      OTP_FALLBACK_CODE: ${OTP_FALLBACK_CODE:-""}
-      APP_ENV: demo
-      DEV_SHOW_OTP: "false"
-      NEXAPAY_STATE_DIR: /app/chain_state
-      NEXAPAY_CHAIN_DATA_DIR: /app/chain_data
-      KYC_DEV_OTP: ""
-      LIVENESS_MOCK_PASS: "true"
-    depends_on:
-      - postgres
-    volumes:
-      - nexapay_demo_chain_data:/app/chain_data
-      - nexapay_demo_chain_state:/app/chain_state
-    profiles: ["demo"]
-
-  # ─── Single-validator node (legacy) ───
-  nexapay-node:
-    build: ./blockchain
-    ports:
-      - "8088:8080"
-    environment:
-      NEXAPAY_DATABASE_URL: postgresql://nexapay:nexapay_secret@postgres:5432/nexapay
-      NEXAPAY_JWT_SECRET: change_this_in_production_64_chars_minimum_change_this_in_production
-      NEXAPAY_ENCRYPTION_KEY: 00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
-      NEXAPAY_SYSTEM_PRIVATE_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-      NEXAPAY_PORT: 8080
-      NEXAPAY_PORTAL_URL: https://nexapay.space
-      NEXAPAY_PAYMENT_SESSION_MINUTES: 1440
-      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-""}
-      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-""}
-      TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER:-""}
-      OTP_FALLBACK_CODE: ${OTP_FALLBACK_CODE:-""}
-      APP_ENV: development
-      DEV_SHOW_OTP: "true"
-      NEXAPAY_STATE_DIR: /app/chain_state
-      NEXAPAY_CHAIN_DATA_DIR: /app/chain_data
-      KYC_DEV_OTP: "554433"
-      LIVENESS_MOCK_PASS: "true"
-    depends_on:
-      - postgres
-    volumes:
-      - nexapay_chain_data:/app/chain_data
-      - nexapay_chain_state:/app/chain_state
-    profiles: ["single"]
-
-  # ─── Multi-validator nodes (BFT) ───
-  # Validator 0 — typically the first node, round-robin leader for block 1
   validator-0:
     build: ./blockchain
     ports:
       - "8090:8080"
     environment:
-      NEXAPAY_DATABASE_URL: postgresql://nexapay:nexapay_secret@postgres:5432/nexapay
-      NEXAPAY_JWT_SECRET: change_this_in_production_64_chars_minimum_change_this_in_production
-      NEXAPAY_ENCRYPTION_KEY: 00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
-      NEXAPAY_SYSTEM_PRIVATE_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      NEXAPAY_DATABASE_URL: postgresql://${POSTGRES_USER:-nexapay}:${POSTGRES_PASSWORD:-nexapay_secret}@postgres:5432/nexapay
+      NEXAPAY_JWT_SECRET: ${NEXAPAY_JWT_SECRET}
+      NEXAPAY_ENCRYPTION_KEY: ${NEXAPAY_ENCRYPTION_KEY}
+      NEXAPAY_SYSTEM_PRIVATE_KEY: ${NEXAPAY_SYSTEM_PRIVATE_KEY}
       NEXAPAY_PORT: 8080
       NEXAPAY_PORTAL_URL: https://nexapay.space
       NEXAPAY_PAYMENT_SESSION_MINUTES: 1440
-      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-""}
-      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-""}
-      TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER:-""}
-      OTP_FALLBACK_CODE: ${OTP_FALLBACK_CODE:-""}
+
       APP_ENV: development
-      DEV_SHOW_OTP: "true"
+      DEV_SHOW_OTP: "${DEV_SHOW_OTP:-false}"
       NEXAPAY_STATE_DIR: /app/chain_state
       NEXAPAY_CHAIN_DATA_DIR: /app/chain_data
-      KYC_DEV_OTP: "554433"
-      LIVENESS_MOCK_PASS: "true"
-      # ─── Multi-validator config ───
       NEXAPAY_VALIDATOR_COUNT: "3"
       NEXAPAY_VALIDATOR_INDEX: "0"
-      NEXAPAY_VALIDATOR_0_KEY: "e1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8001"
-      NEXAPAY_VALIDATOR_1_KEY: "f2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8002"
-      NEXAPAY_VALIDATOR_2_KEY: "a3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8003"
+      NEXAPAY_VALIDATOR_0_KEY: "b5b34bf6a2dcd2469d2f215cc50526421bc31cb3c88139d8b3a4322193e57d59"
+      NEXAPAY_VALIDATOR_1_KEY: "966809bd5ecb79923f0dc14ac2421c394769dc9bad58de0ad3c1b6d345ee319d"
+      NEXAPAY_VALIDATOR_2_KEY: "5c53c8abcb2322d2ad8b2cd2c08a563cab3c7a41d8900613e34a29231bf7031a"
       NEXAPAY_VALIDATOR_0_URL: "http://validator-0:8080"
       NEXAPAY_VALIDATOR_1_URL: "http://validator-1:8080"
       NEXAPAY_VALIDATOR_2_URL: "http://validator-2:8080"
@@ -119,35 +50,29 @@ services:
     volumes:
       - nexapay_v0_chain_data:/app/chain_data
       - nexapay_v0_chain_state:/app/chain_state
-    profiles: ["multi"]
 
   validator-1:
     build: ./blockchain
     ports:
       - "8091:8080"
     environment:
-      NEXAPAY_DATABASE_URL: postgresql://nexapay:nexapay_secret@postgres:5432/nexapay
-      NEXAPAY_JWT_SECRET: change_this_in_production_64_chars_minimum_change_this_in_production
-      NEXAPAY_ENCRYPTION_KEY: 00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
-      NEXAPAY_SYSTEM_PRIVATE_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      NEXAPAY_DATABASE_URL: postgresql://${POSTGRES_USER:-nexapay}:${POSTGRES_PASSWORD:-nexapay_secret}@postgres:5432/nexapay
+      NEXAPAY_JWT_SECRET: ${NEXAPAY_JWT_SECRET}
+      NEXAPAY_ENCRYPTION_KEY: ${NEXAPAY_ENCRYPTION_KEY}
+      NEXAPAY_SYSTEM_PRIVATE_KEY: ${NEXAPAY_SYSTEM_PRIVATE_KEY}
       NEXAPAY_PORT: 8080
       NEXAPAY_PORTAL_URL: https://nexapay.space
       NEXAPAY_PAYMENT_SESSION_MINUTES: 1440
-      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-""}
-      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-""}
-      TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER:-""}
-      OTP_FALLBACK_CODE: ${OTP_FALLBACK_CODE:-""}
+
       APP_ENV: development
-      DEV_SHOW_OTP: "true"
+      DEV_SHOW_OTP: "${DEV_SHOW_OTP:-false}"
       NEXAPAY_STATE_DIR: /app/chain_state
       NEXAPAY_CHAIN_DATA_DIR: /app/chain_data
-      KYC_DEV_OTP: "554433"
-      LIVENESS_MOCK_PASS: "true"
       NEXAPAY_VALIDATOR_COUNT: "3"
       NEXAPAY_VALIDATOR_INDEX: "1"
-      NEXAPAY_VALIDATOR_0_KEY: "e1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8001"
-      NEXAPAY_VALIDATOR_1_KEY: "f2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8002"
-      NEXAPAY_VALIDATOR_2_KEY: "a3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8003"
+      NEXAPAY_VALIDATOR_0_KEY: "b5b34bf6a2dcd2469d2f215cc50526421bc31cb3c88139d8b3a4322193e57d59"
+      NEXAPAY_VALIDATOR_1_KEY: "966809bd5ecb79923f0dc14ac2421c394769dc9bad58de0ad3c1b6d345ee319d"
+      NEXAPAY_VALIDATOR_2_KEY: "5c53c8abcb2322d2ad8b2cd2c08a563cab3c7a41d8900613e34a29231bf7031a"
       NEXAPAY_VALIDATOR_0_URL: "http://validator-0:8080"
       NEXAPAY_VALIDATOR_1_URL: "http://validator-1:8080"
       NEXAPAY_VALIDATOR_2_URL: "http://validator-2:8080"
@@ -156,35 +81,29 @@ services:
     volumes:
       - nexapay_v1_chain_data:/app/chain_data
       - nexapay_v1_chain_state:/app/chain_state
-    profiles: ["multi"]
 
   validator-2:
     build: ./blockchain
     ports:
       - "8092:8080"
     environment:
-      NEXAPAY_DATABASE_URL: postgresql://nexapay:nexapay_secret@postgres:5432/nexapay
-      NEXAPAY_JWT_SECRET: change_this_in_production_64_chars_minimum_change_this_in_production
-      NEXAPAY_ENCRYPTION_KEY: 00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
-      NEXAPAY_SYSTEM_PRIVATE_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      NEXAPAY_DATABASE_URL: postgresql://${POSTGRES_USER:-nexapay}:${POSTGRES_PASSWORD:-nexapay_secret}@postgres:5432/nexapay
+      NEXAPAY_JWT_SECRET: ${NEXAPAY_JWT_SECRET}
+      NEXAPAY_ENCRYPTION_KEY: ${NEXAPAY_ENCRYPTION_KEY}
+      NEXAPAY_SYSTEM_PRIVATE_KEY: ${NEXAPAY_SYSTEM_PRIVATE_KEY}
       NEXAPAY_PORT: 8080
       NEXAPAY_PORTAL_URL: https://nexapay.space
       NEXAPAY_PAYMENT_SESSION_MINUTES: 1440
-      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-""}
-      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-""}
-      TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER:-""}
-      OTP_FALLBACK_CODE: ${OTP_FALLBACK_CODE:-""}
+
       APP_ENV: development
-      DEV_SHOW_OTP: "true"
+      DEV_SHOW_OTP: "${DEV_SHOW_OTP:-false}"
       NEXAPAY_STATE_DIR: /app/chain_state
       NEXAPAY_CHAIN_DATA_DIR: /app/chain_data
-      KYC_DEV_OTP: "554433"
-      LIVENESS_MOCK_PASS: "true"
       NEXAPAY_VALIDATOR_COUNT: "3"
       NEXAPAY_VALIDATOR_INDEX: "2"
-      NEXAPAY_VALIDATOR_0_KEY: "e1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8001"
-      NEXAPAY_VALIDATOR_1_KEY: "f2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8002"
-      NEXAPAY_VALIDATOR_2_KEY: "a3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8003"
+      NEXAPAY_VALIDATOR_0_KEY: "b5b34bf6a2dcd2469d2f215cc50526421bc31cb3c88139d8b3a4322193e57d59"
+      NEXAPAY_VALIDATOR_1_KEY: "966809bd5ecb79923f0dc14ac2421c394769dc9bad58de0ad3c1b6d345ee319d"
+      NEXAPAY_VALIDATOR_2_KEY: "5c53c8abcb2322d2ad8b2cd2c08a563cab3c7a41d8900613e34a29231bf7031a"
       NEXAPAY_VALIDATOR_0_URL: "http://validator-0:8080"
       NEXAPAY_VALIDATOR_1_URL: "http://validator-1:8080"
       NEXAPAY_VALIDATOR_2_URL: "http://validator-2:8080"
@@ -193,11 +112,7 @@ services:
     volumes:
       - nexapay_v2_chain_data:/app/chain_data
       - nexapay_v2_chain_state:/app/chain_state
-    profiles: ["multi"]
 
-  # ─── Load balancer for multi-validator mode ───
-  # Routes API requests to any of the 3 validators.
-  # In production, replace with a proper load balancer (HAProxy, Nginx, Envoy).
   validator-lb:
     image: nginx:alpine
     ports:
@@ -208,43 +123,8 @@ services:
       - validator-0
       - validator-1
       - validator-2
-    profiles: ["multi"]
-
-  # ─── Demo frontend ───
-  nexapay-web-demo:
-    build:
-      context: ./nexapay-web
-      args:
-        - NEXT_PUBLIC_API_URL=https://backend.nexapay.space
-        - API_PROXY_URL=http://nexapay-demo:8080
-    ports:
-      - "3001:3000"
-    environment:
-      - NODE_ENV=development
-      - NEXT_PUBLIC_API_URL=https://backend.nexapay.space
-      - NEXT_PUBLIC_DEMO_MODE=true
-      - API_PROXY_URL=http://nexapay-demo:8080
-    depends_on:
-      - nexapay-demo
-    profiles: ["demo"]
 
   nexapay-web:
-    build:
-      context: ./nexapay-web
-      args:
-        - NEXT_PUBLIC_API_URL=https://backend.nexapay.space
-        - API_PROXY_URL=http://nexapay-node:8080
-    ports:
-      - "3001:3000"
-    environment:
-      - NODE_ENV=development
-      - NEXT_PUBLIC_API_URL=https://backend.nexapay.space
-      - API_PROXY_URL=http://nexapay-node:8080
-    depends_on:
-      - nexapay-node
-    profiles: ["single"]
-
-  nexapay-web-multi:
     build:
       context: ./nexapay-web
       args:
@@ -258,18 +138,12 @@ services:
       - API_PROXY_URL=http://validator-lb:8080
     depends_on:
       - validator-lb
-    profiles: ["multi"]
 
 volumes:
   pgdata:
-  nexapay_chain_data:
-  nexapay_chain_state:
   nexapay_v0_chain_data:
   nexapay_v0_chain_state:
   nexapay_v1_chain_data:
   nexapay_v1_chain_state:
   nexapay_v2_chain_data:
   nexapay_v2_chain_state:
-
-  nexapay_demo_chain_data:
-  nexapay_demo_chain_state:

@@ -33,18 +33,18 @@ async fn run_scoring_pass(pg_pool: &PgPool, chain: Arc<Mutex<Blockchain>>) -> Re
         let tax_registration_number: Option<String> = row.try_get("tax_registration_number").ok();
 
         // compute component scores
-        let kyc_age = kyc_age_score(pg_pool, &user_address).await.unwrap_or(0.1);
+        let account_age = account_age_score(pg_pool, &user_address).await.unwrap_or(0.1);
         let tx_hist = transaction_history_score(chain.clone(), &user_address).await.unwrap_or(0.1);
         let balance = balance_score(pg_pool, &user_address).await.unwrap_or(0.2);
         let tax_doc = tax_document_score(&tax_document_path).await.unwrap_or(0.0);
         let business = business_profile_score(&business_description.clone().unwrap_or_default(), expected_monthly_volume.unwrap_or(0.0)).await.unwrap_or(0.0);
 
-        let score = kyc_age * 0.15 + tx_hist * 0.20 + balance * 0.15 + tax_doc * 0.25 + business * 0.25;
+        let score = account_age * 0.15 + tx_hist * 0.25 + balance * 0.15 + tax_doc * 0.20 + business * 0.25;
 
         let status = if score >= 0.70 { "APPROVED" } else if score >= 0.45 { "UNDER_REVIEW" } else { "REJECTED" };
 
         let breakdown = json!({
-            "kyc_age": kyc_age,
+            "account_age": account_age,
             "transaction_history": tx_hist,
             "balance": balance,
             "tax_document": tax_doc,
@@ -92,14 +92,15 @@ async fn run_scoring_pass(pg_pool: &PgPool, chain: Arc<Mutex<Blockchain>>) -> Re
     Ok(())
 }
 
-async fn kyc_age_score(pg_pool: &PgPool, user_address: &str) -> Result<f64, sqlx::Error> {
-    let r = sqlx::query("SELECT created_at FROM kyc_sessions WHERE kyc_hash IS NOT NULL ORDER BY created_at DESC LIMIT 1")
+async fn account_age_score(pg_pool: &PgPool, user_address: &str) -> Result<f64, sqlx::Error> {
+    let r = sqlx::query("SELECT created_at FROM users WHERE chain_address = $1 LIMIT 1")
+        .bind(user_address)
         .fetch_optional(pg_pool)
         .await?;
-    if let Some(_row) = r {
-        // Placeholder age computation; replace with real time diff if desired
-        let age_days = 30.0;
-        Ok(if age_days > 30.0 {1.0} else if age_days>15.0 {0.7} else if age_days>7.0 {0.5} else {0.2})
+    if let Some(row) = r {
+        let created_at: chrono::NaiveDateTime = row.try_get("created_at").unwrap_or_default();
+        let age_days = (chrono::Utc::now().naive_utc() - created_at).num_days() as f64;
+        Ok(if age_days > 30.0 {1.0} else if age_days > 15.0 {0.7} else if age_days > 7.0 {0.5} else {0.2})
     } else { Ok(0.2) }
 }
 
@@ -111,7 +112,7 @@ async fn transaction_history_score(chain: Arc<Mutex<Blockchain>>, user_address: 
     Ok(if txs>10 && total_vol>500_000 {1.0} else if txs>=5 {0.7} else if txs>=1 {0.4} else {0.1})
 }
 
-async fn balance_score(pg_pool: &PgPool, user_address: &str) -> Result<f64, sqlx::Error> {
+async fn balance_score(_pg_pool: &PgPool, _user_address: &str) -> Result<f64, sqlx::Error> {
     // Read from chain accounts table in sqlite or postgresql snapshot. For simplicity return medium
     Ok(0.8)
 }

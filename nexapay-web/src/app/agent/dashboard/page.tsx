@@ -105,7 +105,7 @@ export default function AgentOverviewPage() {
 
   const limit = agent?.monthly_volume_limit || 0;
   const pct = limit > 0 ? Math.min((monthlyUsed / limit) * 100, 100) : 0;
-  const barColor = pct > 90 ? "bg-red-500" : pct > 70 ? "bg-amber-400" : "bg-[#00FF88]";
+  const barColor = pct > 90 ? "bg-red-500" : pct > 70 ? "bg-amber-400" : "bg-[#00d4aa]";
 
   const StatCard = ({
     icon: Icon,
@@ -120,15 +120,15 @@ export default function AgentOverviewPage() {
   }) => (
     <div className="rounded-2xl border border-white/[0.06] bg-[#111] p-5">
       <div className="flex items-center gap-3">
-        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#00FF88]/10">
-          <Icon className="h-4 w-4 text-[#00FF88]" />
+        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#00d4aa]/10">
+          <Icon className="h-4 w-4 text-[#00d4aa]" />
         </div>
         <span className="text-[12px] font-medium uppercase tracking-wider text-[#888]">{label}</span>
       </div>
       <div className="mt-3 flex items-end justify-between">
         <p className="font-space-grotesk text-[24px] font-bold text-white">{value}</p>
         {trend && (
-          <span className="mb-1 inline-flex items-center rounded-full bg-[#00FF88]/10 px-2 py-0.5 text-[11px] font-medium text-[#00FF88]">
+          <span className="mb-1 inline-flex items-center rounded-full bg-[#00d4aa]/10 px-2 py-0.5 text-[11px] font-medium text-[#00d4aa]">
             {trend}
           </span>
         )}
@@ -139,7 +139,7 @@ export default function AgentOverviewPage() {
   if (loading) {
     return (
       <div className="flex h-[60vh] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-[#00FF88]" />
+        <Loader2 className="h-8 w-8 animate-spin text-[#00d4aa]" />
       </div>
     );
   }
@@ -186,7 +186,7 @@ export default function AgentOverviewPage() {
           <h2 className="font-space-grotesk text-[18px] font-bold text-white">Recent Transactions</h2>
           <Link
             href="/agent/dashboard/transactions"
-            className="flex items-center gap-1 text-[13px] font-medium text-[#00FF88] transition-colors hover:text-[#00e67a]"
+            className="flex items-center gap-1 text-[13px] font-medium text-[#00d4aa] transition-colors hover:text-[#00e67a]"
           >
             View all <ChevronRight className="h-4 w-4" />
           </Link>
@@ -215,12 +215,12 @@ export default function AgentOverviewPage() {
                   )}
                 </div>
                 <div className="ml-4 flex flex-col items-end">
-                  <span className="text-[14px] font-semibold text-[#00FF88]">+{formatMillimes(tx.amount)}</span>
+                  <span className="text-[14px] font-semibold text-[#00d4aa]">+{formatMillimes(tx.amount)}</span>
                   <span
                     className={cn(
                       "mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium uppercase",
                       tx.status === "confirmed" || tx.status === "succeeded"
-                        ? "bg-[#00FF88]/10 text-[#00FF88]"
+                        ? "bg-[#00d4aa]/10 text-[#00d4aa]"
                         : tx.status === "pending"
                         ? "bg-amber-500/10 text-amber-400"
                         : "bg-red-500/10 text-red-400"
@@ -242,7 +242,7 @@ export default function AgentOverviewPage() {
             className={cn(
               "flex items-center gap-3 rounded-xl border px-4 py-3 shadow-2xl backdrop-blur-xl",
               toast.type === "success"
-                ? "border-[#00FF88]/20 bg-[#00FF88]/10 text-[#00FF88]"
+                ? "border-[#00d4aa]/20 bg-[#00d4aa]/10 text-[#00d4aa]"
                 : "border-red-500/20 bg-red-500/10 text-red-400"
             )}
           >

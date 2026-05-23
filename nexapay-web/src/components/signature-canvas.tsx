@@ -6,10 +6,11 @@ import { Pen, Type, Eraser, Check } from "lucide-react";
 
 interface SignatureCanvasProps {
   onChange: (dataUrl: string) => void;
+  onModeChange?: (mode: "draw" | "type") => void;
   className?: string;
 }
 
-export default function SignatureCanvas({ onChange, className }: SignatureCanvasProps) {
+export default function SignatureCanvas({ onChange, onModeChange, className }: SignatureCanvasProps) {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const [mode, setMode] = React.useState<"draw" | "type">("draw");
   const [typedName, setTypedName] = React.useState("");
@@ -32,7 +33,7 @@ export default function SignatureCanvas({ onChange, className }: SignatureCanvas
     canvas.width = rect.width * dpr;
     canvas.height = rect.height * dpr;
     ctx.scale(dpr, dpr);
-    ctx.strokeStyle = "#00FF88";
+    ctx.strokeStyle = "#00d4aa";
     ctx.lineWidth = 2;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
@@ -103,7 +104,7 @@ export default function SignatureCanvas({ onChange, className }: SignatureCanvas
     }
     const rect = canvas.getBoundingClientRect();
     ctx.font = "italic 400 32px 'Brush Script MT', 'Segoe Script', cursive";
-    ctx.fillStyle = "#00FF88";
+    ctx.fillStyle = "#00d4aa";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(typedName, rect.width / 2, rect.height / 2);
@@ -123,20 +124,20 @@ export default function SignatureCanvas({ onChange, className }: SignatureCanvas
       <div className="flex items-center gap-2 self-center bg-white/5 rounded-full p-1 border border-white/10">
         <button
           type="button"
-          onClick={() => { setMode("draw"); clear(); }}
+          onClick={() => { setMode("draw"); clear(); onModeChange?.("draw"); }}
           className={cn(
             "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all",
-            mode === "draw" ? "bg-[#00FF88] text-black" : "text-[#888] hover:text-white"
+            mode === "draw" ? "bg-[#00d4aa] text-black" : "text-[#888] hover:text-white"
           )}
         >
           <Pen size={14} /> Draw
         </button>
         <button
           type="button"
-          onClick={() => { setMode("type"); clear(); }}
+          onClick={() => { setMode("type"); clear(); onModeChange?.("type"); }}
           className={cn(
             "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all",
-            mode === "type" ? "bg-[#00FF88] text-black" : "text-[#888] hover:text-white"
+            mode === "type" ? "bg-[#00d4aa] text-black" : "text-[#888] hover:text-white"
           )}
         >
           <Type size={14} /> Type
@@ -149,12 +150,12 @@ export default function SignatureCanvas({ onChange, className }: SignatureCanvas
           value={typedName}
           onChange={(e) => setTypedName(e.target.value)}
           placeholder="Type your full name"
-          className="w-full h-12 rounded-xl bg-white/5 border border-white/10 px-4 text-base text-white outline-none focus:border-[#00FF88] focus:ring-[3px] focus:ring-[#00FF88]/10 transition-all placeholder:text-white/20"
+          className="w-full h-12 rounded-xl bg-white/5 border border-white/10 px-4 text-base text-white outline-none focus:border-[#00d4aa] focus:ring-[3px] focus:ring-[#00d4aa]/10 transition-all placeholder:text-white/20"
         />
       )}
 
       {/* Canvas */}
-      <div className="relative w-full h-40 rounded-xl bg-[#0a0a0a] border border-white/10 overflow-hidden">
+      <div className="relative w-full h-40 rounded-xl bg-[#0b0b0b] border border-white/10 overflow-hidden">
         <canvas
           ref={canvasRef}
           className="w-full h-full cursor-crosshair touch-none"
@@ -185,7 +186,7 @@ export default function SignatureCanvas({ onChange, className }: SignatureCanvas
           <Eraser size={14} /> Clear
         </button>
         {hasDrawn && (
-          <span className="flex items-center gap-1 text-xs font-bold text-[#00FF88]">
+          <span className="flex items-center gap-1 text-xs font-bold text-[#00d4aa]">
             <Check size={14} /> Signature captured
           </span>
         )}

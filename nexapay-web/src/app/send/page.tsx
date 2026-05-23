@@ -312,7 +312,7 @@ function SendInner() {
             key={s}
             className={cn(
               "h-2 rounded-full transition-all duration-300",
-              s <= current ? "w-2 bg-[#00FF88]" : "w-2 bg-white/20"
+              s <= current ? "w-2 bg-[#00d4aa]" : "w-2 bg-white/20"
             )}
           />
         ))}
@@ -321,9 +321,9 @@ function SendInner() {
   };
 
   return (
-    <div className="min-h-screen bg-[#080808] text-white font-inter selection:bg-[#00FF88] selection:text-black">
+    <div className="min-h-screen bg-[#0b0b0b] text-white font-inter selection:bg-[#00d4aa] selection:text-black">
       {/* Top bar */}
-      <div className="fixed inset-x-0 top-0 z-40 flex h-14 items-center border-b border-white/[0.06] bg-[#0a0a0a]/90 px-4 backdrop-blur-xl md:px-6">
+      <div className="fixed inset-x-0 top-0 z-40 flex h-14 items-center border-b border-white/[0.06] bg-[#0b0b0b]/90 px-4 backdrop-blur-xl md:px-6">
         {/* Left spacer — always w-8 so dots stay truly centered */}
         <div className="flex w-8 shrink-0 items-center justify-start">
           {step !== 1 && step !== "success" && (
@@ -369,7 +369,7 @@ function SendInner() {
 
             {/* Search */}
             <div className="relative mt-6" ref={searchRef}>
-              <div className="relative flex h-14 items-center rounded-full border border-white/10 bg-white/5 px-5 transition-all focus-within:border-[#00FF88] focus-within:ring-[3px] focus-within:ring-[#00FF88]/10">
+              <div className="relative flex h-14 items-center rounded-full border border-white/10 bg-white/5 px-5 transition-all focus-within:border-[#00d4aa] focus-within:ring-[3px] focus-within:ring-[#00d4aa]/10">
                 <Search className="h-[18px] w-[18px] shrink-0 text-[#888]" />
                 <input
                   type="text"
@@ -393,14 +393,14 @@ function SendInner() {
                         onClick={() => selectRecipient(r)}
                         className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-white/[0.04]"
                       >
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#00FF88]/15 text-xs font-bold text-[#00FF88]">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#00d4aa]/15 text-xs font-bold text-[#00d4aa]">
                           {getInitials(r.full_name)}
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="truncate text-[14px] font-semibold text-white">{r.full_name}</p>
                           <p className="truncate text-[12px] text-[#888]">{r.phone || r.chain_address.slice(0, 12) + "..."}</p>
                         </div>
-                        <span className="shrink-0 text-[12px] font-medium text-[#00FF88]">Select →</span>
+                        <span className="shrink-0 text-[12px] font-medium text-[#00d4aa]">Select →</span>
                       </button>
                     ))
                   )}
@@ -440,13 +440,13 @@ function SendInner() {
           <div className="animate-in fade-in slide-in-from-right duration-300">
             {/* Recipient pill */}
             <div className="mb-6 flex items-center gap-3 rounded-full border border-white/[0.06] bg-[#111] px-4 py-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#00FF88]/15 text-[10px] font-bold text-[#00FF88]">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#00d4aa]/15 text-[10px] font-bold text-[#00d4aa]">
                 {getInitials(recipient.full_name)}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="truncate text-[13px] font-semibold text-white">{recipient.full_name}</p>
               </div>
-              <button onClick={() => setStep(1)} className="text-[12px] font-medium text-[#00FF88] hover:underline">
+              <button onClick={() => setStep(1)} className="text-[12px] font-medium text-[#00d4aa] hover:underline">
                 Change
               </button>
             </div>
@@ -468,7 +468,7 @@ function SendInner() {
                 value={displayValue}
                 onChange={(e) => handleAmountInput(e.target.value)}
                 placeholder="0.000"
-                className="h-14 w-full rounded-2xl border border-white/10 bg-white/5 px-5 text-center text-base text-white outline-none placeholder:text-white/20 focus:border-[#00FF88] focus:ring-[3px] focus:ring-[#00FF88]/10"
+                className="h-14 w-full rounded-2xl border border-white/10 bg-white/5 px-5 text-center text-base text-white outline-none placeholder:text-white/20 focus:border-[#00d4aa] focus:ring-[3px] focus:ring-[#00d4aa]/10"
               />
             </div>
 
@@ -499,7 +499,7 @@ function SendInner() {
                   onChange={(e) => setMemo(e.target.value)}
                   placeholder="Note to recipient (optional)"
                   maxLength={140}
-                  className="w-full h-12 rounded-full bg-white/5 border border-white/10 px-5 text-sm text-white outline-none placeholder:text-white/20 focus:border-[#00FF88] focus:ring-[3px] focus:ring-[#00FF88]/10 transition-all"
+                  className="w-full h-12 rounded-full bg-white/5 border border-white/10 px-5 text-sm text-white outline-none placeholder:text-white/20 focus:border-[#00d4aa] focus:ring-[3px] focus:ring-[#00d4aa]/10 transition-all"
                 />
                 <p className="mt-1 text-right text-[10px] text-[#555]">{memo.length}/140</p>
               </div>
@@ -513,7 +513,7 @@ function SendInner() {
                 setError("");
               }}
               disabled={rawAmount === 0 || exceedsBalance}
-              className="mt-8 flex h-14 w-full items-center justify-center gap-2 rounded-full bg-[#00FF88] text-[#080808] font-extrabold text-lg transition-all hover:bg-[#00FF88]/90 disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(0,255,136,0.2)]"
+              className="mt-8 flex h-14 w-full items-center justify-center gap-2 rounded-full bg-[#00d4aa] text-[#0b0b0b] font-extrabold text-lg transition-all hover:bg-[#00d4aa]/90 disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(0,255,136,0.2)]"
             >
               Continue <ArrowUpRight className="h-5 w-5" />
             </button>
@@ -524,11 +524,11 @@ function SendInner() {
         {step === 3 && recipient && (
           <div className="animate-in fade-in slide-in-from-right duration-300">
             {/* Summary card */}
-            <div className="mb-6 rounded-2xl border border-[#00FF88]/20 bg-[#111] p-5">
+            <div className="mb-6 rounded-2xl border border-[#00d4aa]/20 bg-[#111] p-5">
               <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
                 <span className="text-[12px] text-[#888]">To</span>
                 <div className="flex items-center gap-2">
-                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#00FF88]/15 text-[8px] font-bold text-[#00FF88]">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#00d4aa]/15 text-[8px] font-bold text-[#00d4aa]">
                     {getInitials(recipient.full_name)}
                   </div>
                   <span className="text-[14px] font-semibold text-white">{recipient.full_name}</span>
@@ -540,7 +540,7 @@ function SendInner() {
               </div>
               <div className="flex items-center justify-between border-b border-white/[0.06] py-3">
                 <span className="text-[12px] text-[#888]">Fee</span>
-                <span className="text-[14px] font-semibold text-[#00FF88]">0.010 TND (Free)</span>
+                <span className="text-[14px] font-semibold text-[#00d4aa]">0.010 TND (Free)</span>
               </div>
               <div className="flex items-center justify-between pt-3">
                 <span className="text-[12px] text-[#888]">Total deducted</span>
@@ -587,9 +587,9 @@ function SendInner() {
                       pin[i]
                         ? pinShake
                           ? "border-red-500/50 shadow-[0_0_12px_rgba(239,68,68,0.12)]"
-                          : "border-[#00FF88]/50 shadow-[0_0_12px_rgba(0,255,136,0.12)]"
+                          : "border-[#00d4aa]/50 shadow-[0_0_12px_rgba(0,255,136,0.12)]"
                         : "border-white/10 shadow-none",
-                      "focus:border-[#00FF88] focus:shadow-[0_0_16px_rgba(0,255,136,0.2)]"
+                      "focus:border-[#00d4aa] focus:shadow-[0_0_16px_rgba(0,255,136,0.2)]"
                     )}
                   />
                 </React.Fragment>
@@ -600,7 +600,7 @@ function SendInner() {
             <button
               onClick={submitTransfer}
               disabled={pin.length !== 6 || confirmLoading}
-              className="mt-8 flex h-14 w-full items-center justify-center gap-2 rounded-full bg-[#00FF88] text-[#080808] font-extrabold text-lg transition-all hover:bg-[#00FF88]/90 disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(0,255,136,0.2)]"
+              className="mt-8 flex h-14 w-full items-center justify-center gap-2 rounded-full bg-[#00d4aa] text-[#0b0b0b] font-extrabold text-lg transition-all hover:bg-[#00d4aa]/90 disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(0,255,136,0.2)]"
             >
               {confirmLoading ? (
                 <>
@@ -656,9 +656,9 @@ function SendInner() {
                     otpCode[i]
                       ? otpShake
                         ? "border-red-500/50 shadow-[0_0_12px_rgba(239,68,68,0.12)]"
-                        : "border-[#00FF88]/50 shadow-[0_0_12px_rgba(0,255,136,0.12)]"
+                        : "border-[#00d4aa]/50 shadow-[0_0_12px_rgba(0,255,136,0.12)]"
                       : "border-white/10 shadow-none",
-                    "focus:border-[#00FF88] focus:shadow-[0_0_16px_rgba(0,255,136,0.2)]"
+                    "focus:border-[#00d4aa] focus:shadow-[0_0_16px_rgba(0,255,136,0.2)]"
                   )}
                 />
               ))}
@@ -672,7 +672,7 @@ function SendInner() {
             <button
               onClick={submitOtp}
               disabled={otpCode.length !== 6 || otpLoading}
-              className="mt-8 flex h-14 w-full items-center justify-center gap-2 rounded-full bg-[#00FF88] text-[#080808] font-extrabold text-lg transition-all hover:bg-[#00FF88]/90 disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(0,255,136,0.2)]"
+              className="mt-8 flex h-14 w-full items-center justify-center gap-2 rounded-full bg-[#00d4aa] text-[#0b0b0b] font-extrabold text-lg transition-all hover:bg-[#00d4aa]/90 disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(0,255,136,0.2)]"
             >
               {otpLoading ? (
                 <>
@@ -700,14 +700,14 @@ function SendInner() {
         {step === "success" && (
           <div className="flex flex-col items-center pt-8 animate-in zoom-in-95 fade-in duration-500">
             <div className="relative mb-6 flex h-20 w-20 items-center justify-center">
-              <div className="absolute inset-0 rounded-full bg-[#00FF88]/20 animate-ping" style={{ animationDuration: "3s" }} />
-              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#00FF88] shadow-[0_0_50px_#00FF88]">
-                <Check className="h-10 w-10 text-[#080808]" />
+              <div className="absolute inset-0 rounded-full bg-[#00d4aa]/20 animate-ping" style={{ animationDuration: "3s" }} />
+              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#00d4aa] shadow-[0_0_50px_#00d4aa]">
+                <Check className="h-10 w-10 text-[#0b0b0b]" />
               </div>
             </div>
 
             <h2 className="font-space-grotesk text-[28px] font-extrabold text-white">Transfer Sent!</h2>
-            <p className="mt-2 text-[24px] font-semibold text-[#00FF88]">{formatMillimes(rawAmount)}</p>
+            <p className="mt-2 text-[24px] font-semibold text-[#00d4aa]">{formatMillimes(rawAmount)}</p>
             <p className="mt-1 text-[14px] text-[#888]">To: {toName || recipient?.full_name}</p>
 
             {txHash && (
@@ -715,7 +715,7 @@ function SendInner() {
                 <span>Tx: {txHash.slice(0, 10)}...</span>
                 <button
                   onClick={() => navigator.clipboard.writeText(txHash)}
-                  className="text-[#00FF88] hover:underline"
+                  className="text-[#00d4aa] hover:underline"
                 >
                   Copy
                 </button>
@@ -739,7 +739,7 @@ function SendInner() {
                   setError("");
                   setTxHash("");
                 }}
-                className="flex h-14 flex-1 items-center justify-center gap-2 rounded-full bg-[#00FF88] text-[#080808] font-extrabold transition-all hover:bg-[#00FF88]/90"
+                className="flex h-14 flex-1 items-center justify-center gap-2 rounded-full bg-[#00d4aa] text-[#0b0b0b] font-extrabold transition-all hover:bg-[#00d4aa]/90"
               >
                 <RotateCcw className="h-4 w-4" /> Send Again
               </button>
@@ -751,8 +751,8 @@ function SendInner() {
       {/* Mobile bottom nav (minimal on this page) */}
       <nav className="md:hidden fixed inset-x-0 bottom-0 z-40 flex h-16 items-center justify-around border-t border-white/[0.06] bg-[#0d0d0d] pb-[env(safe-area-inset-bottom)]">
         <Link href="/dashboard" className="flex flex-col items-center gap-1"><Home className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">Home</span></Link>
-        <Link href="/send" className="flex flex-col items-center gap-1"><ArrowUpRight className="h-5 w-5 text-[#00FF88]" /><span className="text-[10px] text-[#00FF88]">Send</span></Link>
-        <Link href="/fund" className="relative -top-3 flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[#00FF88] text-[#080808] shadow-[0_8px_24px_rgba(0,255,136,0.35)]"><Plus className="h-5 w-5" /></Link>
+        <Link href="/send" className="flex flex-col items-center gap-1"><ArrowUpRight className="h-5 w-5 text-[#00d4aa]" /><span className="text-[10px] text-[#00d4aa]">Send</span></Link>
+        <Link href="/fund" className="relative -top-3 flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[#00d4aa] text-[#0b0b0b] shadow-[0_8px_24px_rgba(0,255,136,0.35)]"><Plus className="h-5 w-5" /></Link>
         <Link href="/history" className="flex flex-col items-center gap-1"><Clock className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">History</span></Link>
         <Link href="/profile" className="flex flex-col items-center gap-1"><User className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">Profile</span></Link>
       </nav>

@@ -51,7 +51,7 @@ export default function ChangePinPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#080808] px-4">
+    <div className="flex min-h-screen items-center justify-center bg-[#0b0b0b] px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex items-center gap-3">
           <Link href="/dashboard" className="text-[#888] hover:text-white transition-colors">
@@ -75,9 +75,9 @@ export default function ChangePinPage() {
         )}
 
         {success ? (
-          <div className="rounded-2xl border border-[#00FF88]/20 bg-[#00FF88]/10 p-6 text-center">
-            <Shield className="mx-auto h-10 w-10 text-[#00FF88]" />
-            <p className="mt-3 text-lg font-bold text-[#00FF88]">PIN Changed</p>
+          <div className="rounded-2xl border border-[#00d4aa]/20 bg-[#00d4aa]/10 p-6 text-center">
+            <Shield className="mx-auto h-10 w-10 text-[#00d4aa]" />
+            <p className="mt-3 text-lg font-bold text-[#00d4aa]">PIN Changed</p>
             <p className="mt-1 text-sm text-[#888]">Redirecting to dashboard...</p>
           </div>
         ) : (
@@ -90,7 +90,7 @@ export default function ChangePinPage() {
                 maxLength={6}
                 value={currentPin}
                 onChange={(e) => setCurrentPin(e.target.value.replace(/\D/g, ""))}
-                className="h-14 w-full rounded-2xl border border-white/[0.06] bg-[#111] px-4 text-center text-lg font-bold tracking-[0.5em] text-white placeholder:text-[#333] focus:border-[#00FF88]/50 focus:outline-none"
+                className="h-14 w-full rounded-2xl border border-white/[0.06] bg-[#111] px-4 text-center text-lg font-bold tracking-[0.5em] text-white placeholder:text-[#333] focus:border-[#00d4aa]/50 focus:outline-none"
                 placeholder="••••••"
                 required
               />
@@ -103,7 +103,7 @@ export default function ChangePinPage() {
                 maxLength={6}
                 value={newPin}
                 onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ""))}
-                className="h-14 w-full rounded-2xl border border-white/[0.06] bg-[#111] px-4 text-center text-lg font-bold tracking-[0.5em] text-white placeholder:text-[#333] focus:border-[#00FF88]/50 focus:outline-none"
+                className="h-14 w-full rounded-2xl border border-white/[0.06] bg-[#111] px-4 text-center text-lg font-bold tracking-[0.5em] text-white placeholder:text-[#333] focus:border-[#00d4aa]/50 focus:outline-none"
                 placeholder="••••••"
                 required
               />
@@ -116,7 +116,7 @@ export default function ChangePinPage() {
                 maxLength={6}
                 value={confirmPin}
                 onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ""))}
-                className="h-14 w-full rounded-2xl border border-white/[0.06] bg-[#111] px-4 text-center text-lg font-bold tracking-[0.5em] text-white placeholder:text-[#333] focus:border-[#00FF88]/50 focus:outline-none"
+                className="h-14 w-full rounded-2xl border border-white/[0.06] bg-[#111] px-4 text-center text-lg font-bold tracking-[0.5em] text-white placeholder:text-[#333] focus:border-[#00d4aa]/50 focus:outline-none"
                 placeholder="••••••"
                 required
               />
@@ -129,7 +129,7 @@ export default function ChangePinPage() {
             <button
               type="submit"
               disabled={loading}
-              className="flex h-14 w-full items-center justify-center rounded-full bg-[#00FF88] font-bold text-[#080808] transition-all hover:opacity-90 disabled:opacity-50"
+              className="flex h-14 w-full items-center justify-center rounded-full bg-[#00d4aa] font-bold text-[#0b0b0b] transition-all hover:opacity-90 disabled:opacity-50"
             >
               {loading ? "Changing..." : "Change PIN"}
             </button>

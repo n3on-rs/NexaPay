@@ -261,11 +261,11 @@ function GettingStarted({
         {steps.map((step, i) => (
           <div key={i} className="flex gap-4 pb-6 last:pb-0">
             <div className="flex flex-col items-center">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#00FF88]/10 text-sm font-bold text-[#00FF88]">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#00d4aa]/10 text-sm font-bold text-[#00d4aa]">
                 {step.num}
               </div>
               {i < steps.length - 1 && (
-                <div className="mt-2 h-full w-px bg-[#00FF88]/20" />
+                <div className="mt-2 h-full w-px bg-[#00d4aa]/20" />
               )}
             </div>
             <div className="pb-2">
@@ -277,12 +277,12 @@ function GettingStarted({
       </div>
 
       {/* API Key box */}
-      <div className="mt-6 rounded-xl bg-[#0a0a0a] border border-white/[0.06] p-4">
+      <div className="mt-6 rounded-xl bg-[#0b0b0b] border border-white/[0.06] p-4">
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-medium uppercase tracking-wider text-[#666]">Your API Key</span>
           <a
             href="/agent/dashboard/api-keys"
-            className="text-xs text-[#00FF88] hover:underline"
+            className="text-xs text-[#00d4aa] hover:underline"
           >
             Manage Keys
           </a>
@@ -299,7 +299,7 @@ function GettingStarted({
               }}
               className={cn(
                 "w-full appearance-none rounded-lg border border-white/[0.08] bg-[#111] px-3 py-2 pr-10 text-sm text-white outline-none transition-colors",
-                "focus:border-[#00FF88]/40 hover:border-white/[0.12]"
+                "focus:border-[#00d4aa]/40 hover:border-white/[0.12]"
               )}
             >
               {keyOptions.map((opt) => (
@@ -311,7 +311,7 @@ function GettingStarted({
             <ChevronRight className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 rotate-90 text-[#666]" />
           </div>
         ) : safeApiKey ? (
-          <div className="mb-3 flex items-center gap-2 rounded-lg border border-[#00FF88]/10 bg-[#00FF88]/5 px-3 py-2 text-sm text-[#00FF88]">
+          <div className="mb-3 flex items-center gap-2 rounded-lg border border-[#00d4aa]/10 bg-[#00d4aa]/5 px-3 py-2 text-sm text-[#00d4aa]">
             <Key className="h-4 w-4" />
             <span>Active Key</span>
             <span className="text-[#666]">({safeApiKey.slice(0, 8)}...{safeApiKey.slice(-6)})</span>
@@ -329,14 +329,14 @@ function GettingStarted({
           </div>
         ) : (
           <div className="flex items-center gap-3">
-            <code className="flex-1 rounded-lg bg-[#111] px-3 py-2 text-sm font-mono text-[#00FF88]">
+            <code className="flex-1 rounded-lg bg-[#111] px-3 py-2 text-sm font-mono text-[#00d4aa]">
               {maskedKey}
             </code>
             <button
               onClick={handleCopy}
               className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/[0.04] text-[#888] transition-colors hover:text-white"
             >
-              {copied ? <Check className="h-4 w-4 text-[#00FF88]" /> : <Copy className="h-4 w-4" />}
+              {copied ? <Check className="h-4 w-4 text-[#00d4aa]" /> : <Copy className="h-4 w-4" />}
             </button>
           </div>
         )}
@@ -470,7 +470,7 @@ let data: serde_json::Value = response.json().await?;`,
           className={cn(
             "rounded-md px-2 py-1 text-[11px] font-bold uppercase tracking-wider",
             endpoint.method === "POST"
-              ? "bg-[#00FF88]/10 text-[#00FF88]"
+              ? "bg-[#00d4aa]/10 text-[#00d4aa]"
               : "bg-blue-500/10 text-blue-400"
           )}
         >
@@ -495,7 +495,7 @@ let data: serde_json::Value = response.json().await?;`,
                 <div className="rounded-lg border border-white/[0.04] overflow-hidden">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="bg-[#0a0a0a] text-left">
+                      <tr className="bg-[#0b0b0b] text-left">
                         <th className="px-3 py-2 text-[11px] font-medium text-[#666]">Parameter</th>
                         <th className="px-3 py-2 text-[11px] font-medium text-[#666]">Type</th>
                         <th className="px-3 py-2 text-[11px] font-medium text-[#666]">Required</th>
@@ -505,11 +505,11 @@ let data: serde_json::Value = response.json().await?;`,
                     <tbody>
                       {endpoint.params.map((p, i) => (
                         <tr key={i} className={cn("border-t border-white/[0.04]", i % 2 === 1 && "bg-white/[0.01]")}>
-                          <td className="px-3 py-2 font-mono text-[#00FF88]">{p.name}</td>
+                          <td className="px-3 py-2 font-mono text-[#00d4aa]">{p.name}</td>
                           <td className="px-3 py-2 text-[#888]">{p.type}</td>
                           <td className="px-3 py-2">
                             {p.required ? (
-                              <span className="text-[#00FF88]">Yes</span>
+                              <span className="text-[#00d4aa]">Yes</span>
                             ) : (
                               <span className="text-[#666]">No</span>
                             )}
@@ -527,7 +527,7 @@ let data: serde_json::Value = response.json().await?;`,
                 <div className="rounded-lg border border-white/[0.04] overflow-hidden">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="bg-[#0a0a0a] text-left">
+                      <tr className="bg-[#0b0b0b] text-left">
                         <th className="px-3 py-2 text-[11px] font-medium text-[#666]">Field</th>
                         <th className="px-3 py-2 text-[11px] font-medium text-[#666]">Type</th>
                         <th className="px-3 py-2 text-[11px] font-medium text-[#666]">Description</th>
@@ -536,7 +536,7 @@ let data: serde_json::Value = response.json().await?;`,
                     <tbody>
                       {endpoint.response.map((r, i) => (
                         <tr key={i} className={cn("border-t border-white/[0.04]", i % 2 === 1 && "bg-white/[0.01]")}>
-                          <td className="px-3 py-2 font-mono text-[#00FF88]">{r.name}</td>
+                          <td className="px-3 py-2 font-mono text-[#00d4aa]">{r.name}</td>
                           <td className="px-3 py-2 text-[#888]">{r.type}</td>
                           <td className="px-3 py-2 text-[#888]">{r.desc}</td>
                         </tr>
@@ -558,7 +558,7 @@ let data: serde_json::Value = response.json().await?;`,
                       className={cn(
                         "rounded-md px-2.5 py-1 text-xs font-medium transition-all",
                         lang === l
-                          ? "bg-[#00FF88]/10 text-[#00FF88]"
+                          ? "bg-[#00d4aa]/10 text-[#00d4aa]"
                           : "text-[#888] hover:text-white"
                       )}
                     >
@@ -566,7 +566,7 @@ let data: serde_json::Value = response.json().await?;`,
                     </button>
                   ))}
                 </div>
-                <div className="relative rounded-xl bg-[#0a0a0a] border border-white/[0.06] p-4">
+                <div className="relative rounded-xl bg-[#0b0b0b] border border-white/[0.06] p-4">
                   <button
                     onClick={() => {
                       navigator.clipboard.writeText(codeSnippets[lang]);
@@ -583,13 +583,13 @@ let data: serde_json::Value = response.json().await?;`,
               </div>
 
               {/* Live Tester */}
-              <div className="rounded-xl border border-white/[0.06] bg-[#0a0a0a]">
+              <div className="rounded-xl border border-white/[0.06] bg-[#0b0b0b]">
                 <button
                   onClick={() => setLiveOpen(!liveOpen)}
                   className="flex w-full items-center justify-between px-4 py-3 text-left"
                 >
                   <span className="flex items-center gap-2 text-sm font-medium text-white">
-                    <Play className="h-4 w-4 text-[#00FF88]" />
+                    <Play className="h-4 w-4 text-[#00d4aa]" />
                     Try it live
                   </span>
                   <ChevronRight
@@ -603,7 +603,7 @@ let data: serde_json::Value = response.json().await?;`,
                       <div key={p.name}>
                         <label className="mb-1 block text-xs text-[#888]">
                           {p.name}
-                          {p.required && <span className="text-[#00FF88]">*</span>}
+                          {p.required && <span className="text-[#00d4aa]">*</span>}
                         </label>
                         <input
                           value={liveFields[p.name] || ""}
@@ -611,14 +611,14 @@ let data: serde_json::Value = response.json().await?;`,
                             setLiveFields((f) => ({ ...f, [p.name]: e.target.value }))
                           }
                           placeholder={p.desc}
-                          className="w-full rounded-lg bg-[#111] border border-white/[0.06] px-3 py-2 text-sm text-white placeholder-[#444] outline-none focus:border-[#00FF88]/50"
+                          className="w-full rounded-lg bg-[#111] border border-white/[0.06] px-3 py-2 text-sm text-white placeholder-[#444] outline-none focus:border-[#00d4aa]/50"
                         />
                       </div>
                     ))}
                     <button
                       onClick={handleLiveTest}
                       disabled={liveLoading}
-                      className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#00FF88] px-4 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-[#00FF88]/90 disabled:opacity-50"
+                      className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#00d4aa] px-4 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-[#00d4aa]/90 disabled:opacity-50"
                     >
                       {liveLoading ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -635,7 +635,7 @@ let data: serde_json::Value = response.json().await?;`,
                             className={cn(
                               "rounded-md px-2 py-0.5 text-[11px] font-bold",
                               liveResponse.status >= 200 && liveResponse.status < 300
-                                ? "bg-[#00FF88]/10 text-[#00FF88]"
+                                ? "bg-[#00d4aa]/10 text-[#00d4aa]"
                                 : "bg-red-500/10 text-red-400"
                             )}
                           >
@@ -662,7 +662,7 @@ function WebhookGuide() {
   return (
     <section className="rounded-2xl border border-white/[0.06] bg-[#111] p-6">
       <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
-        <Webhook className="h-5 w-5 text-[#00FF88]" />
+        <Webhook className="h-5 w-5 text-[#00d4aa]" />
         Webhook Guide
       </h2>
 
@@ -677,7 +677,7 @@ function WebhookGuide() {
 
       <div className="mt-6">
         <h4 className="mb-2 text-sm font-medium text-white">Webhook payload example</h4>
-        <div className="rounded-xl bg-[#0a0a0a] border border-white/[0.06] p-4">
+        <div className="rounded-xl bg-[#0b0b0b] border border-white/[0.06] p-4">
           <pre className="overflow-x-auto text-xs leading-relaxed font-mono">
             <code className="text-[#ccc]">
 {`{
@@ -698,13 +698,13 @@ function WebhookGuide() {
 
       <div className="mt-6">
         <h4 className="mb-2 text-sm font-medium text-white flex items-center gap-2">
-          <Shield className="h-4 w-4 text-[#00FF88]" />
+          <Shield className="h-4 w-4 text-[#00d4aa]" />
           Signature verification
         </h4>
         <p className="text-sm text-[#888] mb-3">
           Verify the webhook signature to ensure it came from NexaPay:
         </p>
-        <div className="rounded-xl bg-[#0a0a0a] border border-white/[0.06] p-4">
+        <div className="rounded-xl bg-[#0b0b0b] border border-white/[0.06] p-4">
           <pre className="overflow-x-auto text-xs leading-relaxed font-mono">
             <code className="text-[#ccc]">
 {`// JavaScript
@@ -739,11 +739,11 @@ function FlowBox({
       className={cn(
         "rounded-xl border px-5 py-4 text-center min-w-[140px]",
         color === "green"
-          ? "border-[#00FF88]/20 bg-[#00FF88]/5"
-          : "border-white/[0.06] bg-[#0a0a0a]"
+          ? "border-[#00d4aa]/20 bg-[#00d4aa]/5"
+          : "border-white/[0.06] bg-[#0b0b0b]"
       )}
     >
-      <div className={cn("text-sm font-semibold", color === "green" ? "text-[#00FF88]" : "text-white")}>
+      <div className={cn("text-sm font-semibold", color === "green" ? "text-[#00d4aa]" : "text-white")}>
         {label}
       </div>
       <div className="mt-1 text-[11px] text-[#666]">{subtitle}</div>
@@ -780,7 +780,7 @@ console.log(payment.payUrl);`;
   return (
     <section className="rounded-2xl border border-white/[0.06] bg-[#111] p-6">
       <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
-        <Package className="h-5 w-5 text-[#00FF88]" />
+        <Package className="h-5 w-5 text-[#00d4aa]" />
         SDK
       </h2>
 
@@ -791,18 +791,18 @@ console.log(payment.payUrl);`;
             onClick={() => handleCopy(installCode)}
             className="flex h-7 items-center gap-1 rounded-md bg-white/[0.04] px-2 text-[11px] text-[#888] transition-colors hover:text-white"
           >
-            {pkgCopied ? <Check className="h-3 w-3 text-[#00FF88]" /> : <Copy className="h-3 w-3" />}
+            {pkgCopied ? <Check className="h-3 w-3 text-[#00d4aa]" /> : <Copy className="h-3 w-3" />}
             Copy
           </button>
         </div>
-        <div className="rounded-xl bg-[#0a0a0a] border border-white/[0.06] p-4">
+        <div className="rounded-xl bg-[#0b0b0b] border border-white/[0.06] p-4">
           <code className="font-mono text-sm text-[#ccc]">{installCode}</code>
         </div>
       </div>
 
       <div>
         <span className="text-xs font-medium uppercase tracking-wider text-[#666]">Quick start</span>
-        <div className="mt-2 rounded-xl bg-[#0a0a0a] border border-white/[0.06] p-4">
+        <div className="mt-2 rounded-xl bg-[#0b0b0b] border border-white/[0.06] p-4">
           <pre className="overflow-x-auto text-xs leading-relaxed font-mono">
             <code className="text-[#ccc]">{quickStart}</code>
           </pre>
@@ -813,7 +813,7 @@ console.log(payment.payUrl);`;
         href="https://nexapay.space/docs"
         target="_blank"
         rel="noopener noreferrer"
-        className="mt-4 inline-flex items-center gap-1 text-sm text-[#00FF88] hover:underline"
+        className="mt-4 inline-flex items-center gap-1 text-sm text-[#00d4aa] hover:underline"
       >
         View full SDK docs
         <ExternalLinkIcon />

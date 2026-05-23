@@ -16,6 +16,7 @@ import {
   getAgentStatus,
 } from "@/lib/api";
 import { getSessionToken, getSessionAddress, getSessionFullName } from "@/lib/auth-utils";
+import { connectSSE } from "@/lib/sse";
 import { cn } from "@/lib/utils";
 import { TransactionDetailModal } from "@/components/transaction-detail-modal";
 import type { TransactionDetail } from "@/components/transaction-detail-modal";
@@ -219,35 +220,34 @@ function DashboardInner() {
     }
   }, []);
 
-  // SSE for real-time events
+  // SSE for real-time events (fetch-based for header auth)
   React.useEffect(() => {
     document.title = "Dashboard — NexaPay";
     load(false);
     const token = getSessionToken();
     const address = getSessionAddress();
-    let es: EventSource | null = null;
+    let closeSSE: (() => void) | null = null;
     if (token && address) {
-      es = new EventSource(`/api/accounts/${address}/events?token=${encodeURIComponent(token)}`);
-      es.onmessage = (ev) => {
-        try {
-          const data = JSON.parse(ev.data);
-          if (data.type === "transfer" && data.to === address) {
-            setToast({ message: `Received ${data.amount_display} from ${data.from_name || data.from.slice(0, 8) + "..."}`, type: "success" });
+      closeSSE = connectSSE(
+        `/api/accounts/${address}/events`,
+        token,
+        (data) => {
+          if (data.type === "transfer" && String(data.to) === address) {
+            setToast({ message: `Received ${String(data.amount_display || "")} from ${String(data.from_name || String(data.from || "").slice(0, 8) + "...")}`, type: "success" });
             setTimeout(() => setToast(null), 5000);
             load(true);
           }
           if (data.type === "security_alert" && data.alert_type === "new_login") {
-            setSecurityAlert({ sessionId: data.session_id, message: data.message || "A new device just logged into your account. Is this you?" });
+            setSecurityAlert({ sessionId: String(data.session_id || ""), message: String(data.message || "A new device just logged into your account. Is this you?") });
           }
-        } catch { /* ignore */ }
-      };
-      es.onerror = () => { /* ignore, will reconnect */ };
+        },
+      );
     }
     // Fallback silent poll every 10s
     const interval = setInterval(() => load(true), 10_000);
     return () => {
       clearInterval(interval);
-      if (es) es.close();
+      if (closeSSE) closeSSE();
     };
   }, [load]);
 
@@ -285,7 +285,7 @@ function DashboardInner() {
       className={cn(
         "flex items-center gap-3 px-3 py-2.5 rounded-l-[10px] text-[13px] font-medium transition-colors",
         active
-          ? "bg-[#00FF88]/[0.08] text-[#00FF88] border-r-2 border-r-[#00FF88]"
+          ? "bg-[#00d4aa]/[0.08] text-[#00d4aa] border-r-2 border-r-[#00d4aa]"
           : "text-[#555555] hover:text-[#888] hover:bg-white/[0.03]"
       )}
     >
@@ -321,24 +321,24 @@ function DashboardInner() {
       )}
     >
       {center ? (
-        <div className="flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[#00FF88] text-[#080808] shadow-[0_8px_24px_rgba(0,255,136,0.35)]">
+        <div className="flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[#00d4aa] text-[#0b0b0b] shadow-[0_8px_24px_rgba(0,255,136,0.35)]">
           <Icon className="w-5 h-5" />
         </div>
       ) : (
-        <Icon className={cn("w-5 h-5", active ? "text-[#00FF88]" : "text-[#555555]")} />
+        <Icon className={cn("w-5 h-5", active ? "text-[#00d4aa]" : "text-[#555555]")} />
       )}
-      {!center && <span className={cn("text-[10px]", active ? "text-[#00FF88]" : "text-[#555555]")}>{label}</span>}
+      {!center && <span className={cn("text-[10px]", active ? "text-[#00d4aa]" : "text-[#555555]")}>{label}</span>}
     </Link>
   );
 
   return (
-    <div className="min-h-screen bg-[#080808] text-white font-inter selection:bg-[#00FF88] selection:text-black">
+    <div className="min-h-screen bg-[#0b0b0b] text-white font-inter selection:bg-[#00d4aa] selection:text-black">
       {/* ─── Mobile Top Bar ─── */}
-      <div className="md:hidden fixed inset-x-0 top-0 z-40 flex h-14 items-center justify-between border-b border-white/[0.06] bg-[#0a0a0a]/90 px-4 backdrop-blur-xl">
-        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#00FF88]">
-          <span className="text-[10px] font-extrabold text-[#080808]">N</span>
+      <div className="md:hidden fixed inset-x-0 top-0 z-40 flex h-14 items-center justify-between border-b border-white/[0.06] bg-[#0b0b0b]/90 px-4 backdrop-blur-xl">
+        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#00d4aa]">
+          <span className="text-[10px] font-extrabold text-[#0b0b0b]">N</span>
         </div>
-        <span className="font-display text-lg tracking-[0.08em] text-[#00FF88]">NexaPay</span>
+        <span className="font-display text-lg tracking-[0.08em] text-[#00d4aa]">NexaPay</span>
         <div className="flex items-center gap-3">
           <Link href="/notifications" className="relative">
             <Bell className="w-5 h-5 text-white/70" />
@@ -346,7 +346,7 @@ function DashboardInner() {
               <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-red-500" />
             )}
           </Link>
-          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#00FF88] text-[10px] font-bold text-[#080808]">
+          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#00d4aa] text-[10px] font-bold text-[#0b0b0b]">
             {initials}
           </div>
         </div>
@@ -357,17 +357,17 @@ function DashboardInner() {
         <aside className="hidden md:flex fixed left-0 top-0 h-screen w-[240px] flex-col border-r border-white/[0.06] bg-[#0d0d0d] px-4 py-6 z-30">
           <div className="mb-10 flex items-center gap-3 px-2">
             <img src="/logo.png" alt="NexaPay" className="h-8 w-8 object-contain" />
-            <span className="font-display text-lg tracking-[0.06em] text-[#00FF88]">NexaPay</span>
+            <span className="font-display text-lg tracking-[0.06em] text-[#00d4aa]">NexaPay</span>
           </div>
 
           <div className="flex flex-1 flex-col gap-1">
             <NavItem icon={LayoutDashboard} label="Dashboard" href="/dashboard" active />
-            <NavItem icon={ArrowUpRight} label="Send Money" href={user?.kycStatus === "verified" ? "/send" : "/verify"} />
-            <NavItem icon={Plus} label="Fund Wallet" href={user?.kycStatus === "verified" ? "/fund" : "/verify"} />
-            <NavItem icon={Building2} label="Bank Transfer" href={user?.kycStatus === "verified" ? "/bank-transfer" : "/verify"} />
+            <NavItem icon={ArrowUpRight} label="Send Money" href="/send" />
+            <NavItem icon={Plus} label="Fund Wallet" href="/fund" />
+            <NavItem icon={Building2} label="Bank Transfer" href="/bank-transfer" />
             <NavItem icon={Clock} label="Transactions" href="/history" />
             <NavItem icon={Bell} label="Notifications" href="/notifications" badge={unreadCount || undefined} />
-            <NavItem icon={CreditCard} label="Virtual Card" href={user?.kycStatus === "verified" ? "/card" : "/verify"} />
+            <NavItem icon={CreditCard} label="Virtual Card" href="/card" />
             {agentApproved && (
               <NavItem icon={Briefcase} label="Agent Portal" href="/agent/dashboard" />
             )}
@@ -376,7 +376,7 @@ function DashboardInner() {
 
           <div className="mt-auto border-t border-white/[0.06] pt-4">
             <div className="mb-3 flex items-center gap-3 px-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#00FF88] text-xs font-bold text-[#080808]">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#00d4aa] text-xs font-bold text-[#0b0b0b]">
                 {initials}
               </div>
               <div className="min-w-0">
@@ -405,40 +405,9 @@ function DashboardInner() {
             </div>
           )}
 
-          {/* KYC Verification Banner */}
-          {user?.kycStatus !== "verified" && (
-            <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-5 py-4 md:flex-row md:items-center md:justify-between">
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-500/20">
-                  <Shield className="h-4 w-4 text-amber-400" />
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-amber-400">
-                    {user?.kycStatus === "pending"
-                      ? "Identity verification in progress..."
-                      : "Verify your identity to unlock all features"}
-                  </p>
-                  <p className="text-xs text-amber-400/70">
-                    {user?.kycStatus === "pending"
-                      ? "We'll notify you when it's done. You can continue using the app."
-                      : "Send money, fund your wallet, and use your virtual card require CIN verification."}
-                  </p>
-                </div>
-              </div>
-              {user?.kycStatus !== "pending" && (
-                <Link
-                  href="/verify"
-                  className="rounded-full bg-amber-500/20 px-5 py-2 text-xs font-bold text-amber-400 transition-colors hover:bg-amber-500/30 text-center"
-                >
-                  Verify Now →
-                </Link>
-              )}
-            </div>
-          )}
-
           {/* ─── Section 1: Balance Hero ─── */}
-          <section className="relative mb-6 overflow-hidden rounded-[24px] border border-[#00FF88]/15 bg-[#111111] p-7">
-            <div className="pointer-events-none absolute -left-10 -top-10 h-40 w-40 rounded-full bg-[#00FF88]/10 blur-[60px]" />
+          <section className="relative mb-6 overflow-hidden rounded-[24px] border border-[#00d4aa]/15 bg-[#111111] p-7">
+            <div className="pointer-events-none absolute -left-10 -top-10 h-40 w-40 rounded-full bg-[#00d4aa]/10 blur-[60px]" />
             {loading ? (
               <div className="space-y-4">
                 <Skeleton className="h-3 w-28" />
@@ -452,17 +421,8 @@ function DashboardInner() {
                   {account ? <AnimatedBalance target={account.balance} suffix="TND" /> : "0.000 TND"}
                 </div>
                 <div className="mt-3 flex items-center gap-3">
-                  <span className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold border",
-                    user?.kycStatus === "verified"
-                      ? "bg-[#00FF88]/10 text-[#00FF88] border-[#00FF88]/20"
-                      : "bg-amber-500/10 text-amber-400 border-amber-500/20"
-                  )}>
-                    {user?.kycStatus === "verified" ? (
-                      <>Verified <Check className="h-3 w-3" /></>
-                    ) : (
-                      <>Unverified</>
-                    )}
+                  <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold border bg-[#00d4aa]/10 text-[#00d4aa] border-[#00d4aa]/20">
+                    Verified <Check className="h-3 w-3" />
                   </span>
                   <span className="text-sm text-[#888]">{displayName}</span>
                 </div>
@@ -481,35 +441,21 @@ function DashboardInner() {
           {/* ─── Section 2: Quick Actions ─── */}
           <section className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
             {[
-              { icon: ArrowUpRight, label: "Send Money", href: "/send", locked: user?.kycStatus !== "verified" },
-              { icon: Plus, label: "Fund Wallet", href: "/fund", locked: user?.kycStatus !== "verified" },
-              { icon: Building2, label: "Bank Transfer", href: "/bank-transfer", locked: user?.kycStatus !== "verified" },
-              { icon: Clock, label: "History", href: "/history", locked: false },
+              { icon: ArrowUpRight, label: "Send Money", href: "/send" },
+              { icon: Plus, label: "Fund Wallet", href: "/fund" },
+              { icon: Building2, label: "Bank Transfer", href: "/bank-transfer" },
+              { icon: Clock, label: "History", href: "/history" },
             ].map((a) => (
-              a.locked ? (
-                <Link
-                  key={a.label}
-                  href="/verify"
-                  className="group flex flex-col items-center gap-3 rounded-2xl border border-white/[0.06] bg-[#161616] p-5 transition-all hover:scale-[1.02] opacity-50"
-                >
-                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#555]/20">
-                    <a.icon className="h-5 w-5 text-[#555]" />
-                  </div>
-                  <span className="text-[12px] font-medium text-[#555]">{a.label}</span>
-                  <span className="text-[9px] text-amber-500/70">Verify to use</span>
-                </Link>
-              ) : (
-                <Link
-                  key={a.label}
-                  href={a.href}
-                  className="group flex flex-col items-center gap-3 rounded-2xl border border-white/[0.06] bg-[#161616] p-5 transition-all hover:scale-[1.02] hover:border-[#00FF88]/30"
-                >
-                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#00FF88]/10">
-                    <a.icon className="h-5 w-5 text-[#00FF88]" />
-                  </div>
-                  <span className="text-[12px] font-medium text-white/80">{a.label}</span>
-                </Link>
-              )
+              <Link
+                key={a.label}
+                href={a.href}
+                className="group flex flex-col items-center gap-3 rounded-2xl border border-white/[0.06] bg-[#161616] p-5 transition-all hover:scale-[1.02] hover:border-[#00d4aa]/30"
+              >
+                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#00d4aa]/10">
+                  <a.icon className="h-5 w-5 text-[#00d4aa]" />
+                </div>
+                <span className="text-[12px] font-medium text-white/80">{a.label}</span>
+              </Link>
             ))}
           </section>
 
@@ -576,7 +522,7 @@ function DashboardInner() {
                   style={{
                     backfaceVisibility: "hidden",
                     transform: "rotateY(180deg)",
-                    background: "linear-gradient(135deg, #111 0%, #0a0a0a 100%)",
+                    background: "linear-gradient(135deg, #111 0%, #0b0b0b 100%)",
                   }}
                 >
                   <div className="-mx-5 mt-2 h-10 bg-black" />
@@ -597,9 +543,9 @@ function DashboardInner() {
                     e.stopPropagation();
                     handleCopy(account.rib, "rib");
                   }}
-                  className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.03] px-4 py-2 text-[12px] font-medium text-[#888] transition-colors hover:border-[#00FF88]/30 hover:text-white"
+                  className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.03] px-4 py-2 text-[12px] font-medium text-[#888] transition-colors hover:border-[#00d4aa]/30 hover:text-white"
                 >
-                  {copiedKey === "rib" ? <Check className="h-3.5 w-3.5 text-[#00FF88]" /> : <Copy className="h-3.5 w-3.5" />}
+                  {copiedKey === "rib" ? <Check className="h-3.5 w-3.5 text-[#00d4aa]" /> : <Copy className="h-3.5 w-3.5" />}
                   {copiedKey === "rib" ? "Copied ✓" : "Copy RIB"}
                 </button>
                 <button
@@ -607,9 +553,9 @@ function DashboardInner() {
                     e.stopPropagation();
                     handleCopy(account.iban, "iban");
                   }}
-                  className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.03] px-4 py-2 text-[12px] font-medium text-[#888] transition-colors hover:border-[#00FF88]/30 hover:text-white"
+                  className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.03] px-4 py-2 text-[12px] font-medium text-[#888] transition-colors hover:border-[#00d4aa]/30 hover:text-white"
                 >
-                  {copiedKey === "iban" ? <Check className="h-3.5 w-3.5 text-[#00FF88]" /> : <Copy className="h-3.5 w-3.5" />}
+                  {copiedKey === "iban" ? <Check className="h-3.5 w-3.5 text-[#00d4aa]" /> : <Copy className="h-3.5 w-3.5" />}
                   {copiedKey === "iban" ? "Copied ✓" : "Copy IBAN"}
                 </button>
               </div>
@@ -620,7 +566,7 @@ function DashboardInner() {
           <section>
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-base font-semibold text-white">Recent activity</h3>
-              <Link href="/history" className="flex items-center gap-1 text-[13px] font-medium text-[#00FF88] hover:underline">
+              <Link href="/history" className="flex items-center gap-1 text-[13px] font-medium text-[#00d4aa] hover:underline">
                 See all <ChevronRight className="h-3.5 w-3.5" />
               </Link>
             </div>
@@ -642,7 +588,7 @@ function DashboardInner() {
               <div className="flex flex-col items-center justify-center rounded-2xl border border-white/[0.04] bg-[#111111] py-12">
                 <Clock className="h-12 w-12 text-[#333]" />
                 <p className="mt-3 text-sm text-[#888]">No transactions yet</p>
-                <Link href="/fund" className="mt-2 text-sm font-medium text-[#00FF88] hover:underline">
+                <Link href="/fund" className="mt-2 text-sm font-medium text-[#00d4aa] hover:underline">
                   Fund your wallet to get started →
                 </Link>
               </div>
@@ -662,7 +608,7 @@ function DashboardInner() {
                         <div
                           className={cn(
                             "flex h-10 w-10 items-center justify-center rounded-full text-xs font-bold",
-                            isCredit ? "bg-[#00FF88]/15 text-[#00FF88]" : "bg-white/[0.06] text-[#888]"
+                            isCredit ? "bg-[#00d4aa]/15 text-[#00d4aa]" : "bg-white/[0.06] text-[#888]"
                           )}
                         >
                           {getInitials(name)}
@@ -670,7 +616,7 @@ function DashboardInner() {
                         <div
                           className={cn(
                             "absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full border-2 border-[#111] text-[8px] font-bold",
-                            isCredit ? "bg-[#00FF88] text-[#080808]" : "bg-red-500 text-white"
+                            isCredit ? "bg-[#00d4aa] text-[#0b0b0b]" : "bg-red-500 text-white"
                           )}
                         >
                           {isCredit ? "↓" : "↑"}
@@ -681,10 +627,10 @@ function DashboardInner() {
                         <p className="text-[12px] text-[#888]">{relativeTime(tx.timestamp)} · {parseTransactionMemo(tx.memo).label}</p>
                       </div>
                       <div className="text-right">
-                        <p className={cn("text-[14px] font-semibold", isCredit ? "text-[#00FF88]" : "text-red-400")}>
+                        <p className={cn("text-[14px] font-semibold", isCredit ? "text-[#00d4aa]" : "text-red-400")}>
                           {isCredit ? "+" : "-"}{tx.amount_display}
                         </p>
-                        <span className="mt-0.5 inline-block rounded-full bg-[#00FF88]/10 px-2 py-0.5 text-[10px] font-bold text-[#00FF88]">
+                        <span className="mt-0.5 inline-block rounded-full bg-[#00d4aa]/10 px-2 py-0.5 text-[10px] font-bold text-[#00d4aa]">
                           Confirmed
                         </span>
                       </div>
@@ -696,7 +642,7 @@ function DashboardInner() {
 
             {!loading && transactions.length > 0 && (
               <div className="mt-4 text-center">
-                <Link href="/history" className="text-[13px] font-medium text-[#00FF88] hover:underline">
+                <Link href="/history" className="text-[13px] font-medium text-[#00d4aa] hover:underline">
                   View all transactions →
                 </Link>
               </div>
@@ -708,9 +654,9 @@ function DashboardInner() {
       {/* ─── Mobile Bottom Tab Nav ─── */}
       <nav className="md:hidden fixed inset-x-0 bottom-0 z-40 flex h-16 items-center justify-around border-t border-white/[0.06] bg-[#0d0d0d] pb-[env(safe-area-inset-bottom)]">
         <TabItem icon={Home} label="Home" href="/dashboard" active />
-        <TabItem icon={ArrowUpRight} label="Send" href={user?.kycStatus === "verified" ? "/send" : "/verify"} />
-        <TabItem icon={Plus} label="" href={user?.kycStatus === "verified" ? "/fund" : "/verify"} center />
-        <TabItem icon={Building2} label="Bank" href={user?.kycStatus === "verified" ? "/bank-transfer" : "/verify"} />
+        <TabItem icon={ArrowUpRight} label="Send" href="/send" />
+        <TabItem icon={Plus} label="" href="/fund" center />
+        <TabItem icon={Building2} label="Bank" href="/bank-transfer" />
         {agentApproved && (
           <TabItem icon={Briefcase} label="Agent" href="/agent/dashboard" />
         )}
@@ -724,7 +670,7 @@ function DashboardInner() {
       {toast && (
         <div className={cn(
           "fixed top-6 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-2 rounded-full border px-5 py-2.5 text-sm font-medium shadow-lg transition-all",
-          toast.type === "success" ? "border-[#00FF88]/30 bg-[#00FF88]/10 text-[#00FF88]" :
+          toast.type === "success" ? "border-[#00d4aa]/30 bg-[#00d4aa]/10 text-[#00d4aa]" :
           toast.type === "warning" ? "border-amber-500/30 bg-amber-500/10 text-amber-400" :
           "border-red-500/30 bg-red-500/10 text-red-400"
         )}>

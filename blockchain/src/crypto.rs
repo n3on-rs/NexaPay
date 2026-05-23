@@ -8,6 +8,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
+#[allow(dead_code)]
 pub enum CryptoError {
     #[error("hex decode error")]
     Hex(#[from] hex::FromHexError),
@@ -119,32 +120,36 @@ pub fn verify_multi_signature(
 
 /// Derive a 32-byte encryption key from the user's PIN using Argon2id.
 /// This key encrypts/decrypts the user's Ed25519 private key.
+/// If `stored_salt` is provided (new random-per-user salt), it is used directly.
+/// Otherwise falls back to deterministic derivation from chain_address + pepper.
 pub fn derive_user_key_encryption_key(
     chain_address: &str,
     pin: &str,
     pepper: &str,
+    stored_salt: Option<&str>,
 ) -> Result<[u8; 32], CryptoError> {
     use argon2::{
-        password_hash::{rand_core::OsRng, PasswordHasher, SaltString},
+        password_hash::{PasswordHasher, SaltString},
         Argon2,
     };
 
-    let salt_str = format!("nexapay.userkey.{}:{}", chain_address, pepper);
-    let mut hasher = Sha256::new();
-    hasher.update(salt_str.as_bytes());
-    let digest = hasher.finalize();
-    let mut salt_bytes = [0u8; 16];
-    salt_bytes.copy_from_slice(&digest[..16]);
-
-    let salt = SaltString::encode_b64(&salt_bytes)
-        .map_err(|_| CryptoError::Encryption)?;
+    let salt = if let Some(existing) = stored_salt {
+        SaltString::from_b64(existing).map_err(|_| CryptoError::Encryption)?
+    } else {
+        let salt_str = format!("nexapay.userkey.{}:{}", chain_address, pepper);
+        let mut hasher = Sha256::new();
+        hasher.update(salt_str.as_bytes());
+        let digest = hasher.finalize();
+        let mut salt_bytes = [0u8; 16];
+        salt_bytes.copy_from_slice(&digest[..16]);
+        SaltString::encode_b64(&salt_bytes).map_err(|_| CryptoError::Encryption)?
+    };
 
     let argon2 = Argon2::default();
     let hash = argon2
         .hash_password(pin.as_bytes(), &salt)
         .map_err(|_| CryptoError::Encryption)?;
 
-    // Use the Argon2id hash output to derive our AES key
     let hash_str = hash.to_string();
     let hash_bytes = sha256_hex(hash_str.as_bytes());
     let mut key = [0u8; 32];
@@ -207,26 +212,24 @@ pub fn sign_transaction_with_user_key(
 
 /// Generate a new Ed25519 keypair for a user.
 /// Returns (private_key_hex, public_key_hex).
+#[allow(dead_code)]
 pub fn generate_user_keypair() -> (String, String) {
     generate_keypair()
 }
 
-/// Generate a deterministic validator keypair from a seed index.
-/// In production, each validator should have a unique, securely generated key.
-pub fn validator_keypair_from_seed(seed: u64) -> (String, String, String) {
-    let mut hasher = Sha256::new();
-    hasher.update(b"NEXAPAY_VALIDATOR_SEED");
-    hasher.update(seed.to_le_bytes());
-    let seed_bytes = hasher.finalize();
-
-    let key_bytes: [u8; 32] = seed_bytes[..32]
-        .try_into()
-        .expect("SHA-256 produces 32 bytes");
-    let signing = SigningKey::from_bytes(&key_bytes);
-    let private_hex = hex::encode(signing.to_bytes());
-    let public_hex = hex::encode(signing.verifying_key().to_bytes());
-    let address = address_from_public_key(&public_hex);
-    (private_hex, public_hex, address)
+/// Parse a hex-encoded Ed25519 private key into (private_hex, public_hex, address).
+/// Does NOT derive from seed — the key must be provided via env var.
+pub fn validator_keypair_from_hex_key(private_hex: &str) -> Result<(String, String, String), String> {
+    let key_bytes = hex::decode(private_hex)
+        .map_err(|e| format!("Invalid validator key hex: {e}"))?;
+    if key_bytes.len() != 32 {
+        return Err(format!("Validator key must be 32 bytes (64 hex chars), got {}", key_bytes.len()));
+    }
+    let arr: [u8; 32] = key_bytes.try_into().map_err(|_| "Invalid key length".to_string())?;
+    let signing = SigningKey::from_bytes(&arr);
+    let pk_hex = hex::encode(signing.verifying_key().to_bytes());
+    let address = address_from_public_key(&pk_hex);
+    Ok((private_hex.to_string(), pk_hex, address))
 }
 
 /// On-chain onboarding digest (commitment over login id, name, DOB).
@@ -238,22 +241,33 @@ pub fn registration_digest(login_id: &str, full_name: &str, dob: &str) -> String
 /// Uses chain_address as salt, pepper as secret pepper for defense-in-depth.
 /// Returns format: "argon2id:$hex_hash" for new hashes,
 /// or "sha256:$hex_hash" for legacy (pre-migration) hashes.
-pub fn hash_transaction_pin(chain_address: &str, pin: &str, pepper: &str) -> String {
+/// Generate a random B64-encoded salt for per-user PIN/key derivation.
+pub fn generate_pin_salt() -> String {
+    use argon2::password_hash::SaltString;
+    let mut salt_bytes = [0u8; 16];
+    OsRng.fill_bytes(&mut salt_bytes);
+    SaltString::encode_b64(&salt_bytes)
+        .unwrap_or_else(|_| SaltString::from_b64("AAAAAAAAAAAAAAAAAAAAAA").unwrap())
+        .to_string()
+}
+
+pub fn hash_transaction_pin(chain_address: &str, pin: &str, pepper: &str, stored_salt: Option<&str>) -> String {
     use argon2::{
-        password_hash::{rand_core::OsRng, PasswordHasher, SaltString},
+        password_hash::{PasswordHasher, SaltString},
         Argon2,
     };
 
-    // Use chain_address + pepper combined as the salt base
-    let salt_str = format!("nexapay.pin.{}:{}", chain_address, pepper);
-    let mut salt_bytes = [0u8; 32];
-    let mut hasher = Sha256::new();
-    hasher.update(salt_str.as_bytes());
-    let digest = hasher.finalize();
-    salt_bytes.copy_from_slice(&digest);
-
-    let salt = SaltString::encode_b64(&salt_bytes[..16])
-        .unwrap_or_else(|_| SaltString::from_b64("AAAAAAAAAAAAAAAAAAAAAA").unwrap());
+    let salt = if let Some(existing) = stored_salt {
+        SaltString::from_b64(existing).unwrap_or_else(|_| SaltString::from_b64("AAAAAAAAAAAAAAAAAAAAAA").unwrap())
+    } else {
+        let salt_str = format!("nexapay.pin.{}:{}", chain_address, pepper);
+        let mut hasher = Sha256::new();
+        hasher.update(salt_str.as_bytes());
+        let digest = hasher.finalize();
+        let mut salt_bytes = [0u8; 16];
+        salt_bytes.copy_from_slice(&digest[..16]);
+        SaltString::encode_b64(&salt_bytes).unwrap_or_else(|_| SaltString::from_b64("AAAAAAAAAAAAAAAAAAAAAA").unwrap())
+    };
 
     let argon2 = Argon2::default();
     let hash = argon2
@@ -300,10 +314,12 @@ pub fn verify_transaction_pin(
 }
 
 /// Check if a stored PIN hash uses the legacy SHA-256 format and needs upgrade.
+#[allow(dead_code)]
 pub fn pin_needs_upgrade(stored_hash: &str) -> bool {
     !stored_hash.is_empty() && !stored_hash.starts_with("argon2id:")
 }
 
+#[allow(dead_code)]
 pub fn generate_api_key(prefix: &str) -> (String, String, String) {
     let mut random = [0u8; 32];
     OsRng.fill_bytes(&mut random);

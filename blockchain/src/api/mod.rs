@@ -13,10 +13,7 @@ pub mod gateway;
 pub mod health;
 pub mod invoice;
 pub mod key_management;
-pub mod kyc;
-pub mod kyc_verify;
 pub mod middleware;
-pub mod network;
 pub mod withdraw;
 
 use std::collections::HashMap;
@@ -42,15 +39,12 @@ pub struct AppState {
     pub auth_failures: Arc<Mutex<HashMap<String, (u32, i64)>>>,
     pub confirm_ip_attempts: Arc<Mutex<HashMap<String, Vec<i64>>>>,
     pub jwt_key: HS256Key,
+    pub admin_jwt_key: HS256Key,
     pub encryption_key: String,
     pub system_private_key: String,
     pub validator_address: String,
     pub validator_private_key: String,
     pub validator_public_key: String,
-    pub twilio_account_sid: Option<String>,
-    pub twilio_auth_token: Option<String>,
-    pub twilio_phone_number: Option<String>,
-    pub otp_fallback_code: Option<String>,
     /// Per-address SSE broadcast senders for real-time events.
     pub sse_broadcasters: Arc<std::sync::RwLock<HashMap<String, broadcast::Sender<String>>>>,
     pub env: String,
@@ -72,35 +66,15 @@ pub fn build_router(state: AppState) -> Router {
         router = router.route("/auth/register", post(auth::register));
     }
     router
-        // KYC multi-step routes
-        .route("/auth/register/init", post(crate::api::kyc::register_init))
-        .route(
-            "/auth/register/resend-otp",
-            post(crate::api::kyc::resend_otp),
-        )
-        .route(
-            "/auth/register/verify-otp",
-            post(crate::api::kyc::verify_registration_otp),
-        )
-        .route(
-            "/auth/register/verify-phone",
-            post(crate::api::kyc::verify_phone),
-        )
-        .route(
-            "/auth/register/upload-documents",
-            post(crate::api::kyc::upload_documents),
-        )
-        .route("/auth/register/liveness", post(crate::api::kyc::liveness))
-        .route(
-            "/auth/register/set-pin",
-            post(crate::api::kyc::register_set_pin),
-        )
+        // Self-serve registration (direct, no KYC)
+        .route("/auth/register/init", post(auth::register_init))
+        .route("/auth/register/set-pin", post(auth::register_set_pin))
         .route("/auth/login", post(auth::login_with_pin))
         .route("/auth/login/verify-otp", post(auth::verify_login_otp))
         .route("/auth/me", get(auth::get_me))
         .route("/auth/recover/verify-identity", post(auth::verify_identity))
         .route("/auth/recover/verify-otp", post(auth::verify_recovery_otp))
-        .route("/auth/recover/reset-password", post(auth::reset_password))
+        // /auth/recover/reset-password removed — use /auth/recover/reset-pin
         .route("/auth/recover/reset-pin", post(auth::reset_pin))
         .route("/auth/security-alert", post(auth::resolve_security_alert))
         .route("/auth/change-pin", post(auth::change_pin))
@@ -324,6 +298,10 @@ pub fn build_router(state: AppState) -> Router {
             get(esign::download_signed_contract),
         )
         .route(
+            "/accounts/:address/esign/account/:doc_id/pdf",
+            get(esign::download_signed_contract_pdf),
+        )
+        .route(
             "/accounts/:address/esign/transfer",
             post(esign::sign_transfer_authorization),
         )
@@ -338,20 +316,6 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/accounts/:address/invoices", get(invoice::list_invoices))
         .route("/verify/invoice", get(invoice::verify_invoice))
-        // KYC verification routes
-        .route("/accounts/:address/kyc/start", post(kyc_verify::start_kyc))
-        .route(
-            "/accounts/:address/kyc/finalize",
-            post(kyc_verify::finalize_kyc),
-        )
-        .route("/accounts/:address/kyc/status", get(kyc_verify::kyc_status))
-        .route("/accounts/:address/kyc/skip", post(kyc_verify::skip_kyc))
-        .route(
-            "/accounts/:address/kyc/face",
-            post(kyc_verify::upload_face_photo),
-        )
-        .route("/accounts/:address/cin", post(kyc_verify::submit_cin))
-        .route("/internal/kyc/callback", post(kyc_verify::kyc_callback))
         // ─── Admin Panel (requires X-Admin-Token) ───
         .route("/admin/login", post(admin_auth::admin_login))
         .route("/admin/login/verify-otp", post(admin_auth::admin_verify_otp))

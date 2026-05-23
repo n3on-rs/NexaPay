@@ -12,7 +12,6 @@ use uuid::Uuid;
 
 use crate::api::admin_auth::{hash_admin_password, require_admin, AdminClaims};
 use crate::api::AppState;
-use crate::crypto::{decrypt_aes256_gcm, sha256_hex};
 
 fn api_error(sc: StatusCode, msg: &str) -> (StatusCode, Json<Value>) {
     (sc, Json(json!({"error": msg})))
@@ -53,7 +52,6 @@ pub struct AdminDashboard {
     pub total_transactions: i64,
     pub total_volume_millimes: i64,
     pub pending_withdrawals: i64,
-    pub kyc_pending: i64,
     pub frozen_accounts: i64,
     pub chain_height: u64,
     pub validator_count: usize,
@@ -89,13 +87,6 @@ pub async fn dashboard(
             .fetch_one(&state.pg_pool)
             .await
             .unwrap_or(0);
-
-    let kyc_pending: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM users WHERE kyc_status = 'pending' OR kyc_status = 'unverified'",
-    )
-    .fetch_one(&state.pg_pool)
-    .await
-    .unwrap_or(0);
 
     let frozen: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM user_freeze_records WHERE unfrozen_at IS NULL")
@@ -138,7 +129,6 @@ pub async fn dashboard(
         total_transactions: total_txs,
         total_volume_millimes: 0, // Computed from chain
         pending_withdrawals,
-        kyc_pending,
         frozen_accounts: frozen,
         chain_height,
         validator_count,
@@ -152,6 +142,7 @@ pub async fn dashboard(
 // ═══════════════════════════════════════
 
 #[derive(Serialize)]
+#[allow(dead_code)]
 pub struct AdminUserView {
     pub address: String,
     pub full_name: String,
@@ -168,6 +159,7 @@ pub struct AdminUserView {
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 pub struct UserListQuery {
     pub page: Option<usize>,
     pub limit: Option<usize>,
@@ -579,7 +571,7 @@ pub async fn audit_log(
     headers: HeaderMap,
     Query(q): Query<UserListQuery>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let admin = require_admin(&state, &headers)
+    let _admin = require_admin(&state, &headers)
         .await
         .map_err(|s| api_error(s, "Unauthorized"))?;
 
@@ -639,7 +631,7 @@ pub async fn seed_admin(
     Json(payload): Json<SeedAdminRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     let expected_key = std::env::var("NEXAPAY_ADMIN_SEED_KEY")
-        .unwrap_or_else(|_| "nexapay-admin-seed-dev-only".to_string());
+        .map_err(|_| api_error(StatusCode::FORBIDDEN, "NEXAPAY_ADMIN_SEED_KEY is required"))?;
     if payload.seed_key != expected_key {
         return Err(api_error(StatusCode::FORBIDDEN, "Invalid seed key"));
     }
@@ -682,11 +674,16 @@ fn format_millimes(value: u64) -> String {
     format!("{:.3} TND", tnd)
 }
 
-// ─── Legacy agent endpoints (keep existing) ───
+// ─── Legacy agent endpoints ───
 pub async fn list_applications(
     State(state): State<AppState>,
+    headers: HeaderMap,
     axum::extract::Query(q): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
+    let _admin = match require_admin(&state, &headers).await {
+        Ok(a) => a,
+        Err(_) => return (StatusCode::UNAUTHORIZED, Json(json!({"error": "Unauthorized"}))),
+    };
     let status = q
         .get("status")
         .cloned()
@@ -701,8 +698,13 @@ pub async fn list_applications(
 
 pub async fn get_application(
     State(state): State<AppState>,
+    headers: HeaderMap,
     axum::extract::Path(id): axum::extract::Path<String>,
 ) -> impl IntoResponse {
+    let _admin = match require_admin(&state, &headers).await {
+        Ok(a) => a,
+        Err(_) => return (StatusCode::UNAUTHORIZED, Json(json!({"error": "Unauthorized"}))),
+    };
     let row = sqlx::query("SELECT * FROM agent_applications WHERE id=$1")
         .bind(&id)
         .fetch_optional(&state.pg_pool)
@@ -721,9 +723,14 @@ pub async fn get_application(
 
 pub async fn approve(
     State(state): State<AppState>,
+    headers: HeaderMap,
     axum::extract::Path(id): axum::extract::Path<String>,
     Json(body): Json<Value>,
 ) -> impl IntoResponse {
+    let _admin = match require_admin(&state, &headers).await {
+        Ok(a) => a,
+        Err(_) => return (StatusCode::UNAUTHORIZED, Json(json!({"error": "Unauthorized"}))),
+    };
     let notes = body
         .get("reviewer_notes")
         .and_then(|v| v.as_str())
@@ -734,9 +741,14 @@ pub async fn approve(
 
 pub async fn reject(
     State(state): State<AppState>,
+    headers: HeaderMap,
     axum::extract::Path(id): axum::extract::Path<String>,
     Json(body): Json<Value>,
 ) -> impl IntoResponse {
+    let _admin = match require_admin(&state, &headers).await {
+        Ok(a) => a,
+        Err(_) => return (StatusCode::UNAUTHORIZED, Json(json!({"error": "Unauthorized"}))),
+    };
     let reason = body
         .get("rejection_reason")
         .and_then(|v| v.as_str())
@@ -747,9 +759,14 @@ pub async fn reject(
 
 pub async fn process_withdrawal(
     State(state): State<AppState>,
+    headers: HeaderMap,
     axum::extract::Path(id): axum::extract::Path<String>,
     Json(body): Json<Value>,
 ) -> impl IntoResponse {
+    let _admin = match require_admin(&state, &headers).await {
+        Ok(a) => a,
+        Err(_) => return (StatusCode::UNAUTHORIZED, Json(json!({"error": "Unauthorized"}))),
+    };
     let action = body.get("action").and_then(|v| v.as_str()).unwrap_or("");
     if action == "COMPLETE" {
         let _ = sqlx::query(

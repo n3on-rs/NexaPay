@@ -39,6 +39,7 @@ pub enum ApiPrincipal {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum AuthError {
     Unauthorized,
     Forbidden,
@@ -98,13 +99,9 @@ pub fn default_permissions(_owner_type: &str) -> Vec<String> {
 pub fn has_permission(principal: &ApiPrincipal, needed: &str) -> bool {
     let permissions = match principal {
         ApiPrincipal::Developer {
-            key_id,
             permissions,
             ..
         } => {
-            if key_id.is_none() {
-                return true;
-            }
             permissions
         }
     };
@@ -178,6 +175,33 @@ pub fn verify_session_token(state: &AppState, token: &str) -> Result<SessionClai
     Ok(claims.custom)
 }
 
+/// Verify session token AND check DB revocation. Use this instead of
+/// verify_session_token for all authenticated endpoints.
+pub async fn verify_session_with_revocation_check(
+    state: &AppState,
+    token: &str,
+) -> Result<SessionClaims, StatusCode> {
+    let claims = verify_session_token(state, token)?;
+    if !claims.session_id.is_empty() {
+        let session_uuid =
+            Uuid::parse_str(&claims.session_id).map_err(|_| StatusCode::UNAUTHORIZED)?;
+        let row = sqlx::query(
+            "SELECT is_revoked FROM user_sessions WHERE user_address = $1 AND id = $2 LIMIT 1",
+        )
+        .bind(&claims.address)
+        .bind(session_uuid)
+        .fetch_optional(&state.pg_pool)
+        .await;
+        if let Ok(Some(r)) = row {
+            let revoked: i32 = r.try_get("is_revoked").unwrap_or(0);
+            if revoked != 0 {
+                return Err(StatusCode::UNAUTHORIZED);
+            }
+        }
+    }
+    Ok(claims)
+}
+
 pub fn extract_account_token(headers: &HeaderMap) -> Option<String> {
     headers
         .get("X-Account-Token")
@@ -198,28 +222,9 @@ pub async fn require_account_token(
     address: &str,
 ) -> Result<SessionClaims, StatusCode> {
     let token = extract_account_token(headers).ok_or(StatusCode::UNAUTHORIZED)?;
-    let claims = verify_session_token(state, &token)?;
+    let claims = verify_session_with_revocation_check(state, &token).await?;
     if claims.address != address {
         return Err(StatusCode::FORBIDDEN);
-    }
-    // Check session revocation for tokens with session_id
-    if !claims.session_id.is_empty() {
-        let session_uuid =
-            Uuid::parse_str(&claims.session_id).map_err(|_| StatusCode::UNAUTHORIZED)?;
-        let row = sqlx::query(
-            "SELECT is_revoked FROM user_sessions WHERE user_address = $1 AND id = $2 LIMIT 1",
-        )
-        .bind(address)
-        .bind(session_uuid)
-        .fetch_optional(&state.pg_pool)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-        if let Some(r) = row {
-            let is_revoked: bool = r.try_get("is_revoked").unwrap_or(false);
-            if is_revoked {
-                return Err(StatusCode::UNAUTHORIZED);
-            }
-        }
     }
     Ok(claims)
 }
@@ -591,17 +596,13 @@ fn sha256_hex(data: &[u8]) -> String {
 // ─── IP-Based Auth Rate Limiting ───
 
 pub fn extract_client_ip(headers: &HeaderMap) -> String {
+    // Only trust X-Real-IP (set by nginx to the real client address).
+    // Do NOT trust X-Forwarded-For from untrusted sources — it can be
+    // injected by clients to bypass IP-based rate limiting.
     headers
-        .get("x-forwarded-for")
+        .get("x-real-ip")
         .and_then(|v| v.to_str().ok())
-        .and_then(|s| s.split(',').next())
         .map(|s| s.trim().to_string())
-        .or_else(|| {
-            headers
-                .get("x-real-ip")
-                .and_then(|v| v.to_str().ok())
-                .map(|s| s.trim().to_string())
-        })
         .unwrap_or_else(|| "unknown".to_string())
 }
 
@@ -632,6 +633,13 @@ pub async fn check_auth_rate_limit(
                     retry_after_seconds: secs,
                 });
             }
+        }
+        // Also check attempt count before lockout is set
+        let attempt_count: i32 = r.try_get("attempt_count").unwrap_or(0);
+        if attempt_count >= max_attempts {
+            return Err(AuthError::TooManyRequests {
+                retry_after_seconds: (lockout_minutes * 60) as u64,
+            });
         }
     }
 

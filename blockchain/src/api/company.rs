@@ -857,7 +857,7 @@ async fn load_company_workspace(
             let phone: String = user_row.try_get("phone").unwrap_or_default();
             let company_name = if business_name.trim().is_empty() { full_name.clone() } else { business_name };
 
-            let (api_key, api_key_hash, prefix, checksum) = create_structured_api_key("developer");
+            let (_api_key, api_key_hash, prefix, checksum) = create_structured_api_key("developer");
             let legacy_prefix = prefix.chars().take(8).collect::<String>();
 
             let dev_row = sqlx::query(
@@ -1248,6 +1248,7 @@ async fn sum_by_uuid(pool: &sqlx::PgPool, query: &str, owner_id: Uuid) -> i64 {
         .unwrap_or(0)
 }
 
+#[allow(dead_code)]
 async fn count_by_uuid(pool: &sqlx::PgPool, query: &str, owner_id: Uuid) -> i64 {
     sqlx::query(query)
         .bind(owner_id)

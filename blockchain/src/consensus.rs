@@ -12,6 +12,7 @@ use crate::chain::Blockchain;
 
 /// Consensus state: what phase the node is in.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum ConsensusPhase {
     Idle,
     Proposing,
@@ -112,7 +113,7 @@ async fn run_leader_round(
     http_client: &Client,
     peers: &[String],
     my_address: &str,
-    my_private_key: &str,
+    _my_private_key: &str,
     round: u64,
     vote_timeout: Duration,
 ) {

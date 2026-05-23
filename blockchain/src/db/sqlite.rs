@@ -20,6 +20,7 @@ pub struct SqliteState {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct ChainAccountSnapshot {
     pub address: String,
     pub balance: u64,
@@ -120,6 +121,7 @@ impl SqliteState {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn get_account_snapshot(
         &self,
         address: &str,
@@ -186,6 +188,7 @@ impl SqliteState {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn upsert_loan_snapshot(
         &self,
         loan_id: &str,

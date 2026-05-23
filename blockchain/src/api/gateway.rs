@@ -73,6 +73,7 @@ pub struct CreateWebhookRequest {
     pub event_types: Option<Vec<String>>,
 }
 
+#[allow(dead_code)]
 pub async fn gateway_stats(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -784,11 +785,9 @@ pub async fn confirm_intent(
             let _ = send_otp_sms(&state, &user_phone, &otp).await;
 
             let mut dev_otp: Option<String> = None;
-            let app_env = std::env::var("APP_ENV").unwrap_or_default();
             let dev_show = std::env::var("DEV_SHOW_OTP").unwrap_or_default();
-            if app_env == "development" || dev_show == "true" {
+            if (state.env == "development" || state.env == "sandbox") && dev_show == "true" {
                 dev_otp = Some(otp.clone());
-                println!("[dev] wallet payment OTP for {} is {}", cin, otp);
             }
 
             log_api_call(&state, optional_principal.as_ref(), "/gateway/v1/intents/:intent_id/confirm", "POST", 200).await;
@@ -1226,6 +1225,8 @@ pub async fn gateway_transactions(
         _ => "",
     };
 
+    let limit_i64 = limit as i64;
+    let offset_i64 = offset as i64;
     let sql = format!(
         "SELECT intent_id, amount, currency, status, description, created_at,
                 customer_first_name, customer_last_name, customer_phone,
@@ -1233,12 +1234,14 @@ pub async fn gateway_transactions(
          FROM payment_intents
          WHERE merchant_id = $1 AND status != 'requires_confirmation' {}
          ORDER BY created_at DESC
-         LIMIT {} OFFSET {}",
-        status_clause, limit, offset
+         LIMIT $2 OFFSET $3",
+        status_clause
     );
 
     let intents_rows = sqlx::query(&sql)
         .bind(merchant_id)
+        .bind(limit_i64)
+        .bind(offset_i64)
         .fetch_all(&state.pg_pool)
         .await
         .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Database error"))?;
@@ -1397,11 +1400,50 @@ pub async fn create_webhook(
 
     let merchant_id = merchant_id_from_principal(&state, &principal).await?;
 
-    if !payload.url.starts_with("http://") && !payload.url.starts_with("https://") {
+    if !payload.url.starts_with("https://") && !payload.url.starts_with("http://") {
         return Err(api_error(
             StatusCode::BAD_REQUEST,
-            "webhook URL must start with http:// or https://",
+            "webhook URL must start with https:// or http://",
         ));
+    }
+
+    // SSRF protection: block internal/private hosts
+    if let Ok(parsed) = reqwest::Url::parse(&payload.url) {
+        let host = parsed.host_str().unwrap_or("");
+        let host_lower = host.to_lowercase();
+        if host_lower == "localhost"
+            || host_lower == "127.0.0.1"
+            || host_lower == "0.0.0.0"
+            || host_lower == "[::1]"
+            || host_lower == "[::]"
+            || host_lower.starts_with("10.")
+            || host_lower.starts_with("192.168.")
+            || host_lower.starts_with("172.")
+            || host_lower.ends_with(".local")
+            || host_lower == "validator-0"
+            || host_lower == "validator-1"
+            || host_lower == "validator-2"
+            || host_lower == "postgres"
+            || host_lower == "validator-lb"
+        {
+            return Err(api_error(
+                StatusCode::BAD_REQUEST,
+                "webhook URL must target a public host",
+            ));
+        }
+        // Also check for 172.16.x.x - 172.31.x.x
+        if host_lower.starts_with("172.") {
+            if let Some(second) = host_lower.split('.').nth(1) {
+                if let Ok(n) = second.parse::<u32>() {
+                    if n >= 16 && n <= 31 {
+                        return Err(api_error(
+                            StatusCode::BAD_REQUEST,
+                            "webhook URL must target a public host",
+                        ));
+                    }
+                }
+            }
+        }
     }
 
     let event_types = payload

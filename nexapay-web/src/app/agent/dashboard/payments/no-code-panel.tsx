@@ -27,7 +27,8 @@ import {
 import { cn } from "@/lib/utils";
 import { useAgent, formatMillimes } from "../layout";
 import { getJson, postJson, deleteJson } from "@/lib/api";
-import { getSessionAddress } from "@/lib/auth-utils";
+import { getSessionAddress, getSessionToken } from "@/lib/auth-utils";
+import { connectSSE } from "@/lib/sse";
 import QRCodeLib from "qrcode";
 
 interface PaymentLink {
@@ -53,7 +54,7 @@ async function generateQRWithLogo(url: string, theme: "dark" | "light"): Promise
   await QRCodeLib.toCanvas(canvas, url, {
     width: 400,
     margin: 2,
-    color: { dark: "#00FF88", light: theme === "dark" ? "#111111" : "#ffffff" },
+    color: { dark: "#00d4aa", light: theme === "dark" ? "#111111" : "#ffffff" },
   });
 
   const logoSize = 70;
@@ -93,21 +94,22 @@ export default function NoCodePanel() {
     loadLinks();
   }, [safeApiKey]);
 
-  // SSE listener for real-time payment notifications
+  // SSE listener for real-time payment notifications (fetch-based for auth)
   React.useEffect(() => {
     const address = getSessionAddress();
-    if (!address) return;
-    const es = new EventSource(`/api/accounts/${address}/events`);
-    es.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
+    const token = getSessionToken();
+    if (!address || !token) return;
+    const closeSSE = connectSSE(
+      `/api/accounts/${address}/events`,
+      token,
+      (data) => {
         if (data.type === "payment_intent.succeeded") {
-          showToast(`💰 Payment received: ${(Number(data.amount || 0) / 1000).toFixed(3)} TND`, "success");
+          showToast(`Payment received: ${(Number(data.amount || 0) / 1000).toFixed(3)} TND`, "success");
           loadLinks(true);
         }
-      } catch { /* ignore */ }
-    };
-    return () => es.close();
+      },
+    );
+    return () => closeSSE();
   }, [safeApiKey]);
 
   // Poll every 5 seconds for reliable updates
@@ -140,7 +142,7 @@ export default function NoCodePanel() {
           className={cn(
             "flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-all border",
             subTab === "links"
-              ? "border-[#00FF88] bg-[#00FF88]/10 text-[#00FF88]"
+              ? "border-[#00d4aa] bg-[#00d4aa]/10 text-[#00d4aa]"
               : "border-white/[0.06] bg-[#111] text-[#888] hover:text-white"
           )}
         >
@@ -152,7 +154,7 @@ export default function NoCodePanel() {
           className={cn(
             "flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-all border",
             subTab === "qr"
-              ? "border-[#00FF88] bg-[#00FF88]/10 text-[#00FF88]"
+              ? "border-[#00d4aa] bg-[#00d4aa]/10 text-[#00d4aa]"
               : "border-white/[0.06] bg-[#111] text-[#888] hover:text-white"
           )}
         >
@@ -165,7 +167,7 @@ export default function NoCodePanel() {
       <div className="flex justify-end">
         <button
           onClick={() => setShowCreate(true)}
-          className="flex items-center gap-2 rounded-full bg-[#00FF88] px-5 py-2.5 text-sm font-semibold text-black shadow-lg shadow-[#00FF88]/20 transition-all hover:bg-[#00FF88]/90 active:scale-95"
+          className="flex items-center gap-2 rounded-full bg-[#00d4aa] px-5 py-2.5 text-sm font-semibold text-black shadow-lg shadow-[#00d4aa]/20 transition-all hover:bg-[#00d4aa]/90 active:scale-95"
         >
           <Plus className="h-4 w-4" />
           {subTab === "qr" ? "Create Payment QR" : "Create Payment Link"}
@@ -175,7 +177,7 @@ export default function NoCodePanel() {
       {/* List */}
       {loading ? (
         <div className="flex h-48 items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-[#00FF88]" />
+          <Loader2 className="h-8 w-8 animate-spin text-[#00d4aa]" />
         </div>
       ) : links.length === 0 ? (
         <EmptyState subTab={subTab} onCreate={() => setShowCreate(true)} />
@@ -230,7 +232,7 @@ export default function NoCodePanel() {
             className={cn(
               "flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-medium shadow-xl",
               toast.type === "success"
-                ? "bg-[#00FF88] text-black"
+                ? "bg-[#00d4aa] text-black"
                 : "bg-red-500 text-white"
             )}
           >
@@ -247,8 +249,8 @@ function EmptyState({ subTab, onCreate }: { subTab: "links" | "qr"; onCreate: ()
   const isQr = subTab === "qr";
   return (
     <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-white/[0.08] bg-[#111] p-12 text-center">
-      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#00FF88]/10">
-        {isQr ? <QrCode className="h-8 w-8 text-[#00FF88]" /> : <Link2 className="h-8 w-8 text-[#00FF88]" />}
+      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#00d4aa]/10">
+        {isQr ? <QrCode className="h-8 w-8 text-[#00d4aa]" /> : <Link2 className="h-8 w-8 text-[#00d4aa]" />}
       </div>
       <h3 className="mt-4 text-lg font-semibold text-white">
         {isQr ? "No QR codes yet" : "No payment links yet"}
@@ -260,7 +262,7 @@ function EmptyState({ subTab, onCreate }: { subTab: "links" | "qr"; onCreate: ()
       </p>
       <button
         onClick={onCreate}
-        className="mt-6 flex items-center gap-2 rounded-full bg-[#00FF88] px-5 py-2.5 text-sm font-semibold text-black"
+        className="mt-6 flex items-center gap-2 rounded-full bg-[#00d4aa] px-5 py-2.5 text-sm font-semibold text-black"
       >
         <Plus className="h-4 w-4" />
         {isQr ? "Create Payment QR" : "Create Payment Link"}
@@ -310,7 +312,7 @@ function DeleteButton({ intentId, apiKey, onDeleted }: { intentId: string; apiKe
             <div className="mt-6 flex gap-3">
               <button
                 onClick={() => setOpen(false)}
-                className="flex-1 rounded-xl border border-white/[0.06] bg-[#0a0a0a] py-3 text-sm font-medium text-white transition-colors hover:bg-white/[0.04]"
+                className="flex-1 rounded-xl border border-white/[0.06] bg-[#0b0b0b] py-3 text-sm font-medium text-white transition-colors hover:bg-white/[0.04]"
               >
                 Cancel
               </button>
@@ -427,16 +429,16 @@ function ShareButton({ link }: { link: PaymentLink }) {
               {qrUrl ? (
                 <img src={qrUrl} alt="Payment QR" className="h-32 w-32 rounded-xl" />
               ) : (
-                <div className="h-32 w-32 flex items-center justify-center rounded-xl bg-[#0a0a0a]">
-                  <Loader2 className="h-6 w-6 animate-spin text-[#00FF88]" />
+                <div className="h-32 w-32 flex items-center justify-center rounded-xl bg-[#0b0b0b]">
+                  <Loader2 className="h-6 w-6 animate-spin text-[#00d4aa]" />
                 </div>
               )}
               <span className="mt-2 text-xs text-[#666]">Scan to pay</span>
             </div>
 
             {/* Link box */}
-            <div className="mb-4 rounded-xl bg-[#0a0a0a] p-3">
-              <p className="truncate text-xs text-[#00FF88] font-mono">{link.pay_url}</p>
+            <div className="mb-4 rounded-xl bg-[#0b0b0b] p-3">
+              <p className="truncate text-xs text-[#00d4aa] font-mono">{link.pay_url}</p>
             </div>
 
             {/* Actions */}
@@ -462,7 +464,7 @@ function ShareButton({ link }: { link: PaymentLink }) {
               </button>
               <button
                 onClick={handleWhatsApp}
-                className="flex items-center justify-center gap-2 rounded-xl bg-[#00FF88]/10 py-2.5 text-xs font-medium text-[#00FF88] transition-colors hover:bg-[#00FF88]/20"
+                className="flex items-center justify-center gap-2 rounded-xl bg-[#00d4aa]/10 py-2.5 text-xs font-medium text-[#00d4aa] transition-colors hover:bg-[#00d4aa]/20"
               >
                 <MessageCircle className="h-3.5 w-3.5" />
                 WhatsApp
@@ -523,12 +525,12 @@ function QrCard({
           {link.name || `QR #${link.intent_id.slice(0, 8)}`}
         </h4>
       </div>
-      <div className="flex items-center justify-center rounded-xl bg-[#0a0a0a] p-4">
+      <div className="flex items-center justify-center rounded-xl bg-[#0b0b0b] p-4">
         {qrUrl ? (
           <img src={qrUrl} alt="Payment QR" className="h-40 w-40 rounded-lg" />
         ) : (
           <div className="h-40 w-40 flex items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-[#00FF88]" />
+            <Loader2 className="h-6 w-6 animate-spin text-[#00d4aa]" />
           </div>
         )}
       </div>
@@ -667,11 +669,11 @@ function CreateLinkPanel({
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div
         className={cn(
-          "relative w-full max-w-[420px] overflow-y-auto bg-[#0a0a0a] shadow-2xl",
+          "relative w-full max-w-[420px] overflow-y-auto bg-[#0b0b0b] shadow-2xl",
           "sm:border-l sm:border-white/[0.06]"
         )}
       >
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/[0.06] bg-[#0a0a0a]/95 px-6 py-4 backdrop-blur-xl">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/[0.06] bg-[#0b0b0b]/95 px-6 py-4 backdrop-blur-xl">
           <h2 className="text-lg font-semibold text-white">
             {subTab === "qr" ? "Create Payment QR" : "Create Payment Link"}
           </h2>
@@ -713,7 +715,7 @@ function CreateLinkPanel({
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="Summer Sale"
-                    className="w-full rounded-xl bg-[#111] border border-white/[0.06] px-4 py-3 text-sm text-white placeholder-[#444] outline-none focus:border-[#00FF88]/50 transition-colors"
+                    className="w-full rounded-xl bg-[#111] border border-white/[0.06] px-4 py-3 text-sm text-white placeholder-[#444] outline-none focus:border-[#00d4aa]/50 transition-colors"
                   />
                 </Field>
 
@@ -729,7 +731,7 @@ function CreateLinkPanel({
                       placeholder="10.000"
                       min="0"
                       step="0.001"
-                      className="w-full rounded-xl bg-[#111] border border-white/[0.06] px-4 py-3 pr-12 text-sm text-white placeholder-[#444] outline-none focus:border-[#00FF88]/50 transition-colors"
+                      className="w-full rounded-xl bg-[#111] border border-white/[0.06] px-4 py-3 pr-12 text-sm text-white placeholder-[#444] outline-none focus:border-[#00d4aa]/50 transition-colors"
                     />
                     <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-medium text-[#666]">TND</span>
                   </div>
@@ -742,7 +744,7 @@ function CreateLinkPanel({
                     placeholder="Shown to the payer on checkout"
                     maxLength={200}
                     rows={3}
-                    className="w-full rounded-xl bg-[#111] border border-white/[0.06] px-4 py-3 text-sm text-white placeholder-[#444] outline-none focus:border-[#00FF88]/50 transition-colors resize-none"
+                    className="w-full rounded-xl bg-[#111] border border-white/[0.06] px-4 py-3 text-sm text-white placeholder-[#444] outline-none focus:border-[#00d4aa]/50 transition-colors resize-none"
                   />
                   <p className="mt-1 text-right text-[11px] text-[#555]">{description.length}/200</p>
                 </Field>
@@ -753,7 +755,7 @@ function CreateLinkPanel({
                       type="date"
                       value={expiry}
                       onChange={(e) => setExpiry(e.target.value)}
-                      className="w-full rounded-xl bg-[#111] border border-white/[0.06] px-4 py-3 text-sm text-white outline-none focus:border-[#00FF88]/50 transition-colors"
+                      className="w-full rounded-xl bg-[#111] border border-white/[0.06] px-4 py-3 text-sm text-white outline-none focus:border-[#00d4aa]/50 transition-colors"
                     />
                   </Field>
                   <Field label="Max usages" optional>
@@ -763,7 +765,7 @@ function CreateLinkPanel({
                       onChange={(e) => setMaxUsages(e.target.value)}
                       placeholder="Unlimited"
                       min="1"
-                      className="w-full rounded-xl bg-[#111] border border-white/[0.06] px-4 py-3 text-sm text-white placeholder-[#444] outline-none focus:border-[#00FF88]/50 transition-colors"
+                      className="w-full rounded-xl bg-[#111] border border-white/[0.06] px-4 py-3 text-sm text-white placeholder-[#444] outline-none focus:border-[#00d4aa]/50 transition-colors"
                     />
                   </Field>
                 </div>
@@ -798,7 +800,7 @@ function CreateLinkPanel({
                     onClick={() => setAddFees(!addFees)}
                     className={cn(
                       "relative h-6 w-11 rounded-full transition-colors",
-                      addFees ? "bg-[#00FF88]" : "bg-[#333]"
+                      addFees ? "bg-[#00d4aa]" : "bg-[#333]"
                     )}
                   >
                     <span
@@ -818,7 +820,7 @@ function CreateLinkPanel({
                       className={cn(
                         "flex flex-1 items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm transition-all",
                         theme === "dark"
-                          ? "border-[#00FF88]/50 bg-[#00FF88]/5 text-[#00FF88]"
+                          ? "border-[#00d4aa]/50 bg-[#00d4aa]/5 text-[#00d4aa]"
                           : "border-white/[0.06] bg-[#111] text-[#888] hover:text-white"
                       )}
                     >
@@ -830,7 +832,7 @@ function CreateLinkPanel({
                       className={cn(
                         "flex flex-1 items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm transition-all",
                         theme === "light"
-                          ? "border-[#00FF88]/50 bg-[#00FF88]/5 text-[#00FF88]"
+                          ? "border-[#00d4aa]/50 bg-[#00d4aa]/5 text-[#00d4aa]"
                           : "border-white/[0.06] bg-[#111] text-[#888] hover:text-white"
                       )}
                     >
@@ -864,7 +866,7 @@ function CreateLinkPanel({
               <button
                 onClick={handleGenerate}
                 disabled={loading || !amount || parseFloat(amount) <= 0}
-                className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-[#00FF88] px-4 py-3.5 text-sm font-semibold text-black transition-all hover:bg-[#00FF88]/90 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-[#00d4aa] px-4 py-3.5 text-sm font-semibold text-black transition-all hover:bg-[#00d4aa]/90 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
                 {subTab === "qr" ? "Generate QR Code" : "Generate Link"}
@@ -914,7 +916,7 @@ function MethodToggle({
       className={cn(
         "flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-medium transition-all",
         active
-          ? "border-[#00FF88]/30 bg-[#00FF88]/10 text-[#00FF88]"
+          ? "border-[#00d4aa]/30 bg-[#00d4aa]/10 text-[#00d4aa]"
           : "border-white/[0.06] bg-[#111] text-[#888] hover:text-white"
       )}
     >
@@ -956,7 +958,7 @@ function PhoneMockup({
           {variableAmount ? (
             <div className={cn("text-2xl font-bold", isDark ? "text-white" : "text-gray-900")}>—</div>
           ) : (
-            <div className={cn("text-2xl font-bold", isDark ? "text-[#00FF88]" : "text-green-600")}>
+            <div className={cn("text-2xl font-bold", isDark ? "text-[#00d4aa]" : "text-green-600")}>
               {formatMillimes(amount)}
             </div>
           )}
@@ -971,7 +973,7 @@ function PhoneMockup({
           <div
             className={cn(
               "w-full rounded-lg py-2 text-center text-[10px] font-semibold",
-              isDark ? "bg-[#00FF88] text-black" : "bg-green-600 text-white"
+              isDark ? "bg-[#00d4aa] text-black" : "bg-green-600 text-white"
             )}
           >
             Pay Now
@@ -1017,8 +1019,8 @@ function SuccessState({
   return (
     <div className="space-y-6">
       <div className="flex flex-col items-center text-center">
-        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#00FF88]/10">
-          <Check className="h-7 w-7 text-[#00FF88]" />
+        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#00d4aa]/10">
+          <Check className="h-7 w-7 text-[#00d4aa]" />
         </div>
         <h3 className="mt-4 text-lg font-semibold text-white">
           {isQr ? "QR Code ready!" : "Payment link ready!"}
@@ -1032,7 +1034,7 @@ function SuccessState({
       {qrDataUrl && (
         <div className={cn(
           "flex flex-col items-center rounded-xl border p-4",
-          isQr ? "bg-[#0a0a0a] border-[#00FF88]/20" : "bg-[#111] border-white/[0.06]"
+          isQr ? "bg-[#0b0b0b] border-[#00d4aa]/20" : "bg-[#111] border-white/[0.06]"
         )}>
           <p className="mb-3 text-xs font-medium uppercase tracking-wider text-[#666]">QR Code</p>
           <img src={qrDataUrl} alt="Payment QR" className={cn("rounded-xl", isQr ? "h-56 w-56" : "h-48 w-48")} />
@@ -1041,15 +1043,15 @@ function SuccessState({
 
       {/* Link box — hidden for QR tab */}
       {!isQr && (
-        <div className="rounded-xl bg-[#111] border border-[#00FF88]/20 p-4">
+        <div className="rounded-xl bg-[#111] border border-[#00d4aa]/20 p-4">
           <p className="mb-2 text-xs font-medium uppercase tracking-wider text-[#666]">Payment URL</p>
           <div className="flex items-center gap-2">
-            <div className="flex-1 truncate rounded-lg bg-[#0a0a0a] px-3 py-2.5 text-sm text-[#00FF88]">
+            <div className="flex-1 truncate rounded-lg bg-[#0b0b0b] px-3 py-2.5 text-sm text-[#00d4aa]">
               {result.url}
             </div>
             <button
               onClick={handleCopy}
-              className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#00FF88]/10 text-[#00FF88] transition-colors hover:bg-[#00FF88]/20"
+              className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#00d4aa]/10 text-[#00d4aa] transition-colors hover:bg-[#00d4aa]/20"
             >
               {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
             </button>
@@ -1084,7 +1086,7 @@ function SuccessState({
         </button>
         <button
           onClick={onClose}
-          className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#00FF88] px-4 py-3 text-sm font-semibold text-black transition-colors hover:bg-[#00FF88]/90"
+          className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#00d4aa] px-4 py-3 text-sm font-semibold text-black transition-colors hover:bg-[#00d4aa]/90"
         >
           Done
         </button>
@@ -1118,8 +1120,8 @@ function InvoicesComingSoon() {
 
   return (
     <div className="rounded-2xl border border-dashed border-[rgba(0,255,136,0.2)] bg-[#111] p-8 text-center">
-      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#00FF88]/5 mx-auto">
-        <Smartphone className="h-7 w-7 text-[#00FF88]/60" />
+      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#00d4aa]/5 mx-auto">
+        <Smartphone className="h-7 w-7 text-[#00d4aa]/60" />
       </div>
       <h3 className="mt-4 text-lg font-semibold text-white">Invoicing — Coming Soon</h3>
       <p className="mt-2 max-w-sm mx-auto text-sm text-[#888]">
@@ -1131,7 +1133,7 @@ function InvoicesComingSoon() {
         className={cn(
           "mt-5 rounded-full px-5 py-2.5 text-sm font-medium transition-all",
           notified
-            ? "bg-[#00FF88]/10 text-[#00FF88] cursor-default"
+            ? "bg-[#00d4aa]/10 text-[#00d4aa] cursor-default"
             : "bg-white/[0.04] text-white hover:bg-white/[0.08]"
         )}
       >

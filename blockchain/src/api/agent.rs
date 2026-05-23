@@ -50,17 +50,34 @@ pub async fn apply(
 
     let mut fields = std::collections::HashMap::new();
     let mut tax_doc_path = None;
+    const MAX_FILE_SIZE: usize = 5 * 1024 * 1024; // 5MB per file
+    const ALLOWED_EXTENSIONS: &[&str] = &["pdf", "png", "jpg", "jpeg"];
+
     let mut rne_doc_path = None;
     let upload_base = std::env::var("UPLOAD_BASE_PATH").unwrap_or_else(|_| "./uploads".to_string());
 
     while let Some(field) = multipart.next_field().await.unwrap_or(None) {
         let name = field.name().unwrap_or("").to_string();
         if let Some(fname) = field.file_name() {
+            let ext = fname.split('.').last().unwrap_or("").to_lowercase();
+            // Validate file extension
+            if !ALLOWED_EXTENSIONS.contains(&ext.as_str()) {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({"error": format!("Invalid file type: .{ext}")})),
+                );
+            }
             let dir = format!("{}/agents/{}", upload_base, address);
             tokio::fs::create_dir_all(&dir).await.ok();
-            let ext = fname.split('.').last().unwrap_or("pdf");
             let target = format!("{}/{}.{}", dir, name, ext);
             let data = field.bytes().await.unwrap_or_default();
+            // Enforce size limit
+            if data.len() > MAX_FILE_SIZE {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({"error": format!("File too large: {} bytes (max {})", data.len(), MAX_FILE_SIZE)})),
+                );
+            }
             tokio::fs::write(&target, &data).await.ok();
             if name == "business_license" {
                 tax_doc_path = Some(target);

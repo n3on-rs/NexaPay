@@ -47,8 +47,6 @@ interface TestCard {
   description: string;
 }
 
-const isDemoMode = typeof window !== "undefined" ? false : process.env.NEXT_PUBLIC_DEMO_MODE === "true";
-
 export default function CheckoutPage() {
   const params = useParams();
   const intentId = String(params?.intentId || "");
@@ -149,13 +147,13 @@ export default function CheckoutPage() {
       <div
         className={cn(
           "flex min-h-screen items-center justify-center",
-          isDark ? "bg-[#080808]" : "bg-[#F5F5F5]",
+          isDark ? "bg-[#0b0b0b]" : "bg-[#F5F5F5]",
         )}
       >
         <Loader2
           className={cn(
             "h-8 w-8 animate-spin",
-            isDark ? "text-[#00FF88]" : "text-[#00AA55]",
+            isDark ? "text-[#00d4aa]" : "text-[#00AA55]",
           )}
         />
       </div>
@@ -251,7 +249,7 @@ function CheckoutActive({
     <div
       className={cn(
         "min-h-screen pb-8",
-        isDark ? "bg-[#080808] text-white" : "bg-[#F5F5F5] text-[#111]",
+        isDark ? "bg-[#0b0b0b] text-white" : "bg-[#F5F5F5] text-[#111]",
       )}
     >
       {/* Header */}
@@ -260,7 +258,7 @@ function CheckoutActive({
           <div
             className={cn(
               "h-8 w-8 rounded-lg flex items-center justify-center text-sm font-bold",
-              isDark ? "bg-[#00FF88] text-black" : "bg-[#00AA55] text-white",
+              isDark ? "bg-[#00d4aa] text-black" : "bg-[#00AA55] text-white",
             )}
           >
             N
@@ -355,7 +353,7 @@ function CheckoutActive({
                   className={cn(
                     "w-full rounded-xl px-4 py-3 text-center text-2xl font-bold outline-none transition-colors",
                     isDark
-                      ? "bg-[#0a0a0a] border border-white/[0.06] text-white placeholder-[#444] focus:border-[#00FF88]/50"
+                      ? "bg-[#0b0b0b] border border-white/[0.06] text-white placeholder-[#444] focus:border-[#00d4aa]/50"
                       : "bg-gray-50 border border-gray-200 text-[#111] placeholder-gray-300 focus:border-[#00AA55]/50",
                   )}
                 />
@@ -374,7 +372,7 @@ function CheckoutActive({
               className="text-4xl font-extrabold"
               style={{ fontFamily: "'Space Grotesk', sans-serif" }}
             >
-              <span className={isDark ? "text-[#00FF88]" : "text-[#00AA55]"}>
+              <span className={isDark ? "text-[#00d4aa]" : "text-[#00AA55]"}>
                 {formatAmount(intent.amount)}
               </span>
             </div>
@@ -417,7 +415,7 @@ function CheckoutActive({
                   className={cn(
                     "w-full rounded-xl px-4 py-3 text-sm outline-none transition-colors",
                     isDark
-                      ? "bg-[#0a0a0a] border border-white/[0.06] text-white placeholder-[#444] focus:border-[#00FF88]/50"
+                      ? "bg-[#0b0b0b] border border-white/[0.06] text-white placeholder-[#444] focus:border-[#00d4aa]/50"
                       : "bg-gray-50 border border-gray-200 text-[#111] placeholder-gray-300 focus:border-[#00AA55]/50",
                   )}
                 />
@@ -439,7 +437,7 @@ function CheckoutActive({
                   className={cn(
                     "w-full rounded-xl px-4 py-3 text-sm outline-none transition-colors",
                     isDark
-                      ? "bg-[#0a0a0a] border border-white/[0.06] text-white placeholder-[#444] focus:border-[#00FF88]/50"
+                      ? "bg-[#0b0b0b] border border-white/[0.06] text-white placeholder-[#444] focus:border-[#00d4aa]/50"
                       : "bg-gray-50 border border-gray-200 text-[#111] placeholder-gray-300 focus:border-[#00AA55]/50",
                   )}
                 />
@@ -474,7 +472,7 @@ function CheckoutActive({
                   className={cn(
                     "w-full rounded-xl pl-14 pr-4 py-3 text-sm outline-none transition-colors",
                     isDark
-                      ? "bg-[#0a0a0a] border border-white/[0.06] text-white placeholder-[#444] focus:border-[#00FF88]/50"
+                      ? "bg-[#0b0b0b] border border-white/[0.06] text-white placeholder-[#444] focus:border-[#00d4aa]/50"
                       : "bg-gray-50 border border-gray-200 text-[#111] placeholder-gray-300 focus:border-[#00AA55]/50",
                   )}
                 />
@@ -493,7 +491,7 @@ function CheckoutActive({
                 "flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-medium transition-all",
                 activeMethod === method
                   ? isDark
-                    ? "bg-[#00FF88] text-black"
+                    ? "bg-[#00d4aa] text-black"
                     : "bg-[#00AA55] text-white"
                   : isDark
                     ? "bg-[#111] text-[#888] border border-white/[0.06]"
@@ -689,14 +687,14 @@ function WalletForm({
           className={cn(
             "rounded-xl p-4 text-center",
             isDark
-              ? "bg-[#00FF88]/5 border border-[#00FF88]/10"
+              ? "bg-[#00d4aa]/5 border border-[#00d4aa]/10"
               : "bg-[#00AA55]/5 border border-[#00AA55]/10",
           )}
         >
           <p
             className={cn(
               "text-sm font-medium",
-              isDark ? "text-[#00FF88]" : "text-[#00AA55]",
+              isDark ? "text-[#00d4aa]" : "text-[#00AA55]",
             )}
           >
             Verification code sent
@@ -709,7 +707,7 @@ function WalletForm({
           >
             Enter the 6-digit code sent to {phoneHint || "your phone"}
           </p>
-          {!isDemoMode && devOtp && (
+          {devOtp && (
             <p className="mt-1 text-xs font-mono text-amber-400">
               Dev OTP: {devOtp}
             </p>
@@ -737,7 +735,7 @@ function WalletForm({
             className={cn(
               "w-full rounded-xl px-4 py-3 text-sm outline-none transition-colors text-center tracking-[0.5em]",
               isDark
-                ? "bg-[#0a0a0a] border border-white/[0.06] text-white placeholder-[#444] focus:border-[#00FF88]/50"
+                ? "bg-[#0b0b0b] border border-white/[0.06] text-white placeholder-[#444] focus:border-[#00d4aa]/50"
                 : "bg-gray-50 border border-gray-200 text-[#111] placeholder-gray-300 focus:border-[#00AA55]/50",
             )}
           />
@@ -768,7 +766,7 @@ function WalletForm({
               processing || otp.length !== 6
                 ? "opacity-50 cursor-not-allowed"
                 : "hover:opacity-90 active:scale-[0.98]",
-              isDark ? "bg-[#00FF88] text-black" : "bg-[#00AA55] text-white",
+              isDark ? "bg-[#00d4aa] text-black" : "bg-[#00AA55] text-white",
             )}
           >
             {processing ? (
@@ -812,7 +810,7 @@ function WalletForm({
             className={cn(
               "w-full rounded-xl pl-14 pr-4 py-3 text-sm outline-none transition-colors",
               isDark
-                ? "bg-[#0a0a0a] border border-white/[0.06] text-white placeholder-[#444] focus:border-[#00FF88]/50"
+                ? "bg-[#0b0b0b] border border-white/[0.06] text-white placeholder-[#444] focus:border-[#00d4aa]/50"
                 : "bg-gray-50 border border-gray-200 text-[#111] placeholder-gray-300 focus:border-[#00AA55]/50",
             )}
           />
@@ -837,7 +835,7 @@ function WalletForm({
           className={cn(
             "w-full rounded-xl px-4 py-3 text-sm outline-none transition-colors text-center tracking-[0.5em]",
             isDark
-              ? "bg-[#0a0a0a] border border-white/[0.06] text-white placeholder-[#444] focus:border-[#00FF88]/50"
+              ? "bg-[#0b0b0b] border border-white/[0.06] text-white placeholder-[#444] focus:border-[#00d4aa]/50"
               : "bg-gray-50 border border-gray-200 text-[#111] placeholder-gray-300 focus:border-[#00AA55]/50",
           )}
         />
@@ -851,7 +849,7 @@ function WalletForm({
           processing || phoneNumber.length < 8 || pin.length < 6
             ? "opacity-50 cursor-not-allowed"
             : "hover:opacity-90 active:scale-[0.98]",
-          isDark ? "bg-[#00FF88] text-black" : "bg-[#00AA55] text-white",
+          isDark ? "bg-[#00d4aa] text-black" : "bg-[#00AA55] text-white",
         )}
       >
         {processing ? (
@@ -1041,7 +1039,7 @@ function CardForm({
             className={cn(
               "w-full rounded-xl px-4 py-3 text-sm outline-none transition-colors",
               isDark
-                ? "bg-[#0a0a0a] border border-white/[0.06] text-white placeholder-[#444] focus:border-[#00FF88]/50"
+                ? "bg-[#0b0b0b] border border-white/[0.06] text-white placeholder-[#444] focus:border-[#00d4aa]/50"
                 : "bg-gray-50 border border-gray-200 text-[#111] placeholder-gray-300 focus:border-[#00AA55]/50",
             )}
           />
@@ -1064,7 +1062,7 @@ function CardForm({
             className={cn(
               "w-full rounded-xl px-4 py-3 text-sm outline-none transition-colors uppercase",
               isDark
-                ? "bg-[#0a0a0a] border border-white/[0.06] text-white placeholder-[#444] focus:border-[#00FF88]/50"
+                ? "bg-[#0b0b0b] border border-white/[0.06] text-white placeholder-[#444] focus:border-[#00d4aa]/50"
                 : "bg-gray-50 border border-gray-200 text-[#111] placeholder-gray-300 focus:border-[#00AA55]/50",
             )}
           />
@@ -1092,7 +1090,7 @@ function CardForm({
                 className={cn(
                   "w-full rounded-xl px-4 py-3 text-sm text-center outline-none transition-colors",
                   isDark
-                    ? "bg-[#0a0a0a] border border-white/[0.06] text-white placeholder-[#444] focus:border-[#00FF88]/50"
+                    ? "bg-[#0b0b0b] border border-white/[0.06] text-white placeholder-[#444] focus:border-[#00d4aa]/50"
                     : "bg-gray-50 border border-gray-200 text-[#111] placeholder-gray-300 focus:border-[#00AA55]/50",
                 )}
               />
@@ -1107,7 +1105,7 @@ function CardForm({
                 className={cn(
                   "w-full rounded-xl px-4 py-3 text-sm text-center outline-none transition-colors",
                   isDark
-                    ? "bg-[#0a0a0a] border border-white/[0.06] text-white placeholder-[#444] focus:border-[#00FF88]/50"
+                    ? "bg-[#0b0b0b] border border-white/[0.06] text-white placeholder-[#444] focus:border-[#00d4aa]/50"
                     : "bg-gray-50 border border-gray-200 text-[#111] placeholder-gray-300 focus:border-[#00AA55]/50",
                 )}
               />
@@ -1133,7 +1131,7 @@ function CardForm({
               className={cn(
                 "w-full rounded-xl px-4 py-3 text-sm text-center outline-none transition-colors",
                 isDark
-                  ? "bg-[#0a0a0a] border border-white/[0.06] text-white placeholder-[#444] focus:border-[#00FF88]/50"
+                  ? "bg-[#0b0b0b] border border-white/[0.06] text-white placeholder-[#444] focus:border-[#00d4aa]/50"
                   : "bg-gray-50 border border-gray-200 text-[#111] placeholder-gray-300 focus:border-[#00AA55]/50",
               )}
             />
@@ -1159,7 +1157,7 @@ function CardForm({
             <div
               className={cn(
                 "mt-2 overflow-hidden rounded-xl",
-                isDark ? "bg-[#0a0a0a]" : "bg-gray-50",
+                isDark ? "bg-[#0b0b0b]" : "bg-gray-50",
               )}
             >
               <table className="w-full text-xs">
@@ -1216,7 +1214,7 @@ function CardForm({
                       </td>
                       <td className="px-3 py-2">
                         {tc.behavior === "success" ? (
-                          <span className="text-[#00FF88]">✓</span>
+                          <span className="text-[#00d4aa]">✓</span>
                         ) : (
                           <span className="text-red-500">✗</span>
                         )}{" "}
@@ -1249,7 +1247,7 @@ function CardForm({
           processing || !cardValid
             ? "opacity-50 cursor-not-allowed"
             : "hover:opacity-90 active:scale-[0.98]",
-          isDark ? "bg-[#00FF88] text-black" : "bg-[#00AA55] text-white",
+          isDark ? "bg-[#00d4aa] text-black" : "bg-[#00AA55] text-white",
         )}
       >
         {processing ? (
@@ -1330,10 +1328,10 @@ function SuccessOverlay({
   return (
     <div
       className="fixed inset-0 z-50 flex flex-col items-center justify-center p-6"
-      style={{ background: isDark ? "#080808" : "#F5F5F5" }}
+      style={{ background: isDark ? "#0b0b0b" : "#F5F5F5" }}
     >
-      <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#00FF88]/10">
-        <Check className="h-10 w-10 text-[#00FF88]" />
+      <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#00d4aa]/10">
+        <Check className="h-10 w-10 text-[#00d4aa]" />
       </div>
       <h2
         className={cn(
@@ -1347,7 +1345,7 @@ function SuccessOverlay({
       <p
         className={cn(
           "mt-2 text-3xl font-bold",
-          isDark ? "text-[#00FF88]" : "text-[#00AA55]",
+          isDark ? "text-[#00d4aa]" : "text-[#00AA55]",
         )}
       >
         {formatAmount(amount)}
@@ -1406,7 +1404,7 @@ ${intent.order_id ? `<p><strong>Order:</strong> #${intent.order_id}</p>` : ""}
             className={cn(
               "flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold transition-all",
               isDark
-                ? "bg-[#00FF88] text-black hover:bg-[#00FF88]/90"
+                ? "bg-[#00d4aa] text-black hover:bg-[#00d4aa]/90"
                 : "bg-[#00AA55] text-white hover:bg-[#00AA55]/90",
             )}
           >
@@ -1465,7 +1463,7 @@ function SessionTimer({
                 ? "text-red-500"
                 : urgent
                   ? "text-amber-400"
-                  : "text-[#00FF88]",
+                  : "text-[#00d4aa]",
             )}
           />
           <span
@@ -1503,7 +1501,7 @@ function SessionTimer({
         <div
           className={cn(
             "h-full rounded-full transition-all duration-1000",
-            expired ? "bg-red-500" : urgent ? "bg-amber-400" : "bg-[#00FF88]",
+            expired ? "bg-red-500" : urgent ? "bg-amber-400" : "bg-[#00d4aa]",
           )}
           style={{ width: `${pct}%` }}
         />
@@ -1529,7 +1527,7 @@ function DeclinedOverlay({
   return (
     <div
       className="fixed inset-0 z-50 flex flex-col items-center justify-center p-6"
-      style={{ background: isDark ? "#080808" : "#F5F5F5" }}
+      style={{ background: isDark ? "#0b0b0b" : "#F5F5F5" }}
     >
       <div className="flex h-20 w-20 items-center justify-center rounded-full bg-red-500/10">
         <X className="h-10 w-10 text-red-500" />
@@ -1554,7 +1552,7 @@ function DeclinedOverlay({
         className={cn(
           "mt-6 flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold transition-all",
           isDark
-            ? "bg-[#00FF88] text-black hover:bg-[#00FF88]/90"
+            ? "bg-[#00d4aa] text-black hover:bg-[#00d4aa]/90"
             : "bg-[#00AA55] text-white hover:bg-[#00AA55]/90",
         )}
       >
@@ -1576,7 +1574,7 @@ function ErrorOverlay({
   return (
     <div
       className="fixed inset-0 z-50 flex flex-col items-center justify-center p-6"
-      style={{ background: isDark ? "#080808" : "#F5F5F5" }}
+      style={{ background: isDark ? "#0b0b0b" : "#F5F5F5" }}
     >
       <div className="flex h-20 w-20 items-center justify-center rounded-full bg-amber-500/10">
         <AlertCircle className="h-10 w-10 text-amber-500" />
@@ -1609,7 +1607,7 @@ function ErrorOverlay({
         className={cn(
           "mt-6 flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold transition-all",
           isDark
-            ? "bg-[#00FF88] text-black hover:bg-[#00FF88]/90"
+            ? "bg-[#00d4aa] text-black hover:bg-[#00d4aa]/90"
             : "bg-[#00AA55] text-white hover:bg-[#00AA55]/90",
         )}
       >
@@ -1624,7 +1622,7 @@ function NotFoundScreen({ isDark }: { isDark: boolean }) {
     <div
       className={cn(
         "flex min-h-screen flex-col items-center justify-center p-6",
-        isDark ? "bg-[#080808] text-white" : "bg-[#F5F5F5] text-[#111]",
+        isDark ? "bg-[#0b0b0b] text-white" : "bg-[#F5F5F5] text-[#111]",
       )}
     >
       <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#333]">
@@ -1659,11 +1657,11 @@ function AlreadyPaidScreen({
     <div
       className={cn(
         "flex min-h-screen flex-col items-center justify-center p-6",
-        isDark ? "bg-[#080808] text-white" : "bg-[#F5F5F5] text-[#111]",
+        isDark ? "bg-[#0b0b0b] text-white" : "bg-[#F5F5F5] text-[#111]",
       )}
     >
-      <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#00FF88]/10">
-        <Check className="h-10 w-10 text-[#00FF88]" />
+      <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#00d4aa]/10">
+        <Check className="h-10 w-10 text-[#00d4aa]" />
       </div>
       <h1 className="mt-6 text-2xl font-bold">Already Paid</h1>
       <p
@@ -1671,7 +1669,7 @@ function AlreadyPaidScreen({
       >
         This payment has already been completed.
       </p>
-      <p className="mt-4 text-xl font-bold text-[#00FF88]">
+      <p className="mt-4 text-xl font-bold text-[#00d4aa]">
         {formatAmount(intent.amount)}
       </p>
       <p
@@ -1694,7 +1692,7 @@ function ExpiredScreen({
     <div
       className={cn(
         "flex min-h-screen flex-col items-center justify-center p-6",
-        isDark ? "bg-[#080808] text-white" : "bg-[#F5F5F5] text-[#111]",
+        isDark ? "bg-[#0b0b0b] text-white" : "bg-[#F5F5F5] text-[#111]",
       )}
     >
       <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#333]">
@@ -1720,7 +1718,7 @@ function CancelledScreen({ isDark }: { isDark: boolean }) {
     <div
       className={cn(
         "flex min-h-screen flex-col items-center justify-center p-6",
-        isDark ? "bg-[#080808] text-white" : "bg-[#F5F5F5] text-[#111]",
+        isDark ? "bg-[#0b0b0b] text-white" : "bg-[#F5F5F5] text-[#111]",
       )}
     >
       <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#333]">
@@ -1747,7 +1745,7 @@ function ErrorScreen({
     <div
       className={cn(
         "flex min-h-screen flex-col items-center justify-center p-6",
-        isDark ? "bg-[#080808] text-white" : "bg-[#F5F5F5] text-[#111]",
+        isDark ? "bg-[#0b0b0b] text-white" : "bg-[#F5F5F5] text-[#111]",
       )}
     >
       <div className="flex h-20 w-20 items-center justify-center rounded-full bg-amber-500/10">
@@ -1764,7 +1762,7 @@ function ErrorScreen({
         className={cn(
           "mt-6 flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold transition-all",
           isDark
-            ? "bg-[#00FF88] text-black hover:bg-[#00FF88]/90"
+            ? "bg-[#00d4aa] text-black hover:bg-[#00d4aa]/90"
             : "bg-[#00AA55] text-white hover:bg-[#00AA55]/90",
         )}
       >

@@ -233,7 +233,7 @@ function CardInner() {
       <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 backdrop-blur-sm md:items-center">
         <div className="w-full max-w-sm rounded-t-3xl bg-[#111] p-6 md:rounded-3xl md:border md:border-white/[0.08]">
           <div className="mb-4 flex items-center justify-between">
-            <Lock className="h-8 w-8 text-[#00FF88]" />
+            <Lock className="h-8 w-8 text-[#00d4aa]" />
             <button onClick={() => { setShowPinModal(false); setPin(""); setPinError(""); }} className="rounded-full bg-white/[0.05] p-2 text-white/50 hover:text-white">
               <X className="h-4 w-4" />
             </button>
@@ -275,11 +275,11 @@ function CardInner() {
                 <div
                   className={cn(
                     "flex h-10 w-10 items-center justify-center rounded-full border transition-all",
-                    pin[i] ? "border-[#00FF88]/50 bg-[#161616]" : "border-white/10 bg-[#161616]"
+                    pin[i] ? "border-[#00d4aa]/50 bg-[#161616]" : "border-white/10 bg-[#161616]"
                   )}
                 >
                   {pin[i] ? (
-                    <div className="h-2.5 w-2.5 rounded-full bg-[#00FF88]" />
+                    <div className="h-2.5 w-2.5 rounded-full bg-[#00d4aa]" />
                   ) : null}
                 </div>
               </React.Fragment>
@@ -290,7 +290,7 @@ function CardInner() {
           <button
             onClick={() => verifyPinAndReveal(revealTarget!)}
             disabled={pin.length !== 6 || pinLoading}
-            className="mt-6 flex h-14 w-full items-center justify-center rounded-full bg-[#00FF88] text-[#080808] font-extrabold text-lg transition-all disabled:opacity-40"
+            className="mt-6 flex h-14 w-full items-center justify-center rounded-full bg-[#00d4aa] text-[#0b0b0b] font-extrabold text-lg transition-all disabled:opacity-40"
           >
             {pinLoading ? <span className="animate-pulse">Verifying...</span> : "Confirm"}
           </button>
@@ -312,7 +312,7 @@ function CardInner() {
           <button onClick={onCancel} disabled={isLoading} className="flex h-12 flex-1 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-white font-medium transition-all hover:bg-white/[0.06] disabled:opacity-40">
             {cancelLabel || "Cancel"}
           </button>
-          <button onClick={onConfirm} disabled={isLoading} className={cn("flex h-12 flex-1 items-center justify-center rounded-full font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed", danger ? "bg-red-500 text-white hover:bg-red-500/90" : "bg-amber-500 text-[#080808] hover:bg-amber-500/90")}>
+          <button onClick={onConfirm} disabled={isLoading} className={cn("flex h-12 flex-1 items-center justify-center rounded-full font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed", danger ? "bg-red-500 text-white hover:bg-red-500/90" : "bg-amber-500 text-[#0b0b0b] hover:bg-amber-500/90")}>
             {isLoading ? "Processing..." : (confirmLabel || "Confirm")}
           </button>
         </div>
@@ -321,7 +321,7 @@ function CardInner() {
   );
 
   return (
-    <div className="min-h-screen bg-[#080808] text-white font-inter selection:bg-[#00FF88] selection:text-black">
+    <div className="min-h-screen bg-[#0b0b0b] text-white font-inter selection:bg-[#00d4aa] selection:text-black">
       {showPinModal && <PinModal />}
       {showFreezeDialog && (
         <ConfirmDialog
@@ -349,7 +349,7 @@ function CardInner() {
       {toast && (
         <div className={cn(
           "fixed top-6 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-2 rounded-full border px-5 py-2.5 text-sm font-medium shadow-lg transition-all",
-          toast.type === "success" ? "border-[#00FF88]/30 bg-[#00FF88]/10 text-[#00FF88]" :
+          toast.type === "success" ? "border-[#00d4aa]/30 bg-[#00d4aa]/10 text-[#00d4aa]" :
           toast.type === "warning" ? "border-amber-500/30 bg-amber-500/10 text-amber-400" :
           "border-red-500/30 bg-red-500/10 text-red-400"
         )}>
@@ -398,12 +398,12 @@ function CardInner() {
                       <div className="flex items-center gap-2">
                         <p className={cn(
                           "font-mono text-[15px] tracking-[0.15em] transition-colors",
-                          revealed === "number" ? "text-[#00FF88]" : "text-white"
+                          revealed === "number" ? "text-[#00d4aa]" : "text-white"
                         )}>
                           {revealed === "number" ? simulatedFullNumber : maskCardNumber(last4)}
                         </p>
                         {revealed === "number" && (
-                          <span className="text-[10px] text-[#00FF88]">Hiding in {countdown}s</span>
+                          <span className="text-[10px] text-[#00d4aa]">Hiding in {countdown}s</span>
                         )}
                       </div>
                       <p className="mt-1 text-[11px] font-bold uppercase tracking-widest text-[#888]">{displayName.toUpperCase()}</p>
@@ -430,7 +430,7 @@ function CardInner() {
                 style={{
                   backfaceVisibility: "hidden",
                   transform: "rotateY(180deg)",
-                  background: "linear-gradient(135deg, #111 0%, #0a0a0a 100%)",
+                  background: "linear-gradient(135deg, #111 0%, #0b0b0b 100%)",
                 }}
               >
                 <div className="-mx-6 mt-2 h-10 bg-[#1a1a1a]" />
@@ -442,7 +442,7 @@ function CardInner() {
                       {revealed === "cvv" ? (
                         <div className="flex items-center gap-2">
                           <p className="font-mono text-sm text-white/90">{simulatedCvv}</p>
-                          <span className="text-[10px] text-[#00FF88]">Hiding in {countdown}s</span>
+                          <span className="text-[10px] text-[#00d4aa]">Hiding in {countdown}s</span>
                         </div>
                       ) : (
                         <div className="flex items-center gap-2">
@@ -470,7 +470,7 @@ function CardInner() {
         {/* ─── Status Bar ─── */}
         <div className="mt-5 flex items-center justify-center gap-16">
           <div className="flex items-center gap-2">
-            <span className={cn("h-2.5 w-2.5 rounded-full", frozen ? "bg-amber-400" : "bg-[#00FF88]")} />
+            <span className={cn("h-2.5 w-2.5 rounded-full", frozen ? "bg-amber-400" : "bg-[#00d4aa]")} />
             <span className="text-[13px] text-white/80">{frozen ? "Frozen" : "Active"}</span>
           </div>
           <span className="text-[13px] text-[#888]">VISA Virtual</span>
@@ -495,9 +495,9 @@ function CardInner() {
                 {row.key !== "card" && row.key !== "holder" && row.key !== "exp" && row.value && (
                   <button
                     onClick={() => handleCopy(row.value, row.key)}
-                    className="ml-3 opacity-0 group-hover:opacity-100 transition-opacity text-[#888] hover:text-[#00FF88]"
+                    className="ml-3 opacity-0 group-hover:opacity-100 transition-opacity text-[#888] hover:text-[#00d4aa]"
                   >
-                    {copiedKey === row.key ? <Check className="h-4 w-4 text-[#00FF88]" /> : <Copy className="h-4 w-4" />}
+                    {copiedKey === row.key ? <Check className="h-4 w-4 text-[#00d4aa]" /> : <Copy className="h-4 w-4" />}
                   </button>
                 )}
                 {row.key === "card" && (
@@ -520,7 +520,7 @@ function CardInner() {
             className={cn(
               "flex w-full items-center justify-center gap-2 rounded-full border px-5 py-3.5 text-[14px] font-semibold transition-all",
               frozen
-                ? "border-[#00FF88]/30 bg-[#00FF88]/10 text-[#00FF88]"
+                ? "border-[#00d4aa]/30 bg-[#00d4aa]/10 text-[#00d4aa]"
                 : "border-amber-500/30 bg-amber-500/[0.08] text-[#FFB800]"
             )}
           >
@@ -549,7 +549,7 @@ function CardInner() {
       <nav className="md:hidden fixed inset-x-0 bottom-0 z-40 flex h-16 items-center justify-around border-t border-white/[0.06] bg-[#0d0d0d] pb-[env(safe-area-inset-bottom)]">
         <Link href="/dashboard" className="flex flex-col items-center gap-1"><Home className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">Home</span></Link>
         <Link href="/send" className="flex flex-col items-center gap-1"><ArrowUpRight className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">Send</span></Link>
-        <Link href="/fund" className="relative -top-3 flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[#00FF88] text-[#080808] shadow-[0_8px_24px_rgba(0,255,136,0.35)]"><Plus className="h-5 w-5" /></Link>
+        <Link href="/fund" className="relative -top-3 flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[#00d4aa] text-[#0b0b0b] shadow-[0_8px_24px_rgba(0,255,136,0.35)]"><Plus className="h-5 w-5" /></Link>
         <Link href="/history" className="flex flex-col items-center gap-1"><Clock className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">History</span></Link>
         <Link href="/profile" className="flex flex-col items-center gap-1"><User className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">Profile</span></Link>
       </nav>

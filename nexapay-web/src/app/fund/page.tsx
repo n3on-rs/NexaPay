@@ -95,7 +95,7 @@ function QRCodeDisplay({ address, fullName }: { address: string; fullName: strin
   return (
     <div className="flex flex-col items-center">
       {/* QR Container */}
-      <div className="relative flex h-[280px] w-[280px] items-center justify-center rounded-3xl border border-[#00FF88]/20 bg-[#111] p-6 shadow-[0_0_60px_rgba(0,255,136,0.08)]">
+      <div className="relative flex h-[280px] w-[280px] items-center justify-center rounded-3xl border border-[#00d4aa]/20 bg-[#111] p-6 shadow-[0_0_60px_rgba(0,255,136,0.08)]">
         {/* Green glow behind */}
         <div
           className="pointer-events-none absolute inset-0 rounded-3xl opacity-40"
@@ -110,7 +110,7 @@ function QRCodeDisplay({ address, fullName }: { address: string; fullName: strin
         />
         {/* Logo overlay in center */}
         <div className="absolute inset-0 z-20 flex items-center justify-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl border-2 border-[#00FF88]/30 bg-[#080808] shadow-[0_0_30px_rgba(0,255,136,0.3)]">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl border-2 border-[#00d4aa]/30 bg-[#0b0b0b] shadow-[0_0_30px_rgba(0,255,136,0.3)]">
             <img src="/logo.png" alt="N" className="h-8 w-8 object-contain" />
           </div>
         </div>
@@ -125,8 +125,8 @@ function QRCodeDisplay({ address, fullName }: { address: string; fullName: strin
         <code className="text-[13px] text-[#888]">
           {address.slice(0, 8)}...{address.slice(-6)}
         </code>
-        <button onClick={handleCopy} className="text-[#888] hover:text-[#00FF88] transition-colors">
-          {copied ? <Check className="h-4 w-4 text-[#00FF88]" /> : <Copy className="h-4 w-4" />}
+        <button onClick={handleCopy} className="text-[#888] hover:text-[#00d4aa] transition-colors">
+          {copied ? <Check className="h-4 w-4 text-[#00d4aa]" /> : <Copy className="h-4 w-4" />}
         </button>
       </div>
 
@@ -241,10 +241,14 @@ function FundInner() {
           if (polls >= 10) { clearInterval(poll); setView("card-success"); }
         }, 3000);
       } else {
-        const msg = String((res.data as any).error || "");
-        if (msg.includes("declined") || msg.includes("card")) setError("Card declined. Check your card details.");
-        else if (msg.includes("balance") || msg.includes("Insufficient")) setError("Insufficient balance on source card.");
-        else setError(msg || "Payment failed. Please try again.");
+        if (res.status === 429) {
+          setError("Too many attempts. Please wait a moment before trying again.");
+        } else {
+          const msg = String((res.data as any).error || "");
+          if (msg.includes("declined") || msg.includes("card")) setError("Card declined. Check your card details.");
+          else if (msg.includes("balance") || msg.includes("Insufficient")) setError("Insufficient balance on source card.");
+          else setError(msg || "Payment failed. Please try again.");
+        }
       }
     } catch {
       setError("Network error. Please try again.");
@@ -267,7 +271,7 @@ function FundInner() {
   // ─── Selection View ───
   if (view === "select") {
     return (
-      <div className="min-h-screen bg-[#080808] text-white font-inter selection:bg-[#00FF88] selection:text-black">
+      <div className="min-h-screen bg-[#0b0b0b] text-white font-inter selection:bg-[#00d4aa] selection:text-black">
         <main className="mx-auto max-w-lg px-4 pt-10 pb-24 md:pb-8">
           <h1 className="font-space-grotesk text-[32px] font-extrabold text-white">Add Money</h1>
           <p className="mt-2 text-[15px] text-[#888]">Choose how you want to fund your wallet</p>
@@ -276,22 +280,22 @@ function FundInner() {
             {/* Card Payment */}
             <button
               onClick={() => setView("card")}
-              className="group flex w-full items-center gap-5 rounded-2xl border border-white/[0.08] bg-[#111] p-5 text-left transition-all hover:border-[#00FF88]/30 hover:bg-[#00FF88]/[0.03]"
+              className="group flex w-full items-center gap-5 rounded-2xl border border-white/[0.08] bg-[#111] p-5 text-left transition-all hover:border-[#00d4aa]/30 hover:bg-[#00d4aa]/[0.03]"
             >
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#00FF88]/10 text-[#00FF88] transition-colors group-hover:bg-[#00FF88]/15">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#00d4aa]/10 text-[#00d4aa] transition-colors group-hover:bg-[#00d4aa]/15">
                 <CreditCard className="h-7 w-7" />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-[17px] font-bold text-white">Card Payment</p>
                 <p className="mt-0.5 text-[13px] text-[#888]">Pay with debit or credit card</p>
               </div>
-              <ChevronRight className="h-5 w-5 shrink-0 text-[#555] transition-colors group-hover:text-[#00FF88]" />
+              <ChevronRight className="h-5 w-5 shrink-0 text-[#555] transition-colors group-hover:text-[#00d4aa]" />
             </button>
 
             {/* Bank Transfer */}
             <button
               onClick={() => setView("bank")}
-              className="group flex w-full items-center gap-5 rounded-2xl border border-white/[0.08] bg-[#111] p-5 text-left transition-all hover:border-[#00FF88]/30 hover:bg-[#00FF88]/[0.03]"
+              className="group flex w-full items-center gap-5 rounded-2xl border border-white/[0.08] bg-[#111] p-5 text-left transition-all hover:border-[#00d4aa]/30 hover:bg-[#00d4aa]/[0.03]"
             >
               <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/[0.05] text-white/70 transition-colors group-hover:bg-white/[0.08]">
                 <Landmark className="h-7 w-7" />
@@ -300,13 +304,13 @@ function FundInner() {
                 <p className="text-[17px] font-bold text-white">Bank Transfer</p>
                 <p className="mt-0.5 text-[13px] text-[#888]">Transfer from your bank account</p>
               </div>
-              <ChevronRight className="h-5 w-5 shrink-0 text-[#555] transition-colors group-hover:text-[#00FF88]" />
+              <ChevronRight className="h-5 w-5 shrink-0 text-[#555] transition-colors group-hover:text-[#00d4aa]" />
             </button>
 
             {/* QR Code */}
             <button
               onClick={() => setView("qr")}
-              className="group flex w-full items-center gap-5 rounded-2xl border border-white/[0.08] bg-[#111] p-5 text-left transition-all hover:border-[#00FF88]/30 hover:bg-[#00FF88]/[0.03]"
+              className="group flex w-full items-center gap-5 rounded-2xl border border-white/[0.08] bg-[#111] p-5 text-left transition-all hover:border-[#00d4aa]/30 hover:bg-[#00d4aa]/[0.03]"
             >
               <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/[0.05] text-white/70 transition-colors group-hover:bg-white/[0.08]">
                 <QrCode className="h-7 w-7" />
@@ -315,7 +319,7 @@ function FundInner() {
                 <p className="text-[17px] font-bold text-white">Receive via QR</p>
                 <p className="mt-0.5 text-[13px] text-[#888]">Share your QR code to receive funds</p>
               </div>
-              <ChevronRight className="h-5 w-5 shrink-0 text-[#555] transition-colors group-hover:text-[#00FF88]" />
+              <ChevronRight className="h-5 w-5 shrink-0 text-[#555] transition-colors group-hover:text-[#00d4aa]" />
             </button>
           </div>
 
@@ -330,7 +334,7 @@ function FundInner() {
         <nav className="md:hidden fixed inset-x-0 bottom-0 z-40 flex h-16 items-center justify-around border-t border-white/[0.06] bg-[#0d0d0d] pb-[env(safe-area-inset-bottom)]">
           <Link href="/dashboard" className="flex flex-col items-center gap-1"><Home className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">Home</span></Link>
           <Link href="/send" className="flex flex-col items-center gap-1"><ArrowUpRight className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">Send</span></Link>
-          <div className="relative -top-3 flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[#00FF88] text-[#080808] shadow-[0_8px_24px_rgba(0,255,136,0.35)]"><Plus className="h-5 w-5" /></div>
+          <div className="relative -top-3 flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[#00d4aa] text-[#0b0b0b] shadow-[0_8px_24px_rgba(0,255,136,0.35)]"><Plus className="h-5 w-5" /></div>
           <Link href="/history" className="flex flex-col items-center gap-1"><Clock className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">History</span></Link>
           <Link href="/profile" className="flex flex-col items-center gap-1"><User className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">Profile</span></Link>
         </nav>
@@ -341,7 +345,7 @@ function FundInner() {
   // ─── QR Code View ───
   if (view === "qr") {
     return (
-      <div className="min-h-screen bg-[#080808] text-white font-inter selection:bg-[#00FF88] selection:text-black">
+      <div className="min-h-screen bg-[#0b0b0b] text-white font-inter selection:bg-[#00d4aa] selection:text-black">
         <main className="mx-auto max-w-lg px-4 pt-8 pb-24 md:pb-8">
           {/* Header */}
           <div className="flex items-center gap-3">
@@ -362,15 +366,15 @@ function FundInner() {
               <p className="text-[12px] font-bold uppercase tracking-widest text-[#555]">How it works</p>
               <ol className="mt-3 space-y-3 text-[14px] text-[#888]">
                 <li className="flex items-start gap-3">
-                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#00FF88]/10 text-[10px] font-bold text-[#00FF88]">1</span>
+                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#00d4aa]/10 text-[10px] font-bold text-[#00d4aa]">1</span>
                   Share this QR code with the sender
                 </li>
                 <li className="flex items-start gap-3">
-                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#00FF88]/10 text-[10px] font-bold text-[#00FF88]">2</span>
+                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#00d4aa]/10 text-[10px] font-bold text-[#00d4aa]">2</span>
                   The sender scans it in their NexaPay app
                 </li>
                 <li className="flex items-start gap-3">
-                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#00FF88]/10 text-[10px] font-bold text-[#00FF88]">3</span>
+                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#00d4aa]/10 text-[10px] font-bold text-[#00d4aa]">3</span>
                   Money arrives in your wallet instantly
                 </li>
               </ol>
@@ -382,7 +386,7 @@ function FundInner() {
         <nav className="md:hidden fixed inset-x-0 bottom-0 z-40 flex h-16 items-center justify-around border-t border-white/[0.06] bg-[#0d0d0d] pb-[env(safe-area-inset-bottom)]">
           <Link href="/dashboard" className="flex flex-col items-center gap-1"><Home className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">Home</span></Link>
           <Link href="/send" className="flex flex-col items-center gap-1"><ArrowUpRight className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">Send</span></Link>
-          <div className="relative -top-3 flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[#00FF88] text-[#080808] shadow-[0_8px_24px_rgba(0,255,136,0.35)]"><Plus className="h-5 w-5" /></div>
+          <div className="relative -top-3 flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[#00d4aa] text-[#0b0b0b] shadow-[0_8px_24px_rgba(0,255,136,0.35)]"><Plus className="h-5 w-5" /></div>
           <Link href="/history" className="flex flex-col items-center gap-1"><Clock className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">History</span></Link>
           <Link href="/profile" className="flex flex-col items-center gap-1"><User className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">Profile</span></Link>
         </nav>
@@ -393,7 +397,7 @@ function FundInner() {
   // ─── Bank Transfer View ───
   if (view === "bank") {
     return (
-      <div className="min-h-screen bg-[#080808] text-white font-inter selection:bg-[#00FF88] selection:text-black">
+      <div className="min-h-screen bg-[#0b0b0b] text-white font-inter selection:bg-[#00d4aa] selection:text-black">
         <main className="mx-auto max-w-lg px-4 pt-8 pb-24 md:pb-8">
           <div className="flex items-center gap-3">
             <button
@@ -406,7 +410,7 @@ function FundInner() {
           </div>
 
           <div className="mt-10 rounded-2xl border border-white/[0.06] bg-[#111] p-6">
-            <Landmark className="h-8 w-8 text-[#00FF88]" />
+            <Landmark className="h-8 w-8 text-[#00d4aa]" />
             <h2 className="mt-4 text-lg font-bold text-white">Wire Transfer Instructions</h2>
             <p className="mt-2 text-[14px] text-[#888]">Transfer from any Tunisian bank to your NexaPay account using these details.</p>
 
@@ -437,7 +441,7 @@ function FundInner() {
         <nav className="md:hidden fixed inset-x-0 bottom-0 z-40 flex h-16 items-center justify-around border-t border-white/[0.06] bg-[#0d0d0d] pb-[env(safe-area-inset-bottom)]">
           <Link href="/dashboard" className="flex flex-col items-center gap-1"><Home className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">Home</span></Link>
           <Link href="/send" className="flex flex-col items-center gap-1"><ArrowUpRight className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">Send</span></Link>
-          <div className="relative -top-3 flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[#00FF88] text-[#080808] shadow-[0_8px_24px_rgba(0,255,136,0.35)]"><Plus className="h-5 w-5" /></div>
+          <div className="relative -top-3 flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[#00d4aa] text-[#0b0b0b] shadow-[0_8px_24px_rgba(0,255,136,0.35)]"><Plus className="h-5 w-5" /></div>
           <Link href="/history" className="flex flex-col items-center gap-1"><Clock className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">History</span></Link>
           <Link href="/profile" className="flex flex-col items-center gap-1"><User className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">Profile</span></Link>
         </nav>
@@ -448,17 +452,17 @@ function FundInner() {
   // ─── Card Success View ───
   if (view === "card-success") {
     return (
-      <div className="min-h-screen bg-[#080808] text-white font-inter selection:bg-[#00FF88] selection:text-black">
+      <div className="min-h-screen bg-[#0b0b0b] text-white font-inter selection:bg-[#00d4aa] selection:text-black">
         <main className="mx-auto max-w-lg px-4 pt-12 pb-24 md:pb-8">
           <div className="flex flex-col items-center animate-in zoom-in-95 fade-in duration-500">
-            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#00FF88] shadow-[0_0_50px_#00FF88]">
-              <Check className="h-10 w-10 text-[#080808]" />
+            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#00d4aa] shadow-[0_0_50px_#00d4aa]">
+              <Check className="h-10 w-10 text-[#0b0b0b]" />
             </div>
             <h2 className="mt-6 font-space-grotesk text-[28px] font-extrabold text-white">Wallet Funded!</h2>
-            <p className="mt-2 text-[24px] font-semibold text-[#00FF88]">+{formatMillimes(rawAmount)}</p>
+            <p className="mt-2 text-[24px] font-semibold text-[#00d4aa]">+{formatMillimes(rawAmount)}</p>
             <p className="mt-1 text-[14px] text-[#888]">New balance: {formatMillimes(balance)}</p>
             <div className="mt-8 flex w-full gap-3">
-              <Link href="/dashboard" className="flex h-14 flex-1 items-center justify-center gap-2 rounded-full bg-[#00FF88] text-[#080808] font-extrabold transition-all hover:bg-[#00FF88]/90">
+              <Link href="/dashboard" className="flex h-14 flex-1 items-center justify-center gap-2 rounded-full bg-[#00d4aa] text-[#0b0b0b] font-extrabold transition-all hover:bg-[#00d4aa]/90">
                 Back to Dashboard
               </Link>
               <button
@@ -475,7 +479,7 @@ function FundInner() {
         <nav className="md:hidden fixed inset-x-0 bottom-0 z-40 flex h-16 items-center justify-around border-t border-white/[0.06] bg-[#0d0d0d] pb-[env(safe-area-inset-bottom)]">
           <Link href="/dashboard" className="flex flex-col items-center gap-1"><Home className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">Home</span></Link>
           <Link href="/send" className="flex flex-col items-center gap-1"><ArrowUpRight className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">Send</span></Link>
-          <div className="relative -top-3 flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[#00FF88] text-[#080808] shadow-[0_8px_24px_rgba(0,255,136,0.35)]"><Plus className="h-5 w-5" /></div>
+          <div className="relative -top-3 flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[#00d4aa] text-[#0b0b0b] shadow-[0_8px_24px_rgba(0,255,136,0.35)]"><Plus className="h-5 w-5" /></div>
           <Link href="/history" className="flex flex-col items-center gap-1"><Clock className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">History</span></Link>
           <Link href="/profile" className="flex flex-col items-center gap-1"><User className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">Profile</span></Link>
         </nav>
@@ -485,7 +489,7 @@ function FundInner() {
 
   // ─── Card Payment View (default) ───
   return (
-    <div className="min-h-screen bg-[#080808] text-white font-inter selection:bg-[#00FF88] selection:text-black">
+    <div className="min-h-screen bg-[#0b0b0b] text-white font-inter selection:bg-[#00d4aa] selection:text-black">
       <main className="mx-auto max-w-lg px-4 pt-8 pb-24 md:pb-8">
         {/* Header */}
         <div className="flex items-center gap-3">
@@ -529,7 +533,7 @@ function FundInner() {
                   className={cn(
                     "shrink-0 rounded-full border px-5 py-2.5 text-[14px] font-medium transition-all",
                     active
-                      ? "border-[#00FF88] bg-[#00FF88]/10 text-[#00FF88]"
+                      ? "border-[#00d4aa] bg-[#00d4aa]/10 text-[#00d4aa]"
                       : "border-white/10 bg-[#161616] text-white/70 hover:border-white/20"
                   )}
                 >
@@ -591,11 +595,11 @@ function FundInner() {
               onBlur={handleCardBlur}
               placeholder="1234 5678 9012 3456"
               className={cn(
-                "w-full h-[60px] rounded-full bg-white/5 border outline-none pl-14 pr-14 text-base text-white font-inter placeholder:text-white/20 focus:border-[#00FF88] focus:ring-[3px] focus:ring-[#00FF88]/10 transition-all",
-                cardValid === true ? "border-[#00FF88]/40" : cardValid === false ? "border-red-500/40" : "border-white/10"
+                "w-full h-[60px] rounded-full bg-white/5 border outline-none pl-14 pr-14 text-base text-white font-inter placeholder:text-white/20 focus:border-[#00d4aa] focus:ring-[3px] focus:ring-[#00d4aa]/10 transition-all",
+                cardValid === true ? "border-[#00d4aa]/40" : cardValid === false ? "border-red-500/40" : "border-white/10"
               )}
             />
-            {cardValid === true && <Check className="absolute right-5 top-1/2 h-5 w-5 -translate-y-1/2 text-[#00FF88]" />}
+            {cardValid === true && <Check className="absolute right-5 top-1/2 h-5 w-5 -translate-y-1/2 text-[#00d4aa]" />}
             {cardValid === false && <span className="absolute right-5 top-1/2 -translate-y-1/2 text-sm text-red-400">✕</span>}
           </div>
           {cardValid === false && <p className="mt-2 text-sm text-red-400">Invalid card number</p>}
@@ -607,7 +611,7 @@ function FundInner() {
               value={expiry}
               onChange={(e) => setExpiry(formatExpiry(e.target.value))}
               placeholder="MM / YY"
-              className="h-[60px] w-1/2 rounded-full bg-white/5 border border-white/10 outline-none px-6 text-base text-white font-inter placeholder:text-white/20 focus:border-[#00FF88] focus:ring-[3px] focus:ring-[#00FF88]/10 transition-all"
+              className="h-[60px] w-1/2 rounded-full bg-white/5 border border-white/10 outline-none px-6 text-base text-white font-inter placeholder:text-white/20 focus:border-[#00d4aa] focus:ring-[3px] focus:ring-[#00d4aa]/10 transition-all"
             />
             <div className="relative w-1/2">
               <input
@@ -615,7 +619,7 @@ function FundInner() {
                 value={cvv}
                 onChange={(e) => setCvv(e.target.value.replace(/\D/g, "").slice(0, 3))}
                 placeholder="CVV"
-                className="h-[60px] w-full rounded-full bg-white/5 border border-white/10 outline-none px-6 pr-14 text-base text-white font-inter placeholder:text-white/20 focus:border-[#00FF88] focus:ring-[3px] focus:ring-[#00FF88]/10 transition-all"
+                className="h-[60px] w-full rounded-full bg-white/5 border border-white/10 outline-none px-6 pr-14 text-base text-white font-inter placeholder:text-white/20 focus:border-[#00d4aa] focus:ring-[3px] focus:ring-[#00d4aa]/10 transition-all"
               />
               <button
                 onClick={() => setShowCvv((s) => !s)}
@@ -632,7 +636,7 @@ function FundInner() {
             value={cardholder}
             onChange={(e) => setCardholder(e.target.value)}
             placeholder="Name on card"
-            className="mt-4 h-[60px] w-full rounded-full bg-white/5 border border-white/10 outline-none px-6 text-base text-white font-inter placeholder:text-white/20 focus:border-[#00FF88] focus:ring-[3px] focus:ring-[#00FF88]/10 transition-all uppercase"
+            className="mt-4 h-[60px] w-full rounded-full bg-white/5 border border-white/10 outline-none px-6 text-base text-white font-inter placeholder:text-white/20 focus:border-[#00d4aa] focus:ring-[3px] focus:ring-[#00d4aa]/10 transition-all uppercase"
           />
         </section>
 
@@ -640,7 +644,7 @@ function FundInner() {
         <button
           onClick={submitCard}
           disabled={!isFormValid || cardLoading}
-          className="mt-10 flex h-[60px] w-full items-center justify-center gap-2 rounded-full bg-[#00FF88] text-[#080808] font-extrabold text-lg transition-all hover:bg-[#00FF88]/90 disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(0,255,136,0.2)]"
+          className="mt-10 flex h-[60px] w-full items-center justify-center gap-2 rounded-full bg-[#00d4aa] text-[#0b0b0b] font-extrabold text-lg transition-all hover:bg-[#00d4aa]/90 disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(0,255,136,0.2)]"
         >
           {cardLoading ? (
             <><Loader2 className="h-5 w-5 animate-spin" /> Processing payment...</>
@@ -654,7 +658,7 @@ function FundInner() {
       <nav className="md:hidden fixed inset-x-0 bottom-0 z-40 flex h-16 items-center justify-around border-t border-white/[0.06] bg-[#0d0d0d] pb-[env(safe-area-inset-bottom)]">
         <Link href="/dashboard" className="flex flex-col items-center gap-1"><Home className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">Home</span></Link>
         <Link href="/send" className="flex flex-col items-center gap-1"><ArrowUpRight className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">Send</span></Link>
-        <div className="relative -top-3 flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[#00FF88] text-[#080808] shadow-[0_8px_24px_rgba(0,255,136,0.35)]"><Plus className="h-5 w-5" /></div>
+        <div className="relative -top-3 flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[#00d4aa] text-[#0b0b0b] shadow-[0_8px_24px_rgba(0,255,136,0.35)]"><Plus className="h-5 w-5" /></div>
         <Link href="/history" className="flex flex-col items-center gap-1"><Clock className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">History</span></Link>
         <Link href="/profile" className="flex flex-col items-center gap-1"><User className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">Profile</span></Link>
       </nav>

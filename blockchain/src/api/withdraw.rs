@@ -134,7 +134,7 @@ pub async fn withdraw_to_bank(
         );
     }
     if pin_upgrade {
-        let new_hash = hash_transaction_pin(&from, &pin, &state.encryption_key);
+        let new_hash = hash_transaction_pin(&from, &pin, &state.encryption_key, None);
         let _ = sqlx::query("UPDATE cards SET pin_hash = $1 WHERE chain_address = $2")
             .bind(&new_hash)
             .bind(&from)

@@ -29,12 +29,12 @@ export default function UserDetailPage() {
     setTimeout(() => { setMsg(""); if (res.ok) window.location.reload(); }, 1500);
   };
 
-  if (loading) return <div className="flex min-h-screen items-center justify-center bg-[#080808]"><Loader2 className="h-8 w-8 animate-spin text-[#00FF88]" /></div>;
-  if (!user) return <div className="flex min-h-screen items-center justify-center bg-[#080808] text-white">User not found</div>;
+  if (loading) return <div className="flex min-h-screen items-center justify-center bg-[#0b0b0b]"><Loader2 className="h-8 w-8 animate-spin text-[#00d4aa]" /></div>;
+  if (!user) return <div className="flex min-h-screen items-center justify-center bg-[#0b0b0b] text-white">User not found</div>;
 
   return (
-    <div className="min-h-screen bg-[#080808] text-white">
-      <div className="border-b border-white/[0.06] bg-[#0a0a0a]/80 px-6 py-4">
+    <div className="min-h-screen bg-[#0b0b0b] text-white">
+      <div className="border-b border-white/[0.06] bg-[#0b0b0b]/80 px-6 py-4">
         <div className="mx-auto flex max-w-4xl items-center gap-4">
           <button onClick={() => router.push("/admin/users")} className="rounded-lg p-2 text-[#666] hover:bg-white/[0.04] hover:text-white"><ArrowLeft className="h-5 w-5" /></button>
           <div>
@@ -44,15 +44,14 @@ export default function UserDetailPage() {
         </div>
       </div>
       <div className="mx-auto max-w-4xl px-6 py-8">
-        {msg && <div className="mb-4 rounded-xl bg-[#00FF88]/10 px-4 py-3 text-sm text-[#00FF88]">{msg}</div>}
+        {msg && <div className="mb-4 rounded-xl bg-[#00d4aa]/10 px-4 py-3 text-sm text-[#00d4aa]">{msg}</div>}
 
         {/* Overview */}
         <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
           {[
             { label: "Balance", value: user.balance_display, icon: CreditCard },
             { label: "Transactions", value: user.tx_count, icon: ArrowLeft },
-            { label: "KYC Status", value: user.kyc_status, icon: Shield },
-            { label: "Public Key", value: user.public_key ? `${user.public_key.slice(0, 12)}...` : "None", icon: Lock },
+{ label: "Public Key", value: user.public_key ? `${user.public_key.slice(0, 12)}...` : "None", icon: Lock },
           ].map((s) => (
             <div key={s.label} className="rounded-2xl border border-white/[0.06] bg-[#111] p-4">
               <div className="flex items-center justify-between">
@@ -86,7 +85,7 @@ export default function UserDetailPage() {
             <div className="rounded-2xl border border-red-500/20 bg-[#111] p-6">
               <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-red-400"><Lock className="h-4 w-4" />Account Control</h3>
               <p className="mb-4 text-xs text-[#666]">{user.is_frozen ? "This account is currently frozen." : "Freeze this account to prevent all transactions."}</p>
-              <button onClick={toggleFreeze} className={`flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold transition-all ${user.is_frozen ? "bg-[#00FF88] text-black hover:bg-[#00FF88]/90" : "bg-red-500/10 text-red-400 hover:bg-red-500/20"}`}>
+              <button onClick={toggleFreeze} className={`flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold transition-all ${user.is_frozen ? "bg-[#00d4aa] text-black hover:bg-[#00d4aa]/90" : "bg-red-500/10 text-red-400 hover:bg-red-500/20"}`}>
                 {user.is_frozen ? <><Unlock className="h-4 w-4" /> Unfreeze Account</> : <><Lock className="h-4 w-4" /> Freeze Account</>}
               </button>
             </div>
@@ -99,14 +98,14 @@ export default function UserDetailPage() {
             <h3 className="mb-4 text-sm font-semibold text-white">Freeze History</h3>
             <div className="space-y-2">
               {user.freeze_history.map((f: any, i: number) => (
-                <div key={i} className="flex items-center justify-between rounded-lg bg-[#0a0a0a] px-4 py-3 text-xs">
+                <div key={i} className="flex items-center justify-between rounded-lg bg-[#0b0b0b] px-4 py-3 text-xs">
                   <div>
                     <span className="text-white">{f.reason}</span>
                     <span className="ml-2 text-[#555]">({f.legal_basis})</span>
                   </div>
                   <div className="text-[#666]">
                     {f.admin} — {new Date(f.frozen_at).toLocaleDateString()}
-                    {f.unfrozen_at && <span className="ml-2 text-[#00FF88]">Unfrozen</span>}
+                    {f.unfrozen_at && <span className="ml-2 text-[#00d4aa]">Unfrozen</span>}
                   </div>
                 </div>
               ))}

@@ -95,7 +95,7 @@ function NotificationInner() {
   const unreadCount = notifications.filter((n) => !n.is_read).length;
 
   return (
-    <div className="min-h-screen bg-[#080808] text-white font-inter selection:bg-[#00FF88] selection:text-black">
+    <div className="min-h-screen bg-[#0b0b0b] text-white font-inter selection:bg-[#00d4aa] selection:text-black">
       <main className="mx-auto max-w-lg px-4 pt-8 pb-24 md:pb-8">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -111,7 +111,7 @@ function NotificationInner() {
           {notifications.length > 0 && (
             <button
               onClick={handleMarkAllRead}
-              className="flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] px-4 py-2 text-[12px] font-medium text-[#888] transition-all hover:border-[#00FF88]/20 hover:text-white"
+              className="flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] px-4 py-2 text-[12px] font-medium text-[#888] transition-all hover:border-[#00d4aa]/20 hover:text-white"
             >
               <CheckCheck className="h-3.5 w-3.5" /> Mark all read
             </button>
@@ -146,13 +146,13 @@ function NotificationInner() {
                     "flex w-full items-start gap-3 rounded-2xl border px-4 py-3.5 text-left transition-all",
                     n.is_read
                       ? "border-white/[0.04] bg-[#111] opacity-60"
-                      : "border-[#00FF88]/10 bg-[#00FF88]/[0.03] hover:bg-[#00FF88]/[0.05]"
+                      : "border-[#00d4aa]/10 bg-[#00d4aa]/[0.03] hover:bg-[#00d4aa]/[0.05]"
                   )}
                 >
                   <div
                     className={cn(
                       "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
-                      isCredit ? "bg-[#00FF88]/10 text-[#00FF88]" : "bg-white/[0.05] text-[#888]"
+                      isCredit ? "bg-[#00d4aa]/10 text-[#00d4aa]" : "bg-white/[0.05] text-[#888]"
                     )}
                   >
                     {isCredit ? <ArrowDownLeft className="h-4 w-4" /> : <ArrowUpLeft className="h-4 w-4" />}
@@ -166,7 +166,7 @@ function NotificationInner() {
                     </p>
                     {n.memo && <p className="mt-1 text-[12px] text-[#666]">{n.memo}</p>}
                   </div>
-                  {!n.is_read && <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#00FF88]" />}
+                  {!n.is_read && <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#00d4aa]" />}
                 </button>
               );
             })
@@ -178,7 +178,7 @@ function NotificationInner() {
       <nav className="md:hidden fixed inset-x-0 bottom-0 z-40 flex h-16 items-center justify-around border-t border-white/[0.06] bg-[#0d0d0d] pb-[env(safe-area-inset-bottom)]">
         <Link href="/dashboard" className="flex flex-col items-center gap-1"><Home className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">Home</span></Link>
         <Link href="/send" className="flex flex-col items-center gap-1"><ArrowUpRight className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">Send</span></Link>
-        <Link href="/fund" className="relative -top-3 flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[#00FF88] text-[#080808] shadow-[0_8px_24px_rgba(0,255,136,0.35)]"><Plus className="h-5 w-5" /></Link>
+        <Link href="/fund" className="relative -top-3 flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[#00d4aa] text-[#0b0b0b] shadow-[0_8px_24px_rgba(0,255,136,0.35)]"><Plus className="h-5 w-5" /></Link>
         <Link href="/history" className="flex flex-col items-center gap-1"><Clock className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">History</span></Link>
         <Link href="/profile" className="flex flex-col items-center gap-1"><User className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">Profile</span></Link>
       </nav>

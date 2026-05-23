@@ -116,7 +116,7 @@ function HistoryInner() {
   }, [transactions, filter, searchQuery]);
 
   return (
-    <div className="min-h-screen bg-[#080808] text-white font-inter selection:bg-[#00FF88] selection:text-black">
+    <div className="min-h-screen bg-[#0b0b0b] text-white font-inter selection:bg-[#00d4aa] selection:text-black">
       <main className="mx-auto max-w-lg px-4 pt-8 pb-24 md:pb-8">
         {/* Header */}
         <div className="flex items-center gap-3">
@@ -131,7 +131,7 @@ function HistoryInner() {
 
         {/* Search bar */}
         <div className="relative mt-6">
-          <div className="relative flex h-14 items-center rounded-full border border-white/10 bg-white/5 px-5 transition-all focus-within:border-[#00FF88] focus-within:ring-[3px] focus-within:ring-[#00FF88]/10">
+          <div className="relative flex h-14 items-center rounded-full border border-white/10 bg-white/5 px-5 transition-all focus-within:border-[#00d4aa] focus-within:ring-[3px] focus-within:ring-[#00d4aa]/10">
             <Search className="h-[18px] w-[18px] shrink-0 text-[#888]" />
             <input
               type="text"
@@ -157,7 +157,7 @@ function HistoryInner() {
               className={cn(
                 "flex-1 rounded-full border px-4 py-2 text-[13px] font-medium transition-all",
                 filter === f
-                  ? "border-[#00FF88]/30 bg-[#00FF88]/10 text-[#00FF88]"
+                  ? "border-[#00d4aa]/30 bg-[#00d4aa]/10 text-[#00d4aa]"
                   : "border-white/[0.06] bg-white/[0.02] text-[#888] hover:border-white/[0.10]"
               )}
             >
@@ -199,7 +199,7 @@ function HistoryInner() {
                     <div
                       className={cn(
                         "flex h-10 w-10 items-center justify-center rounded-full text-xs font-bold",
-                        isCredit ? "bg-[#00FF88]/15 text-[#00FF88]" : "bg-white/[0.06] text-[#888]"
+                        isCredit ? "bg-[#00d4aa]/15 text-[#00d4aa]" : "bg-white/[0.06] text-[#888]"
                       )}
                     >
                       {getInitials(name)}
@@ -207,7 +207,7 @@ function HistoryInner() {
                     <div
                       className={cn(
                         "absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full border-2 border-[#111] text-[8px] font-bold",
-                        isCredit ? "bg-[#00FF88] text-[#080808]" : "bg-red-500 text-white"
+                        isCredit ? "bg-[#00d4aa] text-[#0b0b0b]" : "bg-red-500 text-white"
                       )}
                     >
                       {isCredit ? "↓" : "↑"}
@@ -218,10 +218,10 @@ function HistoryInner() {
                     <p className="text-[12px] text-[#888]">{relativeTime(tx.timestamp)} · {parseTransactionMemo(tx.memo).label}</p>
                   </div>
                   <div className="text-right">
-                    <p className={cn("text-[14px] font-semibold", isCredit ? "text-[#00FF88]" : "text-red-400")}>
+                    <p className={cn("text-[14px] font-semibold", isCredit ? "text-[#00d4aa]" : "text-red-400")}>
                       {isCredit ? "+" : "-"}{tx.amount_display}
                     </p>
-                    <span className="mt-0.5 inline-block rounded-full bg-[#00FF88]/10 px-2 py-0.5 text-[10px] font-bold text-[#00FF88]">
+                    <span className="mt-0.5 inline-block rounded-full bg-[#00d4aa]/10 px-2 py-0.5 text-[10px] font-bold text-[#00d4aa]">
                       Confirmed
                     </span>
                   </div>
@@ -239,8 +239,8 @@ function HistoryInner() {
       <nav className="md:hidden fixed inset-x-0 bottom-0 z-40 flex h-16 items-center justify-around border-t border-white/[0.06] bg-[#0d0d0d] pb-[env(safe-area-inset-bottom)]">
         <Link href="/dashboard" className="flex flex-col items-center gap-1"><Home className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">Home</span></Link>
         <Link href="/send" className="flex flex-col items-center gap-1"><ArrowUpRight className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">Send</span></Link>
-        <Link href="/fund" className="relative -top-3 flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[#00FF88] text-[#080808] shadow-[0_8px_24px_rgba(0,255,136,0.35)]"><Plus className="h-5 w-5" /></Link>
-        <div className="flex flex-col items-center gap-1"><Clock className="h-5 w-5 text-[#00FF88]" /><span className="text-[10px] text-[#00FF88]">History</span></div>
+        <Link href="/fund" className="relative -top-3 flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[#00d4aa] text-[#0b0b0b] shadow-[0_8px_24px_rgba(0,255,136,0.35)]"><Plus className="h-5 w-5" /></Link>
+        <div className="flex flex-col items-center gap-1"><Clock className="h-5 w-5 text-[#00d4aa]" /><span className="text-[10px] text-[#00d4aa]">History</span></div>
         <Link href="/profile" className="flex flex-col items-center gap-1"><User className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">Profile</span></Link>
       </nav>
     </div>

@@ -29,10 +29,10 @@ import {
   ExternalLink,
 } from "lucide-react";
 
-const ACCENT = "#00FF88";
+const ACCENT = "#00d4aa";
 
 const regField =
-  "h-12 rounded-xl border border-white/[0.08] bg-[#0a0b0e] px-3.5 text-sm text-white outline-none transition placeholder:text-white/35 focus-visible:border-[#00FF88]/55 focus-visible:ring-2 focus-visible:ring-[#00FF88]/15";
+  "h-12 rounded-xl border border-white/[0.08] bg-[#0a0b0e] px-3.5 text-sm text-white outline-none transition placeholder:text-white/35 focus-visible:border-[#00d4aa]/55 focus-visible:ring-2 focus-visible:ring-[#00d4aa]/15";
 
 
 export function RegisterWizard() {
@@ -170,7 +170,7 @@ export function RegisterWizard() {
                 key={i}
                 className={cn(
                   "h-1 flex-1 rounded-full transition-colors",
-                  i <= step ? "bg-[#00FF88]" : "bg-white/10",
+                  i <= step ? "bg-[#00d4aa]" : "bg-white/10",
                 )}
               />
             ))}
@@ -267,13 +267,13 @@ export function RegisterWizard() {
                   type="checkbox"
                   checked={termsAccepted}
                   onChange={(e) => setTermsAccepted(e.target.checked)}
-                  className="mt-0.5 size-4 shrink-0 rounded border-white/25 bg-[#0a0b0e] text-[#00FF88] focus:ring-[#00FF88]/40 focus:ring-offset-0"
+                  className="mt-0.5 size-4 shrink-0 rounded border-white/25 bg-[#0a0b0e] text-[#00d4aa] focus:ring-[#00d4aa]/40 focus:ring-offset-0"
                 />
                 <span>
                   I accept the{" "}
                   <Link
                     href="#"
-                    className="inline-flex items-center gap-0.5 font-medium text-[#00FF88] hover:underline"
+                    className="inline-flex items-center gap-0.5 font-medium text-[#00d4aa] hover:underline"
                   >
                     terms and conditions
                     <ExternalLink className="size-3 opacity-80" aria-hidden />
@@ -287,10 +287,10 @@ export function RegisterWizard() {
               <Button
                 type="submit"
                 disabled={loading1}
-                className="mt-1 flex h-[52px] w-full items-center justify-center gap-2 rounded-full bg-[#00FF88] text-base font-semibold text-[#080808] shadow-[0_0_36px_-10px_rgba(0,255,136,0.55)] hover:bg-[#33ffa3]"
+                className="mt-1 flex h-[52px] w-full items-center justify-center gap-2 rounded-full bg-[#00d4aa] text-base font-semibold text-[#0b0b0b] shadow-[0_0_36px_-10px_rgba(0,255,136,0.55)] hover:bg-[#33ffa3]"
               >
                 {loading1 ? (
-                  <Spinner className="size-5 text-[#080808]" />
+                  <Spinner className="size-5 text-[#0b0b0b]" />
                 ) : (
                   <>
                     Continue
@@ -331,11 +331,11 @@ export function RegisterWizard() {
               <Button
                 type="submit"
                 disabled={loadingPin || pin.length !== 6 || pinConfirm.length !== 6}
-                className="flex h-[52px] w-full items-center justify-center gap-2 rounded-full font-semibold text-[#080808]"
+                className="flex h-[52px] w-full items-center justify-center gap-2 rounded-full font-semibold text-[#0b0b0b]"
                 style={{ backgroundColor: ACCENT }}
               >
                 {loadingPin ? (
-                  <Spinner className="size-5 text-[#080808]" />
+                  <Spinner className="size-5 text-[#0b0b0b]" />
                 ) : (
                   <>
                     <ArrowRight className="size-5" aria-hidden />
@@ -350,7 +350,7 @@ export function RegisterWizard() {
             Already have an account?{" "}
             <Link
               href="/login"
-              className="font-semibold text-[#00FF88] hover:underline"
+              className="font-semibold text-[#00d4aa] hover:underline"
             >
               Sign in
             </Link>

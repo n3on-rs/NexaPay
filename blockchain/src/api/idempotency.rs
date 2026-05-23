@@ -15,7 +15,6 @@ use chrono::Utc;
 use serde_json::Value;
 use sqlx::PgPool;
 use sqlx::Row;
-use uuid::Uuid;
 
 use crate::crypto::sha256_hex;
 

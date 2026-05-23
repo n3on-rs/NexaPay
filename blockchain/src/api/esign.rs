@@ -1,6 +1,7 @@
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::Json;
+use printpdf::*;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sqlx::Row;
@@ -144,7 +145,7 @@ fn generate_account_contract_text(
     address_line: &str,
 ) -> String {
     format!(
-        r#"NEXAPAY — ELECTRONIC ACCOUNT OPENING AGREEMENT
+        r#"GLITCH INC — ELECTRONIC ACCOUNT OPENING AGREEMENT
 Document ID: {doc_id}
 Date: {date}
 Blockchain Address: {address}
@@ -154,9 +155,9 @@ PARTIES
 ═══════════════════════════════════════════════════════════════════
 
 1.  SERVICE PROVIDER
-    NexaPay Financial Technologies S.A.
+    Glitch INC
     Registered in the Republic of Tunisia
-    Financial Services License: BCE/2024/NXP-001
+    Financial Services License: BCE/2024/GI-001
 
 2.  CUSTOMER ("Account Holder")
     Full Legal Name: {full_name}
@@ -172,10 +173,10 @@ PARTIES
 1. DEFINITIONS
 ═══════════════════════════════════════════════════════════════════
 
-"Account" means the electronic money account opened in your name on the NexaPay platform.
-"E-Wallet" means the digital wallet services provided by NexaPay.
+"Account" means the electronic money account opened in your name on the Glitch INC platform.
+"E-Wallet" means the digital wallet services provided by Glitch INC.
 "Fiat Currency" means Tunisian Dinar (TND) and any other supported national currency.
-"Digital Asset" means any blockchain-native token or cryptocurrency supported by NexaPay.
+"Digital Asset" means any blockchain-native token or cryptocurrency supported by Glitch INC.
 "Transaction" means any transfer, payment, deposit, or withdrawal initiated through your Account.
 "KYC" means Know Your Customer identification and verification procedures.
 "AML" means Anti-Money Laundering compliance procedures.
@@ -184,7 +185,7 @@ PARTIES
 2. SCOPE OF SERVICES
 ═══════════════════════════════════════════════════════════════════
 
-NexaPay agrees to provide you with the following services:
+Glitch INC agrees to provide you with the following services:
 
 2.1  Electronic Money Account
      — Issuance of a unique IBAN and RIB for receiving fiat transfers.
@@ -214,14 +215,14 @@ NexaPay agrees to provide you with the following services:
      (c) The information you provided is true, accurate, and complete;
      (d) You are not subject to any sanctions or financial restrictions.
 
-3.2  You consent to NexaPay performing identity verification checks,
+3.2  You consent to Glitch INC performing identity verification checks,
      including but not limited to:
      — Verification of your CIN against the National Identity Database;
      — Automated extraction and validation of your CIN document;
      — Screening against sanctions lists and PEP databases;
      — Ongoing transaction monitoring for suspicious activity.
 
-3.3  NexaPay reserves the right to suspend or terminate your Account
+3.3  Glitch INC reserves the right to suspend or terminate your Account
      if KYC/AML checks reveal any discrepancies or risks.
 
 ═══════════════════════════════════════════════════════════════════
@@ -233,7 +234,7 @@ NexaPay agrees to provide you with the following services:
 4.3  International Transfers: 1.5% per transaction (minimum 5.000 TND).
 4.4  Card Transactions: FREE (merchant interchange applies).
 4.5  Blockchain Transaction Fees: Network fees only (paid to miners/validators).
-4.6  NexaPay may revise fee schedules with 30 days prior notice.
+4.6  Glitch INC may revise fee schedules with 30 days prior notice.
 
 ═══════════════════════════════════════════════════════════════════
 5. TRANSACTION LIMITS
@@ -242,7 +243,7 @@ NexaPay agrees to provide you with the following services:
 5.1  Daily Transfer Limit:     50,000 TND (or equivalent).
 5.2  Monthly Transfer Limit:   500,000 TND (or equivalent).
 5.3  Single Transaction Limit: 20,000 TND (or equivalent).
-5.4  NexaPay may adjust limits based on your KYC tier and risk profile.
+5.4  Glitch INC may adjust limits based on your KYC tier and risk profile.
 
 ═══════════════════════════════════════════════════════════════════
 6. SECURITY & AUTHENTICATION
@@ -253,14 +254,14 @@ NexaPay agrees to provide you with the following services:
      — Recovery phrase (if applicable);
      — Device access credentials.
 
-6.2  NexaPay implements the following security measures:
+6.2  Glitch INC implements the following security measures:
      — AES-256-GCM encryption for all sensitive data at rest;
      — Rate limiting on authentication endpoints;
      — IP-based anomaly detection;
      — Blockchain anchoring of all signed authorizations;
      — Audit logging of all account activities.
 
-6.3  You agree to immediately notify NexaPay of any unauthorized
+6.3  You agree to immediately notify Glitch INC of any unauthorized
      access or suspicious activity.
 
 ═══════════════════════════════════════════════════════════════════
@@ -272,7 +273,7 @@ NexaPay agrees to provide you with the following services:
      (b) Your electronic signature is legally binding under Tunisian
          Law No. 2002-50 on Electronic Exchanges and Commerce;
      (c) The cryptographic hash of this contract will be anchored on
-         the NexaPay blockchain as immutable proof of agreement.
+         the Glitch INC blockchain as immutable proof of agreement.
 
 7.2  Your signature data is encrypted with AES-256-GCM and stored
      securely. The original contract text and your signature hash are
@@ -282,7 +283,7 @@ NexaPay agrees to provide you with the following services:
 8. DATA PRIVACY & PROCESSING
 ═══════════════════════════════════════════════════════════════════
 
-8.1  NexaPay processes your personal data in accordance with:
+8.1  Glitch INC processes your personal data in accordance with:
      — Law No. 2004-63 on the Protection of Personal Data (Tunisia);
      — GDPR principles (where applicable to international users).
 
@@ -302,7 +303,7 @@ NexaPay agrees to provide you with the following services:
 9.1  You may close your Account at any time via the mobile app
      or by written request to support@nexapay.space.
 
-9.2  NexaPay may suspend or terminate your Account:
+9.2  Glitch INC may suspend or terminate your Account:
      — Upon 30 days written notice for convenience;
      — Immediately for fraud, money laundering, or terrorism financing;
      — Immediately for breach of these terms.
@@ -315,7 +316,7 @@ NexaPay agrees to provide you with the following services:
 ═══════════════════════════════════════════════════════════════════
 
 10.1 This Agreement is governed by the laws of the Republic of Tunisia.
-10.2 Any dispute shall first be resolved through NexaPay's internal
+10.2 Any dispute shall first be resolved through Glitch INC's internal
      complaints procedure (30-day resolution target).
 10.3 Failing resolution, disputes shall be submitted to the Tunisian
      Arbitration Centre under its Expedited Rules.
@@ -327,7 +328,7 @@ NexaPay agrees to provide you with the following services:
 ═══════════════════════════════════════════════════════════════════
 
 I, {full_name}, holder of CIN {cin}, hereby confirm that:
-  [x] I have read and understood the NexaPay Account Opening Agreement;
+  [x] I have read and understood the Glitch INC Account Opening Agreement;
   [x] I consent to KYC/AML verification and ongoing monitoring;
   [x] I agree to the fee schedule and transaction limits;
   [x] I accept the electronic signature and blockchain anchoring process;
@@ -338,7 +339,7 @@ Document Hash (SHA-256): {doc_hash}
 Blockchain Anchor: Pending
 
 ═══════════════════════════════════════════════════════════════════
-NexaPay Financial Technologies S.A. — All rights reserved.
+Glitch INC Financial Services S.A. — All rights reserved.
 Version 1.0 — Effective January 2026
 "#,
         doc_id = doc_id,
@@ -418,7 +419,7 @@ pub async fn sign_account_contract(
     };
 
     // Store signed document with encrypted signature and contract text
-    let _ = sqlx::query(
+    if let Err(e) = sqlx::query(
         "INSERT INTO signed_documents (id, user_address, doc_type, doc_hash, signature_data, signature_type, signed_at, status, metadata, contract_text, terms_version)
          VALUES ($1, $2, 'account_opening', $3, $4, $5, $6, 'signed', $7, $8, '1.0')"
     )
@@ -431,7 +432,11 @@ pub async fn sign_account_contract(
     .bind(serde_json::json!({"full_name": full_name, "cin": cin, "terms_accepted": true}))
     .bind(&contract_text)
     .execute(&state.pg_pool)
-    .await;
+    .await
+    {
+        tracing::error!("Failed to insert signed_document: {e}");
+        return Err(api_error(StatusCode::INTERNAL_SERVER_ERROR, &format!("Failed to store signed document: {e}")));
+    }
 
     // Anchor on chain
     let anchor_payload = serde_json::json!({
@@ -519,7 +524,7 @@ pub async fn sign_transfer_authorization(
 
     let expires_at = chrono::Utc::now() + chrono::Duration::minutes(15);
     let auth_text = format!(
-        "NEXAPAY TRANSFER AUTHORIZATION\nTransfer ID: {}\nAmount: {}\nDestination Hash: {}\nExpires: {}\n\nBy signing, I authorize NexaPay to execute this transfer on my behalf.",
+        "GLITCH INC TRANSFER AUTHORIZATION\nTransfer ID: {}\nAmount: {}\nDestination Hash: {}\nExpires: {}\n\nBy signing, I authorize Glitch INC to execute this transfer on my behalf.",
         payload.transfer_id, payload.amount, payload.destination_hash, expires_at.to_rfc3339()
     );
     let doc_hash = sha256_hex(auth_text.as_bytes());
@@ -798,4 +803,301 @@ pub async fn download_signed_contract(
         tx_hash,
         block_number,
     }))
+}
+
+// ─── PDF Generation & Download ───
+
+fn generate_account_contract_pdf(
+    full_name: &str,
+    cin: &str,
+    email: &str,
+    phone: &str,
+    address: &str,
+    contract_text: &str,
+    _signature_image_base64: &str,
+    signed_at: &str,
+    doc_hash: &str,
+    tx_hash: &str,
+    block_number: u64,
+) -> Result<Vec<u8>, String> {
+    // Load embedded assets at compile time
+    let logo_bytes: &[u8] = include_bytes!("../../assets/logo.png");
+    let stamp_bytes: &[u8] = include_bytes!("../../assets/stamp.png");
+
+    let (doc, page1, layer1) = PdfDocument::new(
+        "Glitch INC — Account Opening Agreement",
+        Mm(210.0),
+        Mm(297.0),
+        "Layer 1",
+    );
+    let font = doc
+        .add_builtin_font(BuiltinFont::Helvetica)
+        .map_err(|e| format!("Font error: {e}"))?;
+    let font_bold = doc
+        .add_builtin_font(BuiltinFont::HelveticaBold)
+        .map_err(|e| format!("Font error: {e}"))?;
+
+    let mut current_page_idx = page1;
+    let mut current_layer_idx = layer1;
+    let make_layer = |doc: &PdfDocumentReference, page: PdfPageIndex, layer: PdfLayerIndex| -> PdfLayerReference {
+        doc.get_page(page).get_layer(layer)
+    };
+    let mut current_layer = make_layer(&doc, current_page_idx, current_layer_idx);
+    let mut y = Mm(275.0);
+
+    // Company logo at top-right
+    if let Ok(dynamic_logo) = printpdf::image_crate::load_from_memory(logo_bytes) {
+        let logo_img = printpdf::Image::from_dynamic_image(&dynamic_logo);
+        let logo_layer = make_layer(&doc, current_page_idx, current_layer_idx);
+        logo_img.add_to_layer(
+            logo_layer,
+            ImageTransform {
+                translate_x: Some(Mm(170.0)),
+                translate_y: Some(Mm(260.0)),
+                scale_x: Some(0.3),
+                scale_y: Some(0.3),
+                rotate: None,
+                dpi: None,
+            },
+        );
+        current_layer = make_layer(&doc, current_page_idx, current_layer_idx);
+    }
+
+    // Company header
+    current_layer.use_text("GLITCH INC", 14.0, Mm(20.0), y, &font_bold);
+    y -= Mm(7.0);
+    current_layer.use_text("Registered in the Republic of Tunisia", 8.0, Mm(20.0), y, &font);
+    y -= Mm(5.0);
+    current_layer.use_text("Financial Services License: BCE/2024/GI-001", 8.0, Mm(20.0), y, &font);
+    y -= Mm(10.0);
+
+    // Title
+    current_layer.use_text(
+        "ELECTRONIC ACCOUNT OPENING AGREEMENT",
+        14.0, Mm(20.0), y, &font_bold,
+    );
+    y -= Mm(10.0);
+
+    // Divider
+    current_layer.use_text("──────────────────────────────────────────", 9.0, Mm(20.0), y, &font);
+    y -= Mm(10.0);
+
+    // Document metadata
+    current_layer.use_text(&format!("Document Hash: {doc_hash}"), 8.0, Mm(20.0), y, &font);
+    y -= Mm(5.0);
+    current_layer.use_text(&format!("Signed at: {signed_at}"), 8.0, Mm(20.0), y, &font);
+    y -= Mm(5.0);
+    current_layer.use_text(&format!("Blockchain Tx: {tx_hash}"), 8.0, Mm(20.0), y, &font);
+    y -= Mm(5.0);
+    current_layer.use_text(&format!("Block Number: {block_number}"), 8.0, Mm(20.0), y, &font);
+    y -= Mm(12.0);
+
+    // User details
+    current_layer.use_text("ACCOUNT HOLDER", 11.0, Mm(20.0), y, &font_bold);
+    y -= Mm(8.0);
+    current_layer.use_text(&format!("Full Name: {full_name}"), 10.0, Mm(20.0), y, &font);
+    y -= Mm(5.5);
+    current_layer.use_text(&format!("National ID (CIN): {cin}"), 10.0, Mm(20.0), y, &font);
+    y -= Mm(5.5);
+    current_layer.use_text(&format!("Email: {email}"), 10.0, Mm(20.0), y, &font);
+    y -= Mm(5.5);
+    current_layer.use_text(&format!("Phone: {phone}"), 10.0, Mm(20.0), y, &font);
+    y -= Mm(5.5);
+    current_layer.use_text(&format!("Blockchain Address: {address}"), 8.0, Mm(20.0), y, &font);
+    y -= Mm(12.0);
+
+    // Signature confirmation
+    current_layer.use_text("ELECTRONIC SIGNATURE", 11.0, Mm(20.0), y, &font_bold);
+    y -= Mm(8.0);
+    current_layer.use_text(
+        "The account holder has electronically signed this agreement.",
+        9.0, Mm(20.0), y, &font,
+    );
+    y -= Mm(5.5);
+    current_layer.use_text(
+        "This signature is legally binding under Tunisian Law No. 2002-50.",
+        9.0, Mm(20.0), y, &font,
+    );
+    y -= Mm(5.5);
+    current_layer.use_text(
+        "The full signature image is stored encrypted on the Glitch INC platform.",
+        9.0, Mm(20.0), y, &font,
+    );
+
+    // --- Contract text (starts on new page) ---
+    let (page2, layer2) = doc.add_page(Mm(210.0), Mm(297.0), "contract_page");
+    current_page_idx = page2;
+    current_layer_idx = layer2;
+    current_layer = make_layer(&doc, current_page_idx, current_layer_idx);
+    y = Mm(275.0);
+
+    current_layer.use_text(
+        "ACCOUNT OPENING AGREEMENT — FULL TERMS",
+        12.0,
+        Mm(20.0),
+        y,
+        &font_bold,
+    );
+    y -= Mm(10.0);
+
+    let mut page_count: u32 = 2; // started with 2 pages (cover + contract start)
+    let lines: Vec<&str> = contract_text.lines().collect();
+    for line in &lines {
+        if y < Mm(18.0) {
+            page_count += 1;
+            let (new_page, new_layer) =
+                doc.add_page(Mm(210.0), Mm(297.0), format!("page_{page_count}"));
+            current_page_idx = new_page;
+            current_layer_idx = new_layer;
+            current_layer = make_layer(&doc, current_page_idx, current_layer_idx);
+            y = Mm(275.0);
+        }
+        current_layer.use_text(*line, 8.5, Mm(20.0), y, &font);
+        y -= Mm(4.2);
+    }
+
+    // --- Legal footer with company stamp on final page ---
+    if y < Mm(80.0) {
+        page_count += 1;
+        let (new_page, new_layer) =
+            doc.add_page(Mm(210.0), Mm(297.0), format!("page_{page_count}"));
+        current_page_idx = new_page;
+        current_layer_idx = new_layer;
+        current_layer = make_layer(&doc, current_page_idx, current_layer_idx);
+        y = Mm(275.0);
+    }
+    y -= Mm(15.0);
+
+    // Company stamp
+    current_layer.use_text("COMPANY STAMP & SIGNATURE", 10.0, Mm(20.0), y, &font_bold);
+    y -= Mm(8.0);
+
+    // Embed the company stamp image using add_to_layer
+    if let Ok(dynamic_stamp) = printpdf::image_crate::load_from_memory(stamp_bytes) {
+        let stamp_img = printpdf::Image::from_dynamic_image(&dynamic_stamp);
+        if y >= Mm(35.0) {
+            let stamp_layer = make_layer(&doc, current_page_idx, current_layer_idx);
+            stamp_img.add_to_layer(
+                stamp_layer,
+                ImageTransform {
+                    translate_x: Some(Mm(20.0)),
+                    translate_y: Some(y - Mm(32.0)),
+                    scale_x: Some(0.6),
+                    scale_y: Some(0.6),
+                    rotate: None,
+                    dpi: None,
+                },
+            );
+            current_layer = make_layer(&doc, current_page_idx, current_layer_idx);
+            y -= Mm(35.0);
+        }
+    }
+
+    y -= Mm(5.0);
+    current_layer.use_text("Glitch INC — Authorized Representative", 9.0, Mm(20.0), y, &font);
+    y -= Mm(5.5);
+    current_layer.use_text("This document was electronically signed and is legally binding under", 8.0, Mm(20.0), y, &font);
+    y -= Mm(5.0);
+    current_layer.use_text("Tunisian Law No. 2002-50 on Electronic Exchanges and Commerce.", 8.0, Mm(20.0), y, &font);
+    y -= Mm(10.0);
+    current_layer.use_text(
+        &format!("Generated by Glitch INC on {signed_at}"),
+        7.0, Mm(20.0), y, &font,
+    );
+    y -= Mm(5.0);
+    current_layer.use_text(
+        &format!("Doc Hash: {doc_hash} | Tx: {tx_hash}"),
+        7.0, Mm(20.0), y, &font,
+    );
+
+    doc.save_to_bytes().map_err(|e| format!("PDF save error: {e}"))
+}
+
+pub async fn download_signed_contract_pdf(
+    State(state): State<AppState>,
+    Path((address, doc_id)): Path<(String, String)>,
+    headers: HeaderMap,
+) -> Result<(StatusCode, HeaderMap, Vec<u8>), (StatusCode, HeaderMap, Json<Value>)> {
+    let _principal = try_api_key(&state, &headers)
+        .await
+        .map_err(|e| auth_error_response(e, "Invalid API key"))?;
+
+    require_account_token(&state, &headers, &address)
+        .await
+        .map_err(|_| api_error(StatusCode::UNAUTHORIZED, "Unauthorized"))?;
+
+    let doc_uuid = match Uuid::parse_str(&doc_id) {
+        Ok(u) => u,
+        Err(_) => return Err(api_error(StatusCode::BAD_REQUEST, "Invalid document ID")),
+    };
+
+    let row = sqlx::query(
+        "SELECT u.full_name, u.cin, u.email, u.phone,
+                sd.contract_text, sd.signature_data, sd.signed_at, sd.doc_hash, sd.status
+         FROM signed_documents sd
+         JOIN users u ON u.chain_address = sd.user_address
+         WHERE sd.id = $1 AND sd.user_address = $2 LIMIT 1"
+    )
+    .bind(doc_uuid)
+    .bind(&address)
+    .fetch_optional(&state.pg_pool)
+    .await
+    .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Database error"))?;
+
+    let (full_name, cin, email, phone, contract_text, encrypted_sig, signed_at, doc_hash, _status) = match row {
+        Some(r) => (
+            r.try_get::<String, _>("full_name").unwrap_or_default(),
+            r.try_get::<String, _>("cin").unwrap_or_default(),
+            r.try_get::<String, _>("email").unwrap_or_default(),
+            r.try_get::<String, _>("phone").unwrap_or_default(),
+            r.try_get::<String, _>("contract_text").unwrap_or_default(),
+            r.try_get::<String, _>("signature_data").unwrap_or_default(),
+            r.try_get::<chrono::DateTime<chrono::Utc>, _>("signed_at").unwrap_or_else(|_| chrono::Utc::now()),
+            r.try_get::<String, _>("doc_hash").unwrap_or_default(),
+            r.try_get::<String, _>("status").unwrap_or_default(),
+        ),
+        None => return Err(api_error(StatusCode::NOT_FOUND, "Signed document not found")),
+    };
+
+    // Decrypt signature
+    let decrypted_sig = match decrypt_aes256_gcm(&state.encryption_key, &encrypted_sig) {
+        Ok(sig) => sig,
+        Err(_) => return Err(api_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to decrypt signature")),
+    };
+
+    // Get blockchain anchor
+    let anchor_row = sqlx::query(
+        "SELECT tx_hash, block_number FROM blockchain_anchors WHERE related_id = $1 AND anchor_type = 'esign_account' LIMIT 1"
+    )
+    .bind(doc_uuid)
+    .fetch_optional(&state.pg_pool)
+    .await
+    .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Database error"))?;
+
+    let (tx_hash, block_number) = match anchor_row {
+        Some(r) => (
+            r.try_get::<String, _>("tx_hash").unwrap_or_default(),
+            r.try_get::<i64, _>("block_number").unwrap_or(0),
+        ),
+        None => (String::new(), 0),
+    };
+
+    let pdf_bytes = generate_account_contract_pdf(
+        &full_name, &cin, &email, &phone, &address,
+        &contract_text, &decrypted_sig,
+        &signed_at.to_rfc3339(), &doc_hash, &tx_hash,
+        block_number as u64,
+    )
+    .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, &e))?;
+
+    let mut response_headers = HeaderMap::new();
+    response_headers.insert("Content-Type", "application/pdf".parse().unwrap());
+    response_headers.insert(
+        "Content-Disposition",
+        format!("attachment; filename=\"nexapay-contract-{doc_id}.pdf\"")
+            .parse()
+            .unwrap(),
+    );
+
+    Ok((StatusCode::OK, response_headers, pdf_bytes))
 }

@@ -156,12 +156,12 @@ export default function TransactionsPage() {
           <p className="mt-1 text-[13px] text-[#888]">Gateway payment intents and refunds</p>
         </div>
         <div className="flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-[#111] px-4 py-3">
-          <Wallet className="h-4 w-4 text-[#00FF88]" />
+          <Wallet className="h-4 w-4 text-[#00d4aa]" />
           <span className="text-[13px] text-[#888]">Balance:</span>
           <span className="text-[14px] font-semibold text-white">{formatMillimes(balance)}</span>
           <button
             onClick={() => setShowPayout(true)}
-            className="ml-2 rounded-full bg-[#00FF88] px-3 py-1.5 text-[11px] font-semibold text-[#080808] transition-all hover:bg-[#00e67a]"
+            className="ml-2 rounded-full bg-[#00d4aa] px-3 py-1.5 text-[11px] font-semibold text-[#0b0b0b] transition-all hover:bg-[#00e67a]"
           >
             Withdraw
           </button>
@@ -177,7 +177,7 @@ export default function TransactionsPage() {
             className={cn(
               "rounded-full px-4 py-1.5 text-[12px] font-medium transition-colors",
               filter === f
-                ? "bg-[#00FF88] text-[#080808]"
+                ? "bg-[#00d4aa] text-[#0b0b0b]"
                 : "bg-white/[0.04] text-[#555] hover:bg-white/[0.08] hover:text-[#aaa]"
             )}
           >
@@ -188,7 +188,7 @@ export default function TransactionsPage() {
 
       {loading ? (
         <div className="flex h-[40vh] items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-[#00FF88]" />
+          <Loader2 className="h-8 w-8 animate-spin text-[#00d4aa]" />
         </div>
       ) : txs.length === 0 ? (
         <div className="rounded-2xl border border-white/[0.06] bg-[#111] p-10 text-center">
@@ -230,7 +230,7 @@ export default function TransactionsPage() {
                       {tx.customer_name || tx.customer_email || "—"}
                       {tx.customer_phone && <span className="block text-[11px] text-[#666]">{tx.customer_phone}</span>}
                     </td>
-                    <td className="px-5 py-3 font-medium text-[#00FF88]">+{formatMillimes(tx.amount)}</td>
+                    <td className="px-5 py-3 font-medium text-[#00d4aa]">+{formatMillimes(tx.amount)}</td>
                     <td className="px-5 py-3 text-[#888]">{formatMillimes(tx.fee)}</td>
                     <td className="px-5 py-3">
                       <StatusBadge status={tx.status} />
@@ -278,7 +278,7 @@ export default function TransactionsPage() {
                   {tx.customer_phone && <span className="block text-[11px] text-[#666]">{tx.customer_phone}</span>}
                 </p>
                 <div className="mt-2 flex items-center justify-between">
-                  <span className="text-[14px] font-semibold text-[#00FF88]">+{formatMillimes(tx.amount)}</span>
+                  <span className="text-[14px] font-semibold text-[#00d4aa]">+{formatMillimes(tx.amount)}</span>
                   <span className="text-[12px] text-[#555]">{relativeTime(tx.created_at)}</span>
                 </div>
                 {tx.status === "confirmed" || tx.status === "succeeded" ? (
@@ -316,7 +316,7 @@ export default function TransactionsPage() {
                   step="0.001"
                   value={refundAmount}
                   onChange={(e) => setRefundAmount(e.target.value)}
-                  className="mt-1 h-12 w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 text-[14px] text-white outline-none focus:border-[#00FF88]/40"
+                  className="mt-1 h-12 w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 text-[14px] text-white outline-none focus:border-[#00d4aa]/40"
                 />
                 <p className="mt-1 text-[11px] text-[#555]">
                   Max: {formatMillimes(showRefund.amount)}
@@ -329,7 +329,7 @@ export default function TransactionsPage() {
                   value={refundReason}
                   onChange={(e) => setRefundReason(e.target.value)}
                   placeholder="Customer request"
-                  className="mt-1 h-12 w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 text-[14px] text-white placeholder-[#555] outline-none focus:border-[#00FF88]/40"
+                  className="mt-1 h-12 w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 text-[14px] text-white placeholder-[#555] outline-none focus:border-[#00d4aa]/40"
                 />
               </div>
               <button
@@ -351,7 +351,7 @@ export default function TransactionsPage() {
             className={cn(
               "flex items-center gap-3 rounded-xl border px-4 py-3 shadow-2xl backdrop-blur-xl",
               toast.type === "success"
-                ? "border-[#00FF88]/20 bg-[#00FF88]/10 text-[#00FF88]"
+                ? "border-[#00d4aa]/20 bg-[#00d4aa]/10 text-[#00d4aa]"
                 : "border-red-500/20 bg-red-500/10 text-red-400"
             )}
           >
@@ -388,13 +388,13 @@ export default function TransactionsPage() {
                   value={payoutAmount}
                   onChange={(e) => setPayoutAmount(e.target.value)}
                   placeholder="0.000"
-                  className="mt-1 h-12 w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 text-[14px] text-white placeholder-[#555] outline-none focus:border-[#00FF88]/40"
+                  className="mt-1 h-12 w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 text-[14px] text-white placeholder-[#555] outline-none focus:border-[#00d4aa]/40"
                 />
               </div>
               <button
                 onClick={handlePayout}
                 disabled={!payoutAmount || actionLoading}
-                className="flex h-14 w-full items-center justify-center rounded-full bg-[#00FF88] text-[14px] font-semibold text-[#080808] transition-all hover:bg-[#00e67a] disabled:opacity-50"
+                className="flex h-14 w-full items-center justify-center rounded-full bg-[#00d4aa] text-[14px] font-semibold text-[#0b0b0b] transition-all hover:bg-[#00e67a] disabled:opacity-50"
               >
                 {actionLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Withdraw"}
               </button>
@@ -409,7 +409,7 @@ export default function TransactionsPage() {
 function StatusBadge({ status }: { status: string }) {
   const color =
     status === "confirmed" || status === "succeeded"
-      ? "bg-[#00FF88]/10 text-[#00FF88]"
+      ? "bg-[#00d4aa]/10 text-[#00d4aa]"
       : status === "pending"
       ? "bg-amber-500/10 text-amber-400"
       : status === "refunded"

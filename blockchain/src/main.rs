@@ -25,7 +25,7 @@ use crate::api::{build_router, AppState};
 use crate::block::ValidatorInfo;
 use crate::chain::Blockchain;
 use crate::consensus::start_consensus;
-use crate::crypto::generate_keypair;
+use crate::crypto::{generate_keypair, sha256_hex};
 use crate::db::postgres::{connect, run_migrations};
 use crate::db::sqlite::SqliteState;
 use crate::services::agent_scorer;
@@ -56,6 +56,12 @@ fn parse_validator_config() -> (
         .and_then(|v| v.parse().ok())
         .unwrap_or(0);
 
+    // Read app_env early for dev-only fallback checks
+    let app_env = env::var("NEXAPAY_ENV")
+        .or_else(|_| env::var("APP_ENV"))
+        .unwrap_or_else(|_| "sandbox".to_string())
+        .to_lowercase();
+
     if count <= 1 {
         // Single-validator mode: generate a single keypair (legacy behavior)
         let (sk, pk) = generate_keypair();
@@ -78,39 +84,19 @@ fn parse_validator_config() -> (
         let key_env = format!("NEXAPAY_VALIDATOR_{}_KEY", i);
         let url_env = format!("NEXAPAY_VALIDATOR_{}_URL", i);
 
-        // When no env key is provided, use deterministic seed-based keys
-        // so all nodes agree on the same validator identities.
         let sk = env::var(&key_env).unwrap_or_else(|_| {
-            let (s, _p, _a) = crate::crypto::validator_keypair_from_seed(i as u64);
-            s
+            // Dev-only: if APP_ENV is development/sandbox and no key set,
+            // derive from index so all nodes agree on identities.
+            // In production, NEXAPAY_VALIDATOR_N_KEY is required.
+            if app_env == "development" || app_env == "sandbox" || app_env == "demo" {
+                sha256_hex(format!("NEXAPAY_VALIDATOR_SEED{}", i).as_bytes())
+            } else {
+                panic!("NEXAPAY_VALIDATOR_{}_KEY is required in production", i);
+            }
         });
 
-        // Use deterministic seed-based key derivation so all nodes agree on keys.
-        // Each validator index produces the same keypair on every node.
-        let (actual_sk, pk, addr) = {
-            // Try to use the provided key first (as a hex-encoded Ed25519 key)
-            if let Ok(decoded) = hex::decode(&sk) {
-                if decoded.len() == 32 {
-                    if let Ok(key_bytes) = decoded.as_slice().try_into() {
-                        let signing = ed25519_dalek::SigningKey::from_bytes(key_bytes);
-                        let pk_bytes = signing.verifying_key().to_bytes();
-                        let pk = hex::encode(pk_bytes);
-                        let addr = crate::crypto::address_from_public_key(&pk);
-                        (sk.clone(), pk, addr)
-                    } else {
-                        // Fallback to seed-based
-                        let (s, p, a) = crate::crypto::validator_keypair_from_seed(i as u64);
-                        (s, p, a)
-                    }
-                } else {
-                    let (s, p, a) = crate::crypto::validator_keypair_from_seed(i as u64);
-                    (s, p, a)
-                }
-            } else {
-                let (s, p, a) = crate::crypto::validator_keypair_from_seed(i as u64);
-                (s, p, a)
-            }
-        };
+        let (actual_sk, pk, addr) = crate::crypto::validator_keypair_from_hex_key(&sk)
+            .expect(&format!("Invalid NEXAPAY_VALIDATOR_{}_KEY — must be 64 hex chars (32 bytes)", i));
 
         let url = env::var(&url_env).unwrap_or_else(|_| format!("http://validator{i}:8080"));
 
@@ -158,19 +144,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let port = env::var("NEXAPAY_PORT").unwrap_or_else(|_| "8080".to_string());
     let portal_base_url =
         env::var("NEXAPAY_PORTAL_URL").unwrap_or_else(|_| "http://localhost:3001".to_string());
-    let twilio_account_sid = env::var("TWILIO_ACCOUNT_SID")
-        .ok()
-        .filter(|v| !v.trim().is_empty());
-    let twilio_auth_token = env::var("TWILIO_AUTH_TOKEN")
-        .ok()
-        .filter(|v| !v.trim().is_empty());
-    let twilio_phone_number = env::var("TWILIO_PHONE_NUMBER")
-        .ok()
-        .filter(|v| !v.trim().is_empty());
-    let otp_fallback_code = env::var("OTP_FALLBACK_CODE")
-        .ok()
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty());
     let payment_session_minutes = env::var("NEXAPAY_PAYMENT_SESSION_MINUTES")
         .ok()
         .and_then(|v| v.parse::<i64>().ok())
@@ -261,6 +234,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         agent_scorer::spawn_agent_scorer(pg_pool_clone, chain_clone).await;
     });
 
+    // Derive a separate admin JWT key from the main secret with a domain separator
+    let admin_jwt_secret = sha256_hex(format!("{}:admin", jwt_secret).as_bytes());
     let state = AppState {
         chain,
         pg_pool: pool,
@@ -270,15 +245,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         auth_failures: Arc::new(Mutex::new(HashMap::new())),
         confirm_ip_attempts: Arc::new(Mutex::new(HashMap::new())),
         jwt_key: HS256Key::from_bytes(jwt_secret.as_bytes()),
+        admin_jwt_key: HS256Key::from_bytes(admin_jwt_secret.as_bytes()),
         encryption_key,
         system_private_key,
         validator_address,
         validator_private_key,
         validator_public_key,
-        twilio_account_sid,
-        twilio_auth_token,
-        twilio_phone_number,
-        otp_fallback_code,
         sse_broadcasters: Arc::new(std::sync::RwLock::new(HashMap::new())),
         env: app_env.clone(),
         payment_session_minutes,
@@ -320,7 +292,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Method::PATCH,
             Method::OPTIONS,
         ])
-        .allow_headers(Any);
+        .allow_headers([
+            http::header::CONTENT_TYPE,
+            http::header::AUTHORIZATION,
+            http::header::HeaderName::from_static("x-account-token"),
+            http::header::HeaderName::from_static("x-api-key"),
+            http::header::HeaderName::from_static("x-admin-token"),
+            http::header::HeaderName::from_static("x-idempotency-key"),
+        ]);
 
     let app = build_router(state)
         .layer(axum::middleware::from_fn(crate::api::middleware::request_id_middleware))
@@ -329,11 +308,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .layer(TraceLayer::new_for_http());
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await?;
 
-    if app_env != "demo" {
-        println!("NexaPay node listening on 0.0.0.0:{port} (multi-validator: {is_multi_validator})");
-    } else {
-        println!("NexaPay node ready");
-    }
+    println!("NexaPay node listening on 0.0.0.0:{port} (multi-validator: {is_multi_validator})");
     axum::serve(listener, app).await?;
 
     Ok(())

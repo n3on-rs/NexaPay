@@ -38,7 +38,7 @@ export default function SettingsPage() {
   if (loading) {
     return (
       <div className="flex h-48 items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-[#00FF88]" />
+        <Loader2 className="h-8 w-8 animate-spin text-[#00d4aa]" />
       </div>
     );
   }
@@ -47,7 +47,7 @@ export default function SettingsPage() {
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-          <Settings className="h-6 w-6 text-[#00FF88]" />
+          <Settings className="h-6 w-6 text-[#00d4aa]" />
           Settings
         </h1>
         <p className="mt-1 text-sm text-[#888]">Manage your environment, API keys, and webhook settings</p>
@@ -56,8 +56,8 @@ export default function SettingsPage() {
       {/* Environment Section */}
       <section className="rounded-2xl border border-white/[0.06] bg-[#111] p-6">
         <div className="flex items-center gap-3 mb-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#00FF88]/10">
-            <Shield className="h-5 w-5 text-[#00FF88]" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#00d4aa]/10">
+            <Shield className="h-5 w-5 text-[#00d4aa]" />
           </div>
           <div>
             <h2 className="text-lg font-semibold text-white">Environment</h2>
@@ -65,14 +65,14 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <div className="flex items-center justify-between rounded-xl bg-[#0a0a0a] p-4">
+        <div className="flex items-center justify-between rounded-xl bg-[#0b0b0b] p-4">
           <div className="flex items-center gap-3">
             {env === "sandbox" ? (
               <span className="inline-flex items-center rounded-full border border-[rgba(255,184,0,0.3)] bg-[rgba(255,184,0,0.15)] px-3 py-1 text-xs font-medium text-[#FFB800]">
                 🧪 Sandbox
               </span>
             ) : (
-              <span className="inline-flex items-center rounded-full border border-[rgba(0,255,136,0.3)] bg-[rgba(0,255,136,0.1)] px-3 py-1 text-xs font-medium text-[#00FF88]">
+              <span className="inline-flex items-center rounded-full border border-[rgba(0,255,136,0.3)] bg-[rgba(0,255,136,0.1)] px-3 py-1 text-xs font-medium text-[#00d4aa]">
                 ● LIVE
               </span>
             )}
@@ -91,7 +91,7 @@ export default function SettingsPage() {
               "rounded-full px-4 py-2 text-xs font-medium transition-all",
               env === "sandbox"
                 ? "bg-white/[0.04] text-white hover:bg-white/[0.08]"
-                : "bg-[#00FF88]/10 text-[#00FF88] cursor-default"
+                : "bg-[#00d4aa]/10 text-[#00d4aa] cursor-default"
             )}
           >
             {env === "sandbox" ? "Switch to Production" : "Production Active"}
@@ -102,8 +102,8 @@ export default function SettingsPage() {
       {/* API Keys Section */}
       <section className="rounded-2xl border border-white/[0.06] bg-[#111] p-6">
         <div className="flex items-center gap-3 mb-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#00FF88]/10">
-            <Key className="h-5 w-5 text-[#00FF88]" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#00d4aa]/10">
+            <Key className="h-5 w-5 text-[#00d4aa]" />
           </div>
           <div>
             <h2 className="text-lg font-semibold text-white">API Keys</h2>
@@ -112,7 +112,7 @@ export default function SettingsPage() {
         </div>
         <a
           href="/agent/dashboard/api-keys"
-          className="flex items-center justify-between rounded-xl bg-[#0a0a0a] p-4 transition-colors hover:bg-white/[0.02]"
+          className="flex items-center justify-between rounded-xl bg-[#0b0b0b] p-4 transition-colors hover:bg-white/[0.02]"
         >
           <span className="text-sm text-white">Go to API Keys page</span>
           <Key className="h-4 w-4 text-[#888]" />
@@ -132,7 +132,7 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <div className="overflow-hidden rounded-xl bg-[#0a0a0a]">
+          <div className="overflow-hidden rounded-xl bg-[#0b0b0b]">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-white/[0.06]">
@@ -147,7 +147,7 @@ export default function SettingsPage() {
                 {testCards.map((tc, i) => (
                   <tr key={i} className="border-b border-white/[0.04] last:border-0">
                     <td className="px-4 py-3 text-white">{tc.brand}</td>
-                    <td className="px-4 py-3 font-mono text-[#00FF88]">
+                    <td className="px-4 py-3 font-mono text-[#00d4aa]">
                       {tc.number.slice(0, 4)} {tc.number.slice(4, 8)} {tc.number.slice(8, 12)} {tc.number.slice(12)}
                     </td>
                     <td className="px-4 py-3 text-[#888]">
@@ -156,7 +156,7 @@ export default function SettingsPage() {
                     <td className="px-4 py-3 text-[#888]">{tc.cvv}</td>
                     <td className="px-4 py-3">
                       {tc.behavior === "success" ? (
-                        <span className="text-[#00FF88]">✓ Success</span>
+                        <span className="text-[#00d4aa]">✓ Success</span>
                       ) : tc.behavior === "insufficient_funds" ? (
                         <span className="text-amber-500">⚠ Insufficient</span>
                       ) : (
@@ -174,15 +174,15 @@ export default function SettingsPage() {
       {/* Webhooks Section */}
       <section className="rounded-2xl border border-white/[0.06] bg-[#111] p-6">
         <div className="flex items-center gap-3 mb-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#00FF88]/10">
-            <Webhook className="h-5 w-5 text-[#00FF88]" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#00d4aa]/10">
+            <Webhook className="h-5 w-5 text-[#00d4aa]" />
           </div>
           <div>
             <h2 className="text-lg font-semibold text-white">Webhooks</h2>
             <p className="text-sm text-[#888]">Configure and test webhook deliveries</p>
           </div>
         </div>
-        <div className="rounded-xl bg-[#0a0a0a] p-4 text-sm text-[#888]">
+        <div className="rounded-xl bg-[#0b0b0b] p-4 text-sm text-[#888]">
           Webhook management coming in the next update.
         </div>
       </section>
@@ -201,7 +201,7 @@ export default function SettingsPage() {
             <div className="mt-6 flex gap-3">
               <button
                 onClick={() => setShowConfirm(false)}
-                className="flex-1 rounded-xl border border-white/[0.06] bg-[#0a0a0a] py-3 text-sm font-medium text-white transition-colors hover:bg-white/[0.04]"
+                className="flex-1 rounded-xl border border-white/[0.06] bg-[#0b0b0b] py-3 text-sm font-medium text-white transition-colors hover:bg-white/[0.04]"
               >
                 Cancel
               </button>
@@ -210,7 +210,7 @@ export default function SettingsPage() {
                   setEnv("production");
                   setShowConfirm(false);
                 }}
-                className="flex-1 rounded-xl bg-[#00FF88] py-3 text-sm font-semibold text-black transition-colors hover:bg-[#00FF88]/90"
+                className="flex-1 rounded-xl bg-[#00d4aa] py-3 text-sm font-semibold text-black transition-colors hover:bg-[#00d4aa]/90"
               >
                 Confirm
               </button>

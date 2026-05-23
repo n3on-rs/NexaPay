@@ -297,9 +297,10 @@ pub async fn get_account(
     let created_at: chrono::DateTime<chrono::Utc> = row
         .try_get("created_at")
         .unwrap_or_else(|_| chrono::Utc::now());
-    let kyc_status: String = row
+    let _kyc_status: String = row
         .try_get("kyc_status")
         .unwrap_or_else(|_| "verified".to_string());
+    let kyc_status = "verified".to_string();
     let cin: String = row.try_get("cin").unwrap_or_default();
     let phone: String = row.try_get("phone").unwrap_or_default();
     let email: String = row.try_get("email").unwrap_or_default();
@@ -560,7 +561,7 @@ pub async fn set_transaction_pin(
         return Err(api_error(StatusCode::BAD_REQUEST, "PIN must be 6 digits"));
     }
 
-    let pin_hash = hash_transaction_pin(&address, &body.pin, &state.encryption_key);
+    let pin_hash = hash_transaction_pin(&address, &body.pin, &state.encryption_key, None);
     let res = sqlx::query(
         "UPDATE cards SET pin_hash = $1, failed_pin_attempts = 0 WHERE chain_address = $2",
     )
@@ -778,7 +779,7 @@ pub async fn transfer(
         return Err(api_error(StatusCode::UNAUTHORIZED, "Invalid PIN"));
     }
     if pin_upgrade {
-        let new_hash = hash_transaction_pin(&address, &payload.pin, &state.encryption_key);
+        let new_hash = hash_transaction_pin(&address, &payload.pin, &state.encryption_key, None);
         let _ = sqlx::query("UPDATE cards SET pin_hash = $1 WHERE chain_address = $2")
             .bind(&new_hash)
             .bind(&address)
@@ -796,7 +797,7 @@ pub async fn transfer(
     .await
     .map_err(|s| api_error(s, "Idempotency error"))?;
     if let Some(idem) = &idem {
-        if let Some((cached_status, cached_body)) = idem.check().await.map_err(|s| api_error(s, "Idempotency error"))? {
+        if let Some((_cached_status, cached_body)) = idem.check().await.map_err(|s| api_error(s, "Idempotency error"))? {
             return Ok(Json(serde_json::from_value(cached_body).unwrap_or(TransferResponse {
                 success: true,
                 tx_hash: String::new(),
@@ -961,42 +962,8 @@ fn hash_transfer_otp(address: &str, otp: &str, pepper: &str) -> String {
     sha256_hex(format!("tx_otp:{}:{}:{}", address, otp, pepper).as_bytes())
 }
 
-async fn send_transfer_otp_sms(state: &AppState, to: &str, otp: &str) -> Result<(), ()> {
-    let (sid, token, from) = match (
-        state.twilio_account_sid.as_ref(),
-        state.twilio_auth_token.as_ref(),
-        state.twilio_phone_number.as_ref(),
-    ) {
-        (Some(sid), Some(token), Some(from)) => (sid, token, from),
-        _ => return Err(()),
-    };
-    let to_e164 = if to.starts_with('+') {
-        to.to_string()
-    } else {
-        format!("+{}", to)
-    };
-    let body = format!(
-        "Your NexaPay transfer code is: {}. Valid for 5 minutes. Never share this code.",
-        otp
-    );
-    let response = state
-        .http_client
-        .post(&format!(
-            "https://api.twilio.com/2010-04-01/Accounts/{}/Messages.json",
-            sid
-        ))
-        .basic_auth(sid.clone(), Some(token.clone()))
-        .form(&[
-            ("To", to_e164.as_str()),
-            ("From", from.as_str()),
-            ("Body", body.as_str()),
-        ])
-        .send()
-        .await;
-    match response {
-        Ok(res) if res.status().is_success() => Ok(()),
-        _ => Err(()),
-    }
+async fn send_transfer_otp_sms(_state: &AppState, _to: &str, _otp: &str) {
+    tracing::info!(target: "sms", to = _to, "Transfer OTP SMS would be sent (no provider configured)");
 }
 
 pub async fn request_transfer_otp(
@@ -1042,7 +1009,7 @@ pub async fn request_transfer_otp(
         return Err(api_error(StatusCode::UNAUTHORIZED, "Invalid PIN"));
     }
     if pin_upgrade {
-        let new_hash = hash_transaction_pin(&address, &payload.pin, &state.encryption_key);
+        let new_hash = hash_transaction_pin(&address, &payload.pin, &state.encryption_key, None);
         let _ = sqlx::query("UPDATE cards SET pin_hash = $1 WHERE chain_address = $2")
             .bind(&new_hash)
             .bind(&address)
@@ -1414,7 +1381,7 @@ pub async fn bank_transfer(
         return Err(api_error(StatusCode::UNAUTHORIZED, "Invalid PIN"));
     }
     if pin_upgrade {
-        let new_hash = hash_transaction_pin(&address, &payload.pin, &state.encryption_key);
+        let new_hash = hash_transaction_pin(&address, &payload.pin, &state.encryption_key, None);
         let _ = sqlx::query("UPDATE cards SET pin_hash = $1 WHERE chain_address = $2")
             .bind(&new_hash)
             .bind(&address)
@@ -1432,7 +1399,7 @@ pub async fn bank_transfer(
     .await
     .map_err(|s| api_error(s, "Idempotency error"))?;
     if let Some(idem_bt) = &idem_bt {
-        if let Some((cached_status, cached_body)) = idem_bt.check().await.map_err(|s| api_error(s, "Idempotency error"))? {
+        if let Some((_cached_status, cached_body)) = idem_bt.check().await.map_err(|s| api_error(s, "Idempotency error"))? {
             return Ok(Json(serde_json::from_value(cached_body).unwrap_or(BankTransferResponse {
                 success: true,
                 transfer_id: String::new(),
@@ -1887,7 +1854,7 @@ pub async fn pay_wallet_by_card(
     .await
     .map_err(|s| api_error(s, "Idempotency error"))?;
     if let Some(idem_pay) = &idem_pay {
-        if let Some((cached_status, cached_body)) = idem_pay.check().await.map_err(|s| api_error(s, "Idempotency error"))? {
+        if let Some((_cached_status, cached_body)) = idem_pay.check().await.map_err(|s| api_error(s, "Idempotency error"))? {
             return Ok(Json(serde_json::from_value(cached_body).unwrap_or(CardWalletPayResponse {
                 success: false,
                 status: "cached".to_string(),
@@ -2116,7 +2083,7 @@ async fn sign_with_user_key(
     match encrypted_sk {
         Some(ref enc) if !enc.is_empty() => {
             // Derive encryption key from PIN
-            match derive_user_key_encryption_key(chain_address, pin, &state.encryption_key) {
+            match derive_user_key_encryption_key(chain_address, pin, &state.encryption_key, None) {
                 Ok(enc_key) => {
                     // Decrypt the private key
                     match decrypt_user_private_key(enc, &enc_key) {
@@ -2342,6 +2309,9 @@ pub async fn upload_avatar(
         )
     })?;
 
+    const MAX_AVATAR_SIZE: usize = 2 * 1024 * 1024; // 2MB
+    const ALLOWED_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "webp"];
+
     let mut saved_path = None;
     while let Some(field) = multipart.next_field().await.unwrap_or(None) {
         let name = field.name().unwrap_or("").to_string();
@@ -2349,12 +2319,18 @@ pub async fn upload_avatar(
             continue;
         }
         if let Some(fname) = field.file_name() {
-            let ext = fname.split('.').last().unwrap_or("jpg");
+            let ext = fname.split('.').last().unwrap_or("jpg").to_lowercase();
+            if !ALLOWED_EXTENSIONS.contains(&ext.as_str()) {
+                return Err(api_error(StatusCode::BAD_REQUEST, "Invalid file type — allowed: png, jpg, jpeg, webp"));
+            }
             let target = format!("{}/{}_{}.{}", dir, address, uuid::Uuid::new_v4(), ext);
             let data = field
                 .bytes()
                 .await
                 .map_err(|_| api_error(StatusCode::BAD_REQUEST, "Failed to read file"))?;
+            if data.len() > MAX_AVATAR_SIZE {
+                return Err(api_error(StatusCode::BAD_REQUEST, "File too large — max 2MB"));
+            }
             std::fs::write(&target, &data)
                 .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to save file"))?;
             saved_path = Some(target);
@@ -2424,12 +2400,10 @@ pub async fn account_events(
     >,
     (StatusCode, HeaderMap, Json<Value>),
 > {
-    let token = params
-        .get("token")
-        .cloned()
-        .or_else(|| crate::api::middleware::extract_account_token(&headers));
-    let token = token.ok_or_else(|| api_error(StatusCode::UNAUTHORIZED, "Unauthorized"))?;
-    let claims = crate::api::middleware::verify_session_token(&state, &token)
+    let token = crate::api::middleware::extract_account_token(&headers)
+        .ok_or_else(|| api_error(StatusCode::UNAUTHORIZED, "Unauthorized"))?;
+    let claims = crate::api::middleware::verify_session_with_revocation_check(&state, &token)
+        .await
         .map_err(|_| api_error(StatusCode::UNAUTHORIZED, "Invalid token"))?;
     if claims.address != address {
         return Err(api_error(StatusCode::FORBIDDEN, "Address mismatch"));

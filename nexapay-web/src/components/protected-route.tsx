@@ -3,14 +3,12 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
-import { VerificationGate } from "./verification-gate";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  requireVerification?: boolean;
 }
 
-export function ProtectedRoute({ children, requireVerification = true }: ProtectedRouteProps) {
+export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const router = useRouter();
   const { isAuthenticated, isLoading } = useAuth();
 
@@ -22,18 +20,14 @@ export function ProtectedRoute({ children, requireVerification = true }: Protect
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#080808]">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#00FF88] border-t-transparent" />
+      <div className="flex min-h-screen items-center justify-center bg-[#0b0b0b]">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#00d4aa] border-t-transparent" />
       </div>
     );
   }
 
   if (!isAuthenticated) {
     return null;
-  }
-
-  if (requireVerification) {
-    return <VerificationGate>{children}</VerificationGate>;
   }
 
   return <>{children}</>;

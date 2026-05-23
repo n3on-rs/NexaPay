@@ -35,8 +35,9 @@ export default function RootLayout({
     <html
       lang="en"
       className={`dark ${geistMono.variable} ${spaceGrotesk.variable} ${bebasNeue.variable} h-full scroll-smooth antialiased`}
+      data-scroll-behavior="smooth"
     >
-      <body className="min-h-full bg-[#0a0a0a] font-sans text-white">
+      <body className="min-h-full bg-[#0b0b0b] font-sans text-white">
         <AuthProvider>
           {children}
         </AuthProvider>

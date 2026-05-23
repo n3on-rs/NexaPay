@@ -7,7 +7,7 @@ import { Search, Shield, LogOut, Users, LayoutDashboard, Receipt, ScrollText, Lo
 
 interface UserItem {
   address: string; full_name: string; phone: string; email: string;
-  balance: number; balance_display: string; kyc_status: string;
+  balance: number; balance_display: string;
   is_frozen: boolean; created_at: string;
 }
 
@@ -21,11 +21,11 @@ function AdminShell({ children, current }: { children: React.ReactNode; current:
     { label: "Audit Log", href: "/admin/audit", icon: ScrollText },
   ];
   return (
-    <div className="min-h-screen bg-[#080808] text-white">
-      <div className="border-b border-white/[0.06] bg-[#0a0a0a]/80 px-6 py-4 backdrop-blur-xl">
+    <div className="min-h-screen bg-[#0b0b0b] text-white">
+      <div className="border-b border-white/[0.06] bg-[#0b0b0b]/80 px-6 py-4 backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl items-center justify-between">
           <div className="flex items-center gap-3">
-            <Shield className="h-5 w-5 text-[#00FF88]" />
+            <Shield className="h-5 w-5 text-[#00d4aa]" />
             <h1 className="text-lg font-bold">NexaPay Admin</h1>
           </div>
           <div className="flex items-center gap-2">
@@ -35,7 +35,7 @@ function AdminShell({ children, current }: { children: React.ReactNode; current:
           </div>
         </div>
       </div>
-      <div className="border-b border-white/[0.04] bg-[#0a0a0a]/50 px-6">
+      <div className="border-b border-white/[0.04] bg-[#0b0b0b]/50 px-6">
         <div className="mx-auto flex max-w-6xl gap-1 py-2">
           {nav.map((n) => (
             <button key={n.href} onClick={() => router.push(n.href)}
@@ -88,33 +88,33 @@ export default function AdminUsersPage() {
 
   return (
     <AdminShell current="Users">
-      {actionMsg && <div className="mb-4 rounded-xl bg-[#00FF88]/10 px-4 py-3 text-sm text-[#00FF88]">{actionMsg}</div>}
+      {actionMsg && <div className="mb-4 rounded-xl bg-[#00d4aa]/10 px-4 py-3 text-sm text-[#00d4aa]">{actionMsg}</div>}
       <div className="mb-6 flex items-center gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#555]" />
           <input value={search} onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && loadUsers(1, search)}
-            className="w-full rounded-xl border border-white/[0.06] bg-[#111] py-3 pl-10 pr-4 text-sm text-white outline-none placeholder-[#444] focus:border-[#00FF88]/50"
+            className="w-full rounded-xl border border-white/[0.06] bg-[#111] py-3 pl-10 pr-4 text-sm text-white outline-none placeholder-[#444] focus:border-[#00d4aa]/50"
             placeholder="Search by name, phone, email..." />
         </div>
-        <button onClick={() => loadUsers(1, search)} className="rounded-xl bg-[#00FF88] px-5 py-3 text-sm font-semibold text-black transition-all hover:bg-[#00FF88]/90">Search</button>
+        <button onClick={() => loadUsers(1, search)} className="rounded-xl bg-[#00d4aa] px-5 py-3 text-sm font-semibold text-black transition-all hover:bg-[#00d4aa]/90">Search</button>
       </div>
 
-      {loading ? <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-[#00FF88]" /></div> : (
+      {loading ? <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-[#00d4aa]" /></div> : (
         <>
           <div className="overflow-hidden rounded-2xl border border-white/[0.06]">
             <table className="w-full text-sm">
-              <thead className="bg-[#0a0a0a]">
+              <thead className="bg-[#0b0b0b]">
                 <tr className="border-b border-white/[0.04] text-left text-xs font-medium text-[#666]">
                   <th className="px-4 py-3">User</th><th className="px-4 py-3">Phone</th><th className="px-4 py-3">Balance</th>
-                  <th className="px-4 py-3">KYC</th><th className="px-4 py-3">Status</th><th className="px-4 py-3"></th>
+                  <th className="px-4 py-3"></th>
                 </tr>
               </thead>
               <tbody>
                 {users.map((u) => (
                   <tr key={u.address} className="border-b border-white/[0.03] transition-colors hover:bg-white/[0.02]">
                     <td className="px-4 py-3">
-                      <button onClick={() => router.push(`/admin/users/${u.address}`)} className="text-left hover:text-[#00FF88]">
+                      <button onClick={() => router.push(`/admin/users/${u.address}`)} className="text-left hover:text-[#00d4aa]">
                         <div className="font-medium text-white">{u.full_name}</div>
                         <div className="text-xs text-[#555]">{u.address.slice(0, 16)}...</div>
                       </button>
@@ -122,15 +122,12 @@ export default function AdminUsersPage() {
                     <td className="px-4 py-3 text-[#888]">{u.phone}</td>
                     <td className="px-4 py-3 font-mono text-sm text-white">{u.balance_display}</td>
                     <td className="px-4 py-3">
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${u.kyc_status === "verified" ? "bg-[#00FF88]/10 text-[#00FF88]" : "bg-amber-500/10 text-amber-400"}`}>{u.kyc_status}</span>
-                    </td>
-                    <td className="px-4 py-3">
                       {u.is_frozen ? <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-400">Frozen</span> : <span className="text-xs text-[#555]">Active</span>}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-1">
                         <button onClick={() => router.push(`/admin/users/${u.address}`)} className="rounded-lg p-2 text-[#555] transition-colors hover:bg-white/[0.04] hover:text-white"><ChevronRight className="h-4 w-4" /></button>
-                        <button onClick={() => toggleFreeze(u.address, u.is_frozen)} className={`rounded-lg p-2 transition-colors hover:bg-white/[0.04] ${u.is_frozen ? "text-[#00FF88]" : "text-red-400"}`}>
+                        <button onClick={() => toggleFreeze(u.address, u.is_frozen)} className={`rounded-lg p-2 transition-colors hover:bg-white/[0.04] ${u.is_frozen ? "text-[#00d4aa]" : "text-red-400"}`}>
                           {u.is_frozen ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
                         </button>
                       </div>

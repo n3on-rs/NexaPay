@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 export function AuthPageShell({ children }: { children: ReactNode }) {
   return (
-    <div className="relative flex min-h-screen flex-col bg-[#080808]">
+    <div className="relative flex min-h-screen flex-col bg-[#0b0b0b]">
       <div
         className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_70%_45%_at_50%_-15%,rgba(0,255,136,0.07),transparent_55%)]"
         aria-hidden

@@ -135,10 +135,10 @@ function AgentInner() {
 
   if (submitted) {
     return (
-      <div className="min-h-screen bg-[#080808] text-white font-inter flex items-center justify-center px-4">
+      <div className="min-h-screen bg-[#0b0b0b] text-white font-inter flex items-center justify-center px-4">
         <div className="w-full max-w-md text-center">
-          <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-[#00FF88]/10">
-            <Check className="h-8 w-8 text-[#00FF88]" />
+          <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-[#00d4aa]/10">
+            <Check className="h-8 w-8 text-[#00d4aa]" />
           </div>
           <h1 className="font-space-grotesk text-2xl font-bold text-white">Application Submitted</h1>
           <p className="mt-3 text-[14px] text-[#888]">
@@ -146,7 +146,7 @@ function AgentInner() {
           </p>
           <button
             onClick={() => router.push("/profile")}
-            className="mt-8 w-full rounded-full bg-[#00FF88] py-3 text-[14px] font-semibold text-[#080808] transition-transform active:scale-[0.97]"
+            className="mt-8 w-full rounded-full bg-[#00d4aa] py-3 text-[14px] font-semibold text-[#0b0b0b] transition-transform active:scale-[0.97]"
           >
             Back to Profile
           </button>
@@ -156,7 +156,7 @@ function AgentInner() {
   }
 
   return (
-    <div className="min-h-screen bg-[#080808] text-white font-inter">
+    <div className="min-h-screen bg-[#0b0b0b] text-white font-inter">
       <main className="mx-auto max-w-lg px-4 pt-8 pb-24 md:pb-8">
         {/* Header */}
         <div className="flex items-center gap-3">
@@ -180,7 +180,7 @@ function AgentInner() {
             <div
               className={`flex h-8 w-8 items-center justify-center rounded-full text-[13px] font-bold ${
                 step >= 1
-                  ? "bg-[#00FF88] text-[#080808]"
+                  ? "bg-[#00d4aa] text-[#0b0b0b]"
                   : "border border-white/10 text-[#555]"
               }`}
             >
@@ -195,7 +195,7 @@ function AgentInner() {
             <div
               className={`flex h-8 w-8 items-center justify-center rounded-full text-[13px] font-bold ${
                 step >= 2
-                  ? "bg-[#00FF88] text-[#080808]"
+                  ? "bg-[#00d4aa] text-[#0b0b0b]"
                   : "border border-white/10 text-[#555]"
               }`}
             >
@@ -227,7 +227,7 @@ function AgentInner() {
                 value={businessName}
                 onChange={(e) => setBusinessName(e.target.value)}
                 placeholder="Enter name of the work space"
-                className="mt-2 w-full rounded-xl border border-white/[0.08] bg-[#111] px-4 py-3 text-[14px] text-white placeholder-[#555] outline-none focus:border-[#00FF88]/40"
+                className="mt-2 w-full rounded-xl border border-white/[0.08] bg-[#111] px-4 py-3 text-[14px] text-white placeholder-[#555] outline-none focus:border-[#00d4aa]/40"
               />
             </section>
 
@@ -241,7 +241,7 @@ function AgentInner() {
                 value={taxId}
                 onChange={(e) => setTaxId(e.target.value)}
                 placeholder="Enter tax identification number"
-                className="mt-2 w-full rounded-xl border border-white/[0.08] bg-[#111] px-4 py-3 text-[14px] text-white placeholder-[#555] outline-none focus:border-[#00FF88]/40"
+                className="mt-2 w-full rounded-xl border border-white/[0.08] bg-[#111] px-4 py-3 text-[14px] text-white placeholder-[#555] outline-none focus:border-[#00d4aa]/40"
               />
             </section>
 
@@ -251,13 +251,13 @@ function AgentInner() {
                 Business License (Patente) <span className="text-red-400">*</span>
               </p>
               <p className="text-[11px] text-[#555]">Upload business license document</p>
-              <label className="mt-2 flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-white/[0.08] bg-[#111] px-4 py-8 transition-colors hover:border-[#00FF88]/20">
-                <Upload className="h-6 w-6 text-[#00FF88]" />
+              <label className="mt-2 flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-white/[0.08] bg-[#111] px-4 py-8 transition-colors hover:border-[#00d4aa]/20">
+                <Upload className="h-6 w-6 text-[#00d4aa]" />
                 <p className="mt-2 text-[13px] font-medium text-white">Click to upload</p>
                 <p className="text-[11px] text-[#555]">or drag and drop</p>
                 <p className="text-[10px] text-[#444]">image/*, .pdf (max 5.00 MB)</p>
                 {businessLicense && (
-                  <p className="mt-2 text-[12px] text-[#00FF88]">{businessLicense.name}</p>
+                  <p className="mt-2 text-[12px] text-[#00d4aa]">{businessLicense.name}</p>
                 )}
                 <input
                   type="file"
@@ -272,13 +272,13 @@ function AgentInner() {
             <section>
               <p className="text-[13px] font-medium text-white">RNE Document (Optional)</p>
               <p className="text-[11px] text-[#555]">Upload RNE document (optional)</p>
-              <label className="mt-2 flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-white/[0.08] bg-[#111] px-4 py-8 transition-colors hover:border-[#00FF88]/20">
-                <Upload className="h-6 w-6 text-[#00FF88]" />
+              <label className="mt-2 flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-white/[0.08] bg-[#111] px-4 py-8 transition-colors hover:border-[#00d4aa]/20">
+                <Upload className="h-6 w-6 text-[#00d4aa]" />
                 <p className="mt-2 text-[13px] font-medium text-white">Click to upload</p>
                 <p className="text-[11px] text-[#555]">or drag and drop</p>
                 <p className="text-[10px] text-[#444]">image/*, .pdf (max 5.00 MB)</p>
                 {rneDoc && (
-                  <p className="mt-2 text-[12px] text-[#00FF88]">{rneDoc.name}</p>
+                  <p className="mt-2 text-[12px] text-[#00d4aa]">{rneDoc.name}</p>
                 )}
                 <input
                   type="file"
@@ -298,7 +298,7 @@ function AgentInner() {
                 setError("");
                 setStep(2);
               }}
-              className="mt-4 w-full rounded-full bg-[#00FF88] py-3.5 text-[14px] font-semibold text-[#080808] transition-transform active:scale-[0.97]"
+              className="mt-4 w-full rounded-full bg-[#00d4aa] py-3.5 text-[14px] font-semibold text-[#0b0b0b] transition-transform active:scale-[0.97]"
             >
               Next
             </button>
@@ -318,7 +318,7 @@ function AgentInner() {
                   value={governorate}
                   onChange={(e) => { setGovernorate(e.target.value); setDelegation(""); }}
                   disabled={govLoading}
-                  className="h-12 w-full appearance-none rounded-xl border border-white/[0.08] bg-[#111] px-4 pr-10 text-[14px] text-white outline-none transition-all focus:border-[#00FF88]/40 disabled:opacity-50"
+                  className="h-12 w-full appearance-none rounded-xl border border-white/[0.08] bg-[#111] px-4 pr-10 text-[14px] text-white outline-none transition-all focus:border-[#00d4aa]/40 disabled:opacity-50"
                 >
                   <option value="" className="bg-[#111] text-white">Select governorate</option>
                   {municipalities.map((m) => (
@@ -339,7 +339,7 @@ function AgentInner() {
                   value={delegation}
                   onChange={(e) => setDelegation(e.target.value)}
                   disabled={!governorate}
-                  className="h-12 w-full appearance-none rounded-xl border border-white/[0.08] bg-[#111] px-4 pr-10 text-[14px] text-white outline-none transition-all focus:border-[#00FF88]/40 disabled:opacity-50"
+                  className="h-12 w-full appearance-none rounded-xl border border-white/[0.08] bg-[#111] px-4 pr-10 text-[14px] text-white outline-none transition-all focus:border-[#00d4aa]/40 disabled:opacity-50"
                 >
                   <option value="" className="bg-[#111] text-white">Select delegation</option>
                   {delegations.map((d, idx) => (
@@ -360,7 +360,7 @@ function AgentInner() {
                 value={streetAddress}
                 onChange={(e) => setStreetAddress(e.target.value)}
                 placeholder="Enter street address and city"
-                className="mt-2 w-full rounded-xl border border-white/[0.08] bg-[#111] px-4 py-3 text-[14px] text-white placeholder-[#555] outline-none focus:border-[#00FF88]/40"
+                className="mt-2 w-full rounded-xl border border-white/[0.08] bg-[#111] px-4 py-3 text-[14px] text-white placeholder-[#555] outline-none focus:border-[#00d4aa]/40"
               />
             </section>
 
@@ -374,7 +374,7 @@ function AgentInner() {
               <button
                 onClick={handleSubmit}
                 disabled={submitting}
-                className="flex-1 rounded-full bg-[#00FF88] py-3.5 text-[14px] font-semibold text-[#080808] transition-transform active:scale-[0.97] disabled:opacity-50"
+                className="flex-1 rounded-full bg-[#00d4aa] py-3.5 text-[14px] font-semibold text-[#0b0b0b] transition-transform active:scale-[0.97] disabled:opacity-50"
               >
                 {submitting ? "Submitting..." : "Submit Application"}
               </button>

@@ -7,7 +7,7 @@ import { AgentFlow } from "@/components/landing/agent-flow";
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-[#0a0a0a]">
+    <div className="min-h-screen bg-[#0b0b0b]">
       <LandingNav />
       <main>
         <LandingHero />

@@ -2,16 +2,18 @@ use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use axum::Json;
-use serde_json::json;
+use serde_json::{json, Value};
 
-use crate::api::middleware::{auth_error_response, log_api_call, require_account_token};
+use crate::api::middleware::{log_api_call, require_account_token};
 use crate::api::AppState;
 use crate::crypto::decrypt_aes256_gcm;
 use serde::Deserialize;
 use sqlx::Row;
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 pub struct FundPayload {
+    /// Amount in TND (e.g. 50.0 = 50 TND). Converted to millimes internally.
     pub amount: f64,
     pub card_number: String,
     pub card_expiry_month: u8,
@@ -27,11 +29,46 @@ pub async fn fund(
     Json(payload): Json<FundPayload>,
 ) -> impl IntoResponse {
     // ─── Require authentication ───
-    if let Err(e) = require_account_token(&state, &headers, &address).await {
+    if let Err(_e) = require_account_token(&state, &headers, &address).await {
         return (
             StatusCode::UNAUTHORIZED,
             Json(json!({"error": "Authentication required to fund an account"})),
         );
+    }
+
+    // ─── Rate limiting ───
+    let ip = crate::api::middleware::extract_client_ip(&headers);
+    if let Err(limit_err) = crate::api::middleware::check_auth_rate_limit(
+        &state, &ip, "/accounts/:address/fund", 10, 15,
+    ).await {
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(json!({"error": format!("Rate limited. Retry after {}s.", match limit_err { crate::api::middleware::AuthError::TooManyRequests { retry_after_seconds } => retry_after_seconds, _ => 60 })})),
+        );
+    }
+
+    // ─── Idempotency check ───
+    let idem_key = headers
+        .get("X-Idempotency-Key")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    if let Some(ref key) = idem_key {
+        let key_hash = crate::crypto::sha256_hex(key.as_bytes());
+        match sqlx::query(
+            "SELECT response_body FROM idempotency_keys WHERE key_hash = $1 AND user_address = $2 AND endpoint = $3 AND expires_at > NOW() LIMIT 1"
+        )
+        .bind(&key_hash).bind(&address).bind("/accounts/:address/fund")
+        .fetch_optional(&state.pg_pool).await
+        {
+            Ok(Some(row)) => {
+                let cached: String = row.try_get("response_body").unwrap_or_default();
+                if let Ok(val) = serde_json::from_str::<Value>(&cached) {
+                    return (StatusCode::OK, Json(val));
+                }
+            }
+            Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Database error"}))),
+            _ => {}
+        }
     }
 
     // Validate amount
@@ -79,30 +116,44 @@ pub async fn fund(
     }
 
     let tx_id = uuid::Uuid::new_v4().to_string();
-    let fee = (payload.amount * 0.005).max(0.100);
-    let amount_credited = payload.amount - fee;
+    // Convert to millimes for integer-safe fee calculation
+    let amount_millimes = (payload.amount * 1000.0).round() as i64;
+    let fee_millimes = ((amount_millimes as f64 * 0.005).round() as i64).max(100); // min 0.100 TND = 100 millimes
+    let credited_millimes = amount_millimes - fee_millimes;
 
     let _ = sqlx::query(
         "INSERT INTO funding_transactions (id, to_address, amount, fee, card_last4, status, created_at) VALUES ($1,$2,$3,$4,$5,'PENDING', NOW())",
     )
     .bind(&tx_id)
     .bind(&address)
-    .bind(amount_credited as f64)
-    .bind(fee as f64)
+    .bind(credited_millimes as f64)
+    .bind(fee_millimes as f64)
     .bind(&payload.card_number[payload.card_number.len() - 4..])
     .execute(&state.pg_pool)
     .await;
 
     log_api_call(&state, None, "/accounts/:address/fund", "POST", 200).await;
 
-    (
-        StatusCode::OK,
-        Json(json!({
-            "transaction_id": tx_id,
-            "amount_credited": amount_credited,
-            "fee": fee,
-            "status": "PENDING",
-            "estimated_confirmation": "~5 seconds"
-        })),
-    )
+    let response = json!({
+        "transaction_id": tx_id,
+        "amount_credited": credited_millimes,
+        "fee": fee_millimes,
+        "status": "PENDING",
+        "estimated_confirmation": "~5 seconds"
+    });
+
+    // Store idempotency key for 24h
+    if let Some(ref key) = idem_key {
+        let key_hash = crate::crypto::sha256_hex(key.as_bytes());
+        let _ = sqlx::query(
+            "INSERT INTO idempotency_keys (key_hash, user_address, endpoint, response_body, status_code, expires_at)
+             VALUES ($1, $2, $3, $4, 200, NOW() + INTERVAL '24 hours')
+             ON CONFLICT DO NOTHING"
+        )
+        .bind(&key_hash).bind(&address).bind("/accounts/:address/fund")
+        .bind(serde_json::to_string(&response).unwrap_or_default())
+        .execute(&state.pg_pool).await;
+    }
+
+    (StatusCode::OK, Json(response))
 }

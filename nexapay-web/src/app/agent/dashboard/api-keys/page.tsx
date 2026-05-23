@@ -153,7 +153,7 @@ export default function ApiKeysPage() {
         </div>
         <button
           onClick={() => setShowCreate(true)}
-          className="flex items-center gap-2 rounded-full bg-[#00FF88] px-4 py-2.5 text-[13px] font-semibold text-[#080808] transition-all hover:bg-[#00e67a]"
+          className="flex items-center gap-2 rounded-full bg-[#00d4aa] px-4 py-2.5 text-[13px] font-semibold text-[#0b0b0b] transition-all hover:bg-[#00e67a]"
         >
           <Plus className="h-4 w-4" /> Create API Key
         </button>
@@ -168,7 +168,7 @@ export default function ApiKeysPage() {
 
       {loading ? (
         <div className="flex h-[40vh] items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-[#00FF88]" />
+          <Loader2 className="h-8 w-8 animate-spin text-[#00d4aa]" />
         </div>
       ) : keys.length === 0 ? (
         <div className="rounded-2xl border border-white/[0.06] bg-[#111] p-10 text-center">
@@ -177,7 +177,7 @@ export default function ApiKeysPage() {
           <p className="mt-1 text-[13px] text-[#555]">Create your first key to start integrating</p>
           <button
             onClick={() => setShowCreate(true)}
-            className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#00FF88] px-5 py-2.5 text-[13px] font-semibold text-[#080808] transition-all hover:bg-[#00e67a]"
+            className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#00d4aa] px-5 py-2.5 text-[13px] font-semibold text-[#0b0b0b] transition-all hover:bg-[#00e67a]"
           >
             <Plus className="h-4 w-4" /> Create API Key
           </button>
@@ -197,7 +197,7 @@ export default function ApiKeysPage() {
                 {/* Header */}
                 <div className="mb-3 flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <Key className="h-4 w-4 text-[#00FF88]" />
+                    <Key className="h-4 w-4 text-[#00d4aa]" />
                     <span className="text-[14px] font-semibold text-white">{k.name}</span>
                     {k.is_primary && (
                       <span className="inline-flex items-center rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-medium text-[#aaa]">
@@ -209,7 +209,7 @@ export default function ApiKeysPage() {
                         "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium uppercase",
                         isRevoked
                           ? "bg-red-500/10 text-red-400"
-                          : "bg-[#00FF88]/10 text-[#00FF88]"
+                          : "bg-[#00d4aa]/10 text-[#00d4aa]"
                       )}
                     >
                       {isRevoked ? "Revoked" : "Active"}
@@ -242,7 +242,7 @@ export default function ApiKeysPage() {
                       className={cn(
                         "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium",
                         k.permissions?.[perm.key]
-                          ? "bg-[#00FF88]/10 text-[#00FF88]"
+                          ? "bg-[#00d4aa]/10 text-[#00d4aa]"
                           : "bg-white/[0.04] text-[#555]"
                       )}
                     >
@@ -274,7 +274,7 @@ export default function ApiKeysPage() {
                   value={createName}
                   onChange={(e) => setCreateName(e.target.value)}
                   placeholder="Production Key"
-                  className="mt-1 h-12 w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 text-[14px] text-white placeholder-[#555] outline-none focus:border-[#00FF88]/40"
+                  className="mt-1 h-12 w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 text-[14px] text-white placeholder-[#555] outline-none focus:border-[#00d4aa]/40"
                 />
               </div>
               <div>
@@ -290,7 +290,7 @@ export default function ApiKeysPage() {
                         type="checkbox"
                         checked={createPerms[perm.key]}
                         onChange={(e) => setCreatePerms((p) => ({ ...p, [perm.key]: e.target.checked }))}
-                        className="h-5 w-5 accent-[#00FF88]"
+                        className="h-5 w-5 accent-[#00d4aa]"
                       />
                     </label>
                   ))}
@@ -299,7 +299,7 @@ export default function ApiKeysPage() {
               <button
                 onClick={handleCreate}
                 disabled={!createName.trim() || createLoading}
-                className="mt-2 flex h-14 w-full items-center justify-center rounded-full bg-[#00FF88] text-[14px] font-semibold text-[#080808] transition-all hover:bg-[#00e67a] disabled:opacity-50"
+                className="mt-2 flex h-14 w-full items-center justify-center rounded-full bg-[#00d4aa] text-[14px] font-semibold text-[#0b0b0b] transition-all hover:bg-[#00e67a] disabled:opacity-50"
               >
                 {createLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Create Key"}
               </button>
@@ -311,9 +311,9 @@ export default function ApiKeysPage() {
       {/* Success Modal */}
       {showSuccess && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="w-full max-w-sm rounded-3xl border border-[#00FF88]/20 bg-[#111] p-6 text-center">
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[#00FF88]/10">
-              <Check className="h-7 w-7 text-[#00FF88]" />
+          <div className="w-full max-w-sm rounded-3xl border border-[#00d4aa]/20 bg-[#111] p-6 text-center">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[#00d4aa]/10">
+              <Check className="h-7 w-7 text-[#00d4aa]" />
             </div>
             <h3 className="text-[18px] font-bold text-white">Your new API key</h3>
             <p className="mt-1 text-[13px] text-[#888]">Save it now — you won&apos;t see it again</p>
@@ -329,12 +329,12 @@ export default function ApiKeysPage() {
                 onClick={() => copyKey(newKeyValue)}
                 className="rounded-lg p-1.5 text-[#555] hover:text-white"
               >
-                {copied ? <Check className="h-4 w-4 text-[#00FF88]" /> : <Copy className="h-4 w-4" />}
+                {copied ? <Check className="h-4 w-4 text-[#00d4aa]" /> : <Copy className="h-4 w-4" />}
               </button>
             </div>
             <button
               onClick={() => { setShowSuccess(false); setCopied(false); }}
-              className="mt-6 flex h-14 w-full items-center justify-center rounded-full bg-[#00FF88] text-[14px] font-semibold text-[#080808] transition-all hover:bg-[#00e67a]"
+              className="mt-6 flex h-14 w-full items-center justify-center rounded-full bg-[#00d4aa] text-[14px] font-semibold text-[#0b0b0b] transition-all hover:bg-[#00e67a]"
             >
               I&apos;ve saved my key
             </button>

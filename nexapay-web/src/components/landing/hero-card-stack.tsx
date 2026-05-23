@@ -26,7 +26,7 @@ export function HeroCardStack() {
           className="aspect-[1.586/1] w-full rounded-2xl border border-white/10 shadow-[0_40px_80px_-20px_rgba(0,0,0,0.85),0_0_60px_-10px_rgba(0,255,136,0.45)]"
           style={{ transform: "rotate(-14deg)" }}
         >
-          <div className="flex h-full flex-col justify-between rounded-2xl bg-gradient-to-br from-[#00ff88] via-[#00c96a] to-[#006b3d] p-5">
+          <div className="flex h-full flex-col justify-between rounded-2xl bg-gradient-to-br from-[#00d4aa] via-[#00a88a] to-[#005a4a] p-5">
             <div className="flex items-start justify-between">
               <span className="font-display text-lg text-black/80">NexaPay</span>
               <div className="h-8 w-8 rounded-full overflow-hidden bg-black/10 border border-black/20">
@@ -68,7 +68,7 @@ export function HeroCardStack() {
         >
           <div className="relative flex h-full flex-col justify-between overflow-hidden rounded-2xl bg-white/[0.07] p-5 backdrop-blur-xl">
             <div
-              className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/20 via-transparent to-[#00ff88]/10"
+              className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/20 via-transparent to-[#00d4aa]/10"
               aria-hidden
             />
             <div className="relative flex items-start justify-between">
@@ -95,7 +95,7 @@ export function HeroCardStack() {
       {/* Floating CTA */}
       <a
         href="/register"
-        className="absolute bottom-[8%] right-[-4%] z-20 flex items-center gap-2 rounded-full border border-white/10 bg-zinc-900/95 px-5 py-2.5 text-[13px] font-semibold text-[#00ff88] shadow-[0_12px_40px_-12px_rgba(0,255,136,0.5)] backdrop-blur-md transition hover:border-[#00ff88]/40 hover:bg-zinc-900 sm:bottom-[14%] sm:right-0 md:right-[-8%] lg:bottom-[20%]"
+        className="absolute bottom-[8%] right-[-4%] z-20 flex items-center gap-2 rounded-full border border-white/10 bg-zinc-900/95 px-5 py-2.5 text-[13px] font-semibold text-[#00d4aa] shadow-[0_12px_40px_-12px_rgba(0,255,136,0.5)] backdrop-blur-md transition hover:border-[#00d4aa]/40 hover:bg-zinc-900 sm:bottom-[14%] sm:right-0 md:right-[-8%] lg:bottom-[20%]"
       >
         Get Started <span aria-hidden>↗</span>
       </a>

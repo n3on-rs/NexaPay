@@ -14,14 +14,16 @@ use uuid::Uuid;
 use crate::account::{AccountType, ChainAccount};
 use crate::api::middleware::{
     api_principal_kind, api_principal_prefix, audit_log, check_auth_rate_limit, extract_account_token,
-    extract_client_ip, issue_session_token, log_api_call, record_auth_attempt, try_api_key, verify_session_token,
+    extract_client_ip, issue_session_token, log_api_call, record_auth_attempt, try_api_key,
+    verify_session_token, verify_session_with_revocation_check,
     AuthError,
 };
 use crate::api::AppState;
 use crate::block::{Transaction, TxType};
 use crate::crypto::{
-    address_from_public_key, encrypt_aes256_gcm, generate_keypair, hash_transaction_pin, registration_digest, sha256_hex, verify_transaction_pin,
-    sign_hex,
+    address_from_public_key, encrypt_aes256_gcm, generate_keypair, hash_transaction_pin,
+    registration_digest, sha256_hex, verify_transaction_pin, sign_hex,
+    derive_user_key_encryption_key, encrypt_user_private_key,
 };
 use crate::generator::{
     format_card_display, generate_account_number, generate_card_number, generate_cvv, generate_expiry,
@@ -49,6 +51,7 @@ pub struct RegisterResponse {
     chain_address: String,
     account: AccountResponse,
     card: CardResponse,
+    #[serde(skip_serializing)]
     private_key: String,
     message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -72,6 +75,7 @@ pub struct CardResponse {
     card_number: String,
     card_holder: String,
     expiry: String,
+    #[serde(skip_serializing)]
     cvv: String,
     #[serde(rename = "type")]
     card_type: String,
@@ -106,15 +110,233 @@ pub struct LoginResponse {
     chain_address: String,
 }
 
-/// Banking identifiers returned to the client after KYC liveness approval.
-#[derive(Debug, Serialize, Clone)]
-pub struct KycProvisionSummary {
+// ─── Self-serve registration (direct, no KYC sessions) ───
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+pub struct RegisterInitPayload {
+    pub full_name: String,
+    pub phone: String,
+    pub email: String,
+    pub date_of_birth: String,
+    #[serde(default)]
+    pub cin: String,
+    pub cin_number: Option<String>,
+    pub cin_issue_date: Option<String>,
+    pub address_line: Option<String>,
+    pub delegation: Option<String>,
+    pub governorate: Option<String>,
+}
+
+pub async fn register_init(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<RegisterInitPayload>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let ip = extract_client_ip(&headers);
+
+    if let Err(e) = check_auth_rate_limit(&state, &ip, "/auth/register/init", 5, 15).await {
+        return Err(match e {
+            AuthError::TooManyRequests { retry_after_seconds } =>
+                api_error(StatusCode::TOO_MANY_REQUESTS, &format!("Too many attempts. Try again in {}s.", retry_after_seconds)),
+            _ => api_error(StatusCode::INTERNAL_SERVER_ERROR, "Rate limit error"),
+        });
+    }
+
+    let normalized_phone = normalize_phone(&payload.phone)
+        .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, "Invalid phone number"))?;
+
+    // Check duplicate phone
+    let existing = sqlx::query("SELECT chain_address FROM users WHERE phone = $1 LIMIT 1")
+        .bind(&normalized_phone)
+        .fetch_optional(&state.pg_pool)
+        .await
+        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Database error"))?;
+    if existing.is_some() {
+        record_auth_attempt(&state, &ip, "/auth/register/init", false, 5, 15).await;
+        return Err(api_error(StatusCode::CONFLICT, "An account already exists for this phone"));
+    }
+
+    // Check duplicate CIN if provided
+    let cin = payload.cin_number.as_deref().unwrap_or("");
+    if !cin.is_empty() {
+        let existing_cin = sqlx::query("SELECT chain_address FROM users WHERE cin = $1 LIMIT 1")
+            .bind(cin)
+            .fetch_optional(&state.pg_pool)
+            .await
+            .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Database error"))?;
+        if existing_cin.is_some() {
+            record_auth_attempt(&state, &ip, "/auth/register/init", false, 5, 15).await;
+            return Err(api_error(StatusCode::CONFLICT, "An account already exists for this CIN"));
+        }
+    }
+
+    let dob = if payload.date_of_birth.is_empty() {
+        chrono::Utc::now().date_naive()
+    } else {
+        chrono::NaiveDate::parse_from_str(&payload.date_of_birth, "%Y-%m-%d")
+            .map_err(|_| api_error(StatusCode::BAD_REQUEST, "Invalid date_of_birth format. Expected YYYY-MM-DD"))?
+    };
+    let dob_str = dob.format("%Y-%m-%d").to_string();
+
+    let full_name = if payload.full_name.trim().is_empty() { "User".to_string() } else { payload.full_name.trim().to_string() };
+    let login_id = if !cin.is_empty() { cin.to_string() } else { normalized_phone.clone() };
+    let registration_commitment = registration_digest(&login_id, &full_name, &dob_str);
+
+    let (private_key, public_key) = generate_keypair();
+    let _ = private_key;
+    let chain_address = address_from_public_key(&public_key);
+    let holder_name = full_name.to_uppercase();
+
+    let card_number = generate_card_number("99");
+    let (expiry_month, expiry_year) = generate_expiry();
+    let cvv = generate_cvv(&card_number, &expiry_month, &expiry_year, &state.encryption_key);
+    let encrypted_card = encrypt_aes256_gcm(&state.encryption_key, &card_number)
+        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Card encryption failed"))?;
+    let encrypted_cvv = encrypt_aes256_gcm(&state.encryption_key, &cvv)
+        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "CVV encryption failed"))?;
+
+    let account_number = generate_account_number();
+    let (rib, _) = generate_rib("99", "000");
+    let iban = generate_iban(&rib);
+    let card_last4 = card_number.chars().rev().take(4).collect::<String>().chars().rev().collect::<String>();
+
+    let cin_opt: Option<&str> = if cin.is_empty() { Some(&normalized_phone) } else { Some(cin) };
+    let address_line = payload.address_line.as_deref().unwrap_or("");
+    let delegation = payload.delegation.as_deref().unwrap_or("");
+    let governorate = payload.governorate.as_deref().unwrap_or("");
+    let cin_issue_date = payload.cin_issue_date.as_deref().unwrap_or("");
+
+    sqlx::query(
+        "INSERT INTO users (chain_address, full_name, cin, date_of_birth, phone, email, address_line, delegation, governorate, cin_issue_date, kyc_status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'verified')",
+    )
+    .bind(&chain_address).bind(&full_name).bind(cin_opt).bind(dob).bind(&normalized_phone)
+    .bind(&payload.email)
+    .bind(if address_line.is_empty() { None } else { Some(address_line) })
+    .bind(if delegation.is_empty() { None } else { Some(delegation) })
+    .bind(if governorate.is_empty() { None } else { Some(governorate) })
+    .bind(if cin_issue_date.is_empty() { None } else { Some(cin_issue_date) })
+    .execute(&state.pg_pool).await
+    .map_err(|e| { tracing::error!("User creation failed: {e}"); api_error(StatusCode::BAD_REQUEST, "User creation failed") })?;
+
+    sqlx::query("INSERT INTO cards (chain_address, card_number, card_holder_name, expiry_month, expiry_year, cvv, card_last4) VALUES ($1, $2, $3, $4, $5, $6, $7)")
+        .bind(&chain_address).bind(&encrypted_card).bind(&holder_name).bind(&expiry_month).bind(&expiry_year).bind(&encrypted_cvv).bind(&card_last4)
+        .execute(&state.pg_pool).await
+        .map_err(|e| { tracing::error!("Card creation failed: {e}"); api_error(StatusCode::BAD_REQUEST, "Card creation failed") })?;
+
+    sqlx::query("INSERT INTO bank_accounts (chain_address, account_number, rib, iban, bic, currency) VALUES ($1, $2, $3, $4, 'NXPYTNTT', 'TND')")
+        .bind(&chain_address).bind(&account_number).bind(&rib).bind(&iban)
+        .execute(&state.pg_pool).await
+        .map_err(|e| api_error(StatusCode::BAD_REQUEST, &format!("Bank account creation failed: {e}")))?;
+
+    let mined_block_index: u64;
+    let account_create_tx: Transaction;
+    {
+        let mut chain = state.chain.lock().await;
+        chain.create_account(ChainAccount {
+            address: chain_address.clone(), public_key: public_key.clone(),
+            balance: 150_000, tx_count: 0, account_type: AccountType::User,
+            created_at: now_ts(), is_active: true, kyc_hash: registration_commitment,
+        });
+        let tx = Transaction {
+            id: Uuid::new_v4().to_string(), tx_type: TxType::AccountCreate,
+            from: "SYSTEM".to_string(), to: chain_address.clone(), amount: 150_000, fee: 0,
+            timestamp: now_ts(),
+            signature: sign_hex(&state.system_private_key, &chain_address).unwrap_or_default(),
+            memo: "Account created".to_string(),
+            hash: sha256_hex(format!("{}{}", chain_address, now_ts()).as_bytes()),
+        };
+        account_create_tx = tx.clone();
+        chain.add_pending_transaction(tx);
+        if let Ok(block) = chain.mine_block(&state.validator_address, &state.validator_private_key, &state.validator_public_key) {
+            mined_block_index = block.index;
+        } else { mined_block_index = 0; }
+        if let Some(account) = chain.get_account(&chain_address) {
+            let _ = state.sqlite_state.upsert_account(&account.address, account.balance, account.tx_count, &account.account_type, account.is_active, now_ts());
+        }
+    }
+    let _ = state.sqlite_state.record_transaction(&account_create_tx, mined_block_index);
+    let _ = state.sqlite_state.upsert_card_ref(&chain_address, &card_last4, &expiry_month, &expiry_year, now_ts());
+
+    let session_uuid = Uuid::new_v4();
+    let cin_hash = sha256_hex(cin.as_bytes());
+    let token = issue_session_token(&state, &chain_address, &cin_hash, &session_uuid.to_string())
+        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Token creation failed"))?;
+    let token_hash = sha256_hex(token.as_bytes());
+    let _ = sqlx::query("INSERT INTO user_sessions (id, user_address, token_hash) VALUES ($1, $2, $3)")
+        .bind(session_uuid).bind(&chain_address).bind(&token_hash)
+        .execute(&state.pg_pool).await;
+
+    record_auth_attempt(&state, &ip, "/auth/register/init", true, 5, 15).await;
+    audit_log(&state, Some(&chain_address), "register_init", "user", None, &ip, headers.get("user-agent").and_then(|v| v.to_str().ok()), "success", serde_json::json!({"phone": &normalized_phone})).await;
+
+    Ok(Json(serde_json::json!({
+        "address": chain_address,
+        "rib": rib,
+        "iban": iban,
+        "card_last4": card_last4,
+        "card_expiry": format!("{}/{}", expiry_month, &expiry_year[expiry_year.len().saturating_sub(2)..]),
+        "card_type": "VISA",
+        "token": token,
+    })))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RegisterSetPinRequest {
     pub address: String,
-    pub rib: String,
-    pub iban: String,
-    pub card_last4: String,
-    pub card_expiry: String,
-    pub card_type: String,
+    pub pin: String,
+    pub pin_confirm: String,
+}
+
+pub async fn register_set_pin(
+    State(state): State<AppState>,
+    Json(payload): Json<RegisterSetPinRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if payload.pin.len() != 6 || !payload.pin.chars().all(|c| c.is_ascii_digit()) {
+        return Err(api_error(StatusCode::BAD_REQUEST, "PIN must be exactly 6 digits"));
+    }
+    if payload.pin != payload.pin_confirm {
+        return Err(api_error(StatusCode::BAD_REQUEST, "PINs do not match"));
+    }
+
+    let row = sqlx::query("SELECT chain_address, phone, cin FROM users WHERE chain_address = $1 LIMIT 1")
+        .bind(&payload.address).fetch_optional(&state.pg_pool).await
+        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Database error"))?;
+    let (address, phone, cin) = match row {
+        Some(r) => (r.try_get::<String,_>("chain_address").unwrap_or_default(), r.try_get::<String,_>("phone").unwrap_or_default(), r.try_get::<String,_>("cin").unwrap_or_default()),
+        None => return Err(api_error(StatusCode::BAD_REQUEST, "Invalid account")),
+    };
+
+    let pin_salt = crate::crypto::generate_pin_salt();
+    let pin_hash = hash_transaction_pin(&address, &payload.pin, &state.encryption_key, Some(&pin_salt));
+    let (user_sk, user_pk) = generate_keypair();
+    let enc_key = derive_user_key_encryption_key(&address, &payload.pin, &state.encryption_key, Some(&pin_salt))
+        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Key derivation failed"))?;
+    let encrypted_sk = encrypt_user_private_key(&user_sk, &enc_key)
+        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Key encryption failed"))?;
+
+    sqlx::query("UPDATE cards SET pin_hash = $1, encrypted_user_sk = $2, pin_salt = $3, pin_attempts = 0, pin_locked_until = NULL WHERE chain_address = $4")
+        .bind(&pin_hash).bind(&encrypted_sk).bind(&pin_salt).bind(&address).execute(&state.pg_pool).await
+        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to set PIN"))?;
+
+    {
+        let mut chain = state.chain.lock().await;
+        if let Some(acc) = chain.accounts.get_mut(&address) { acc.public_key = user_pk.clone(); }
+    }
+    let _ = sqlx::query("UPDATE users SET public_key = $1, kyc_status = 'verified' WHERE chain_address = $2")
+        .bind(&user_pk).bind(&address).execute(&state.pg_pool).await;
+
+    let session_uuid = Uuid::new_v4();
+    let token = issue_session_token(&state, &address, &sha256_hex(cin.as_bytes()), &session_uuid.to_string())
+        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Token creation failed"))?;
+    let token_hash = sha256_hex(token.as_bytes());
+    let _ = sqlx::query("INSERT INTO user_sessions (id, user_address, token_hash) VALUES ($1, $2, $3)")
+        .bind(session_uuid).bind(&address).bind(&token_hash).execute(&state.pg_pool).await;
+
+    send_sms(&state, &phone, "Welcome to NexaPay! Your account has been created. PIN is set.").await;
+
+    Ok(Json(serde_json::json!({ "success": true, "address": address, "token": token })))
 }
 
 #[derive(Debug, Deserialize)]
@@ -225,8 +447,8 @@ async fn run_registration(
     let created_by_api_key_prefix = principal.map(api_principal_prefix);
     let created_by_principal_type = principal.map(|p| api_principal_kind(p).to_string());
 
-    // Do NOT store phone as CIN. CIN will be extracted during KYC verification.
-    let cin_value: Option<String> = None;
+    // KYC removed — use phone as the cin value for DB compatibility.
+    let cin_value = Some(normalized_phone.clone());
 
     sqlx::query(
         "INSERT INTO users (chain_address, full_name, cin, date_of_birth, phone, email, address_line, city, governorate, created_by_api_key_prefix, created_by_principal_type, kyc_status)
@@ -245,7 +467,7 @@ async fn run_registration(
     .bind(&created_by_principal_type)
     .execute(&state.pg_pool)
     .await
-    .map_err(|e| api_error(StatusCode::BAD_REQUEST, &format!("User creation failed: {e}")))?;
+    .map_err(|e| { tracing::error!("User creation failed: {e}"); api_error(StatusCode::BAD_REQUEST, "User creation failed") })?;
 
     sqlx::query(
         "INSERT INTO cards (chain_address, card_number, card_holder_name, expiry_month, expiry_year, cvv, card_last4)
@@ -260,7 +482,7 @@ async fn run_registration(
     .bind(&card_last4)
     .execute(&state.pg_pool)
     .await
-    .map_err(|e| api_error(StatusCode::BAD_REQUEST, &format!("Card creation failed: {e}")))?;
+    .map_err(|e| { tracing::error!("Card creation failed: {e}"); api_error(StatusCode::BAD_REQUEST, "Card creation failed") })?;
 
     sqlx::query(
         "INSERT INTO bank_accounts (chain_address, account_number, rib, iban, bic, currency)
@@ -351,15 +573,12 @@ async fn run_registration(
     .execute(&state.pg_pool)
     .await;
 
+    send_otp_sms(&state, &normalized_phone, &otp).await;
     let mut dev_otp: Option<String> = None;
-    match send_otp_sms(&state, &normalized_phone, &otp).await {
-        Ok(_) => {}
-        Err(_) => {
-            let app_env = std::env::var("APP_ENV").unwrap_or_default();
-            let dev_show = std::env::var("DEV_SHOW_OTP").unwrap_or_default();
-            if app_env == "development" || app_env == "demo" || dev_show == "true" {
-                dev_otp = Some(otp.clone());
-            }
+    {
+        let dev_show = std::env::var("DEV_SHOW_OTP").unwrap_or_default();
+        if (state.env == "development" || state.env == "sandbox") && dev_show == "true" {
+            dev_otp = Some(otp.clone());
         }
     }
 
@@ -384,283 +603,7 @@ async fn run_registration(
         message: "Keep your private key safe. It will never be shown again.".to_string(),
         phone_hint: Some(mask_phone(&normalized_phone)),
         dev_otp,
-        fallback_available: otp_fallback_enabled(state),
-    })
-}
-
-/// Creates the on-chain + Postgres user when liveness passes (idempotent per KYC session).
-pub async fn provision_kyc_session_if_needed(
-    state: &AppState,
-    session_id: &str,
-) -> Result<KycProvisionSummary, (StatusCode, Json<Value>)> {
-    let sid = Uuid::parse_str(session_id)
-        .map_err(|_| api_error(StatusCode::BAD_REQUEST, "Invalid session_id"))?;
-
-    let row = sqlx::query(
-        "SELECT full_name, phone, email, cin_number, cin_expiry, date_of_birth, address_line, delegation, governorate, documents, provisioned_chain_address, status
-         FROM kyc_sessions WHERE id = $1",
-    )
-    .bind(sid)
-    .fetch_optional(&state.pg_pool)
-    .await
-    .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Database error"))?;
-
-    let row = row.ok_or_else(|| api_error(StatusCode::NOT_FOUND, "KYC session not found"))?;
-
-    let status: String = row.try_get("status").unwrap_or_default();
-    if status != "APPROVED" {
-        return Err(api_error(
-            StatusCode::BAD_REQUEST,
-            "KYC session is not approved",
-        ));
-    }
-
-    let provisioned: Option<String> = row.try_get("provisioned_chain_address").unwrap_or(None);
-    if let Some(addr) = provisioned.filter(|s| !s.is_empty()) {
-        return load_kyc_provision_summary(state, &addr).await;
-    }
-
-    let full_name: String = row.try_get("full_name").unwrap_or_default();
-    let session_phone: String = row.try_get("phone").unwrap_or_default();
-    let email: Option<String> = row.try_get("email").ok();
-    let cin_number: Option<String> = row.try_get("cin_number").ok();
-    let cin_issue_date: Option<chrono::NaiveDate> = row.try_get("cin_expiry").ok();
-    if std::env::var("APP_ENV").as_deref() != Ok("demo") {
-        eprintln!("[provision] cin_number from kyc session: {:?}", cin_number);
-    }
-    let date_of_birth: chrono::NaiveDate = row
-        .try_get("date_of_birth")
-        .map_err(|_| api_error(StatusCode::BAD_REQUEST, "Invalid session date_of_birth"))?;
-
-    let _documents: Option<Value> = row.try_get("documents").ok();
-
-    let normalized_phone = normalize_phone(&session_phone)
-        .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, "Invalid phone on KYC session"))?;
-
-    // Only check duplicates by phone when CIN is not known yet
-    let existing = if let Some(ref cin) = cin_number {
-        sqlx::query("SELECT chain_address FROM users WHERE cin = $1 OR phone = $2 LIMIT 1")
-            .bind(cin)
-            .bind(&normalized_phone)
-            .fetch_optional(&state.pg_pool)
-            .await
-    } else {
-        sqlx::query("SELECT chain_address FROM users WHERE phone = $1 LIMIT 1")
-            .bind(&normalized_phone)
-            .fetch_optional(&state.pg_pool)
-            .await
-    }
-    .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Database error"))?;
-    if existing.is_some() {
-        return Err(api_error(
-            StatusCode::CONFLICT,
-            "An account already exists for this phone",
-        ));
-    }
-
-    let address_line: Option<String> = row.try_get("address_line").ok();
-    let delegation: Option<String> = row.try_get("delegation").ok();
-    let governorate: Option<String> = row.try_get("governorate").ok();
-
-    let dob_str = date_of_birth.format("%Y-%m-%d").to_string();
-    let login_id = cin_number.as_ref().unwrap_or(&normalized_phone).clone();
-
-    let (private_key, public_key) = generate_keypair();
-    let _ = private_key;
-    let chain_address = address_from_public_key(&public_key);
-    let holder_name = full_name.to_uppercase();
-
-    let registration_commitment =
-        registration_digest(&login_id, &full_name, &dob_str);
-
-    let card_number = generate_card_number("99");
-    let (expiry_month, expiry_year) = generate_expiry();
-    let cvv = generate_cvv(
-        &card_number,
-        &expiry_month,
-        &expiry_year,
-        &state.encryption_key,
-    );
-    let encrypted_card = encrypt_aes256_gcm(&state.encryption_key, &card_number)
-        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Card encryption failed"))?;
-    let encrypted_cvv = encrypt_aes256_gcm(&state.encryption_key, &cvv)
-        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "CVV encryption failed"))?;
-
-    let account_number = generate_account_number();
-    let (rib, _) = generate_rib("99", "000");
-    let iban = generate_iban(&rib);
-    let card_last4 = card_number
-        .chars()
-        .rev()
-        .take(4)
-        .collect::<String>()
-        .chars()
-        .rev()
-        .collect::<String>();
-
-    sqlx::query(
-        "INSERT INTO users (chain_address, full_name, cin, cin_issue_date, date_of_birth, phone, email, address_line, city, governorate, delegation, created_by_api_key_prefix, created_by_principal_type, kyc_status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NULL, NULL, 'verified')",
-    )
-    .bind(&chain_address)
-    .bind(&full_name)
-    .bind(&cin_number)
-    .bind(cin_issue_date)
-    .bind(date_of_birth)
-    .bind(&normalized_phone)
-    .bind(&email)
-    .bind(&address_line)
-    .bind(None::<String>)
-    .bind(&governorate)
-    .bind(&delegation)
-    .execute(&state.pg_pool)
-    .await
-    .map_err(|e| api_error(StatusCode::BAD_REQUEST, &format!("User creation failed: {e}")))?;
-
-    sqlx::query(
-        "INSERT INTO cards (chain_address, card_number, card_holder_name, expiry_month, expiry_year, cvv, card_last4)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)",
-    )
-    .bind(&chain_address)
-    .bind(&encrypted_card)
-    .bind(&holder_name)
-    .bind(&expiry_month)
-    .bind(&expiry_year)
-    .bind(&encrypted_cvv)
-    .bind(&card_last4)
-    .execute(&state.pg_pool)
-    .await
-    .map_err(|e| api_error(StatusCode::BAD_REQUEST, &format!("Card creation failed: {e}")))?;
-
-    sqlx::query(
-        "INSERT INTO bank_accounts (chain_address, account_number, rib, iban, bic, currency)
-         VALUES ($1, $2, $3, $4, 'NXPYTNTT', 'TND')",
-    )
-    .bind(&chain_address)
-    .bind(&account_number)
-    .bind(&rib)
-    .bind(&iban)
-    .execute(&state.pg_pool)
-    .await
-    .map_err(|e| api_error(StatusCode::BAD_REQUEST, &format!("Bank account creation failed: {e}")))?;
-
-    let mut mined_block_index = 0u64;
-    let account_create_tx: Transaction;
-    {
-        let mut chain = state.chain.lock().await;
-        chain.create_account(ChainAccount {
-            address: chain_address.clone(),
-            public_key: public_key.clone(),
-            balance: 150_000,
-            tx_count: 0,
-            account_type: AccountType::User,
-            created_at: now_ts(),
-            is_active: true,
-            kyc_hash: registration_commitment,
-        });
-
-        let tx = Transaction {
-            id: Uuid::new_v4().to_string(),
-            tx_type: TxType::AccountCreate,
-            from: "SYSTEM".to_string(),
-            to: chain_address.clone(),
-            amount: 150_000,
-            fee: 0,
-            timestamp: now_ts(),
-            signature: sign_hex(&state.system_private_key, &chain_address)
-                .unwrap_or_else(|_| String::new()),
-            memo: "Account created".to_string(),
-            hash: sha256_hex(format!("{}{}", chain_address, now_ts()).as_bytes()),
-        };
-        account_create_tx = tx.clone();
-        chain.add_pending_transaction(tx);
-        if let Ok(block) = chain.mine_block(
-            &state.validator_address,
-            &state.validator_private_key,
-            &state.validator_public_key,
-        ) {
-            mined_block_index = block.index;
-        }
-
-        if let Some(account) = chain.get_account(&chain_address) {
-            let _ = state.sqlite_state.upsert_account(
-                &account.address,
-                account.balance,
-                account.tx_count,
-                &account.account_type,
-                account.is_active,
-                now_ts(),
-            );
-        }
-    }
-
-    let _ = state
-        .sqlite_state
-        .record_transaction(&account_create_tx, mined_block_index);
-    let _ = state.sqlite_state.upsert_card_ref(
-        &chain_address,
-        &card_last4,
-        &expiry_month,
-        &expiry_year,
-        now_ts(),
-    );
-
-    sqlx::query("UPDATE kyc_sessions SET provisioned_chain_address = $1, updated_at = NOW() WHERE id = $2")
-        .bind(&chain_address)
-        .bind(sid)
-        .execute(&state.pg_pool)
-        .await
-        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to finalize KYC session"))?;
-
-    Ok(KycProvisionSummary {
-        address: chain_address,
-        rib,
-        iban,
-        card_last4,
-        card_expiry: format!("{}/{}", expiry_month, &expiry_year[expiry_year.len().saturating_sub(2)..]),
-        card_type: "VISA".to_string(),
-    })
-}
-
-async fn load_kyc_provision_summary(
-    state: &AppState,
-    chain_address: &str,
-) -> Result<KycProvisionSummary, (StatusCode, Json<Value>)> {
-    let row = sqlx::query(
-        "SELECT b.rib, b.iban, c.card_last4, c.expiry_month, c.expiry_year
-         FROM bank_accounts b
-         JOIN cards c ON c.chain_address = b.chain_address
-         WHERE b.chain_address = $1",
-    )
-    .bind(chain_address)
-    .fetch_optional(&state.pg_pool)
-    .await
-    .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Database error"))?;
-
-    let row = row.ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Provisioned account data not found"))?;
-
-    let rib: String = row.try_get("rib").unwrap_or_default();
-    let iban: String = row.try_get("iban").unwrap_or_default();
-    let card_last4: String = row.try_get("card_last4").unwrap_or_default();
-    let expiry_month: String = row
-        .try_get("expiry_month")
-        .unwrap_or_else(|_| "01".to_string());
-    let expiry_year: String = row
-        .try_get("expiry_year")
-        .unwrap_or_else(|_| "2029".to_string());
-    let y2 = if expiry_year.len() >= 2 {
-        &expiry_year[expiry_year.len() - 2..]
-    } else {
-        expiry_year.as_str()
-    };
-
-    Ok(KycProvisionSummary {
-        address: chain_address.to_string(),
-        rib,
-        iban,
-        card_last4,
-        card_expiry: format!("{}/{}", expiry_month, y2),
-        card_type: "VISA".to_string(),
+        fallback_available: false,
     })
 }
 
@@ -673,10 +616,13 @@ pub(crate) async fn verify_pin(
     chain_address: &str,
     provided_pin: &str,
 ) -> Result<(), (StatusCode, Json<Value>)> {
-    // Dev master PIN bypass
-    let dev_master = std::env::var("DEV_MASTER_PIN").unwrap_or_default();
-    if !dev_master.is_empty() && provided_pin == dev_master {
-        return Ok(());
+    // Dev master PIN bypass — only active in non-production environments
+    let app_env = std::env::var("APP_ENV").unwrap_or_default();
+    if app_env == "development" || app_env == "sandbox" {
+        let dev_master = std::env::var("DEV_MASTER_PIN").unwrap_or_default();
+        if !dev_master.is_empty() && provided_pin == dev_master {
+            return Ok(());
+        }
     }
 
     let row = sqlx::query(
@@ -841,14 +787,11 @@ pub async fn login_with_pin(
     .await
     .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to save OTP"))?;
 
+    send_otp_sms(&state, &phone, &format!("Your NexaPay login code is: {}. Valid for 5 minutes. Never share this code.", otp)).await;
     let mut dev_otp: Option<String> = None;
-    match send_otp_sms(&state, &phone, &format!("Your NexaPay login code is: {}. Valid for 5 minutes. Never share this code.", otp)).await {
-        Ok(_) => {}
-        Err(_) => {}
-    }
     let app_env = std::env::var("APP_ENV").unwrap_or_default();
     let dev_show = std::env::var("DEV_SHOW_OTP").unwrap_or_default();
-    if app_env == "development" || app_env == "demo" || dev_show == "true" {
+    if app_env == "development" || dev_show == "true" {
         dev_otp = Some(otp.clone());
     }
 
@@ -900,63 +843,6 @@ pub async fn verify_login_otp(
         .try_get("full_name")
         .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Invalid row data"))?;
 
-    // Fallback code
-    if otp_fallback_matches(&state, &payload.otp_code) {
-        let session_id = Uuid::new_v4();
-        let session_id_str = session_id.to_string();
-        let token = issue_session_token(
-            &state,
-            &chain_address,
-            &sha256_hex(stored_login_id.as_bytes()),
-            &session_id_str,
-        )
-        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Token creation failed"))?;
-
-        let token_hash = sha256_hex(token.as_bytes());
-        let _ = sqlx::query(
-            "INSERT INTO user_sessions (id, user_address, token_hash) VALUES ($1, $2, $3)")
-            .bind(session_id)
-            .bind(&chain_address)
-            .bind(&token_hash)
-            .execute(&state.pg_pool)
-            .await;
-
-        // Check for other active sessions and broadcast security alert
-        let others: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM user_sessions WHERE user_address = $1 AND is_revoked = FALSE AND id != $2")
-            .bind(&chain_address)
-            .bind(session_id)
-            .fetch_one(&state.pg_pool)
-            .await
-            .unwrap_or(0);
-        if others > 0 {
-            let _ = sqlx::query(
-                "INSERT INTO security_alerts (user_address, alert_type, metadata) VALUES ($1, 'new_login', $2)")
-                .bind(&chain_address)
-                .bind(serde_json::json!({"session_id": session_id, "time": chrono::Utc::now().to_rfc3339()}))
-                .execute(&state.pg_pool)
-                .await;
-            // Broadcast SSE to other sessions
-            let alert = serde_json::json!({
-                "type": "security_alert",
-                "alert_type": "new_login",
-                "message": "A new device just logged into your account. Is this you?",
-                "session_id": session_id,
-                "time": chrono::Utc::now().to_rfc3339(),
-            }).to_string();
-            crate::api::accounts::broadcast_event(&state, &chain_address, &alert);
-        }
-
-        log_api_call(&state, None, "/auth/login/verify-otp", "POST", 200).await;
-
-        return Ok(Json(LoginResponse {
-            token: token.clone(),
-            address: chain_address.clone(),
-            chain_address: chain_address.clone(),
-            full_name: full_name.clone(),
-        }));
-    }
-
     // Find latest unused unexpired login_otp
     let otp_row = sqlx::query(
         "SELECT id, otp_hash, expires_at, used FROM login_otps WHERE user_address = $1 AND used = FALSE ORDER BY created_at DESC LIMIT 1",
@@ -981,7 +867,7 @@ pub async fn verify_login_otp(
     }
 
     let provided_hash = hash_otp(&stored_login_id, &payload.otp_code, &state.encryption_key);
-    if provided_hash != stored_hash {
+    if !constant_time_eq_hex(&provided_hash, &stored_hash) {
         return Err(api_error(StatusCode::UNAUTHORIZED, "Invalid OTP"));
     }
 
@@ -1058,8 +944,7 @@ pub async fn verify_identity(
     let row = sqlx::query(
         "SELECT u.chain_address, u.cin, u.phone, u.full_name
          FROM users u
-         JOIN kyc_sessions k ON k.provisioned_chain_address = u.chain_address
-         WHERE u.phone = $1 AND k.cin_number = $2 AND k.date_of_birth = $3
+         WHERE u.phone = $1 AND u.cin = $2 AND u.date_of_birth = $3
          LIMIT 1",
     )
     .bind(&normalized_phone)
@@ -1118,14 +1003,11 @@ pub async fn verify_identity(
     .await
     .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to store OTP"))?;
 
+    send_otp_sms(&state, &phone, &otp).await;
     let mut dev_otp: Option<String> = None;
-    match send_otp_sms(&state, &phone, &otp).await {
-        Ok(_) => {}
-        Err(_) => {}
-    }
     let app_env = std::env::var("APP_ENV").unwrap_or_default();
     let dev_show = std::env::var("DEV_SHOW_OTP").unwrap_or_default();
-    if app_env == "development" || app_env == "demo" || dev_show == "true" {
+    if app_env == "development" || dev_show == "true" {
         dev_otp = Some(otp.clone());
     }
 
@@ -1198,7 +1080,7 @@ pub async fn verify_recovery_otp(
     }
 
     let provided_hash = hash_otp(&cin, &payload.otp_code, &state.encryption_key);
-    if provided_hash != stored_hash {
+    if !constant_time_eq_hex(&provided_hash, &stored_hash) {
         return Err(api_error(StatusCode::UNAUTHORIZED, "Invalid OTP"));
     }
 
@@ -1299,7 +1181,7 @@ async fn reset_pin_handler(
         None => return Err(api_error(StatusCode::INTERNAL_SERVER_ERROR, "User not found")),
     };
 
-    let pin_hash = hash_transaction_pin(&user_address, &payload.new_pin, &state.encryption_key);
+    let pin_hash = hash_transaction_pin(&user_address, &payload.new_pin, &state.encryption_key, None);
 
     sqlx::query(
         "UPDATE cards SET pin_hash = $1, pin_attempts = 0, pin_locked_until = NULL WHERE chain_address = $2",
@@ -1352,6 +1234,20 @@ pub(crate) fn is_valid_otp(otp: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Constant-time hex string comparison to prevent timing side-channel attacks.
+pub(crate) fn constant_time_eq_hex(a: &str, b: &str) -> bool {
+    let a_bytes = a.as_bytes();
+    let b_bytes = b.as_bytes();
+    if a_bytes.len() != b_bytes.len() {
+        return false;
+    }
+    let mut result: u8 = 0;
+    for i in 0..a_bytes.len() {
+        result |= a_bytes[i] ^ b_bytes[i];
+    }
+    result == 0
+}
+
 pub(crate) fn generate_otp_code() -> String {
     let mut rng = rand::thread_rng();
     format!("{:06}", rng.gen_range(0..1_000_000))
@@ -1379,81 +1275,27 @@ pub(crate) fn hash_otp(cin: &str, otp: &str, pepper: &str) -> String {
     sha256_hex(format!("otp:{}:{}:{}", cin, otp, pepper).as_bytes())
 }
 
-fn otp_fallback_enabled(state: &AppState) -> bool {
-    state
-        .otp_fallback_code
-        .as_ref()
-        .map(|code| is_valid_otp(code))
-        .unwrap_or(false)
-}
 
-fn otp_fallback_matches(state: &AppState, provided_otp: &str) -> bool {
-    match state.otp_fallback_code.as_ref() {
-        Some(code) if is_valid_otp(code) => provided_otp == code,
-        _ => false,
-    }
-}
-
-pub async fn send_twilio_sms(
-    state: &AppState,
-    to: &str,
-    body: &str,
-) -> Result<(), (StatusCode, Json<Value>)> {
-    let sid = state
-        .twilio_account_sid
-        .clone()
-        .ok_or_else(|| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Twilio account SID is not configured"))?;
-    let token = state
-        .twilio_auth_token
-        .clone()
-        .ok_or_else(|| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Twilio auth token is not configured"))?;
-    let from = state
-        .twilio_phone_number
-        .clone()
-        .ok_or_else(|| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Twilio phone number is not configured"))?;
-
-    let endpoint = format!("https://api.twilio.com/2010-04-01/Accounts/{}/Messages.json", sid);
-    let to_e164 = if to.starts_with('+') {
-        to.to_string()
-    } else {
-        format!("+{}", to)
-    };
-
-    let response = state
-        .http_client
-        .post(endpoint)
-        .basic_auth(&sid, Some(&token))
-        .form(&[("To", to_e164.as_str()), ("From", from.as_str()), ("Body", body)])
-        .send()
-        .await
-        .map_err(|_| api_error(StatusCode::BAD_GATEWAY, "Failed to reach Twilio service"))?;
-
-    if !response.status().is_success() {
-        let details = response.text().await.unwrap_or_else(|_| "unknown error".to_string());
-        return Err(api_error(
-            StatusCode::BAD_GATEWAY,
-            &format!("Twilio rejected SMS delivery request: {}", details),
-        ));
-    }
-
-    Ok(())
+// SMS provider placeholder — previously Twilio. Replace with your SMS provider.
+pub(crate) async fn send_sms(_state: &AppState, _to: &str, _body: &str) {
+    tracing::info!(target: "sms", to = _to, "SMS would be sent (no provider configured)");
 }
 
 pub(crate) async fn send_otp_sms(
     state: &AppState,
     to: &str,
     otp: &str,
-) -> Result<(), (StatusCode, Json<Value>)> {
+) {
     let body = format!("Your NexaPay verification code is: {}. It expires in 5 minutes.", otp);
-    send_twilio_sms(state, to, &body).await
+    send_sms(state, to, &body).await;
 }
 
 async fn send_pin_changed_sms(
     state: &AppState,
     to: &str,
-) -> Result<(), (StatusCode, Json<Value>)> {
+) {
     let body = "Your NexaPay PIN has been successfully changed. If this wasn't you, contact support immediately at support@nexapay.tn";
-    send_twilio_sms(state, to, body).await
+    send_sms(state, to, body).await;
 }
 
 fn api_error(status: StatusCode, message: &str) -> (StatusCode, Json<Value>) {
@@ -1498,7 +1340,8 @@ pub async fn get_me(
 ) -> Result<Json<MeResponse>, (StatusCode, Json<Value>)> {
     let token = extract_account_token(&headers)
         .ok_or_else(|| api_error(StatusCode::UNAUTHORIZED, "Missing session token"))?;
-    let claims = verify_session_token(&state, &token)
+    let claims = verify_session_with_revocation_check(&state, &token)
+        .await
         .map_err(|_| api_error(StatusCode::UNAUTHORIZED, "Invalid or expired session"))?;
 
     let row = sqlx::query(
@@ -1521,7 +1364,7 @@ pub async fn get_me(
     let governorate: Option<String> = row.try_get("governorate").ok();
     let avatar_url: Option<String> = row.try_get("avatar_url").ok();
     let force_pin_change: bool = row.try_get("force_pin_change").unwrap_or(false);
-    let kyc_status: String = row.try_get("kyc_status").unwrap_or_else(|_| "unverified".to_string());
+    let _kyc_status: String = row.try_get("kyc_status").unwrap_or_else(|_| "unverified".to_string());
 
     Ok(Json(MeResponse {
         full_name,
@@ -1535,7 +1378,7 @@ pub async fn get_me(
         governorate,
         avatar_url,
         force_pin_change,
-        kyc_status,
+        kyc_status: "verified".to_string(),
     }))
 }
 
@@ -1559,7 +1402,8 @@ pub async fn resolve_security_alert(
 ) -> Result<Json<ResolveSecurityAlertResponse>, (StatusCode, Json<Value>)> {
     let token = extract_account_token(&headers)
         .ok_or_else(|| api_error(StatusCode::UNAUTHORIZED, "Missing session token"))?;
-    let claims = verify_session_token(&state, &token)
+    let claims = verify_session_with_revocation_check(&state, &token)
+        .await
         .map_err(|_| api_error(StatusCode::UNAUTHORIZED, "Invalid or expired session"))?;
     let address = claims.address;
 
@@ -1610,7 +1454,8 @@ pub async fn change_pin(
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     let token = extract_account_token(&headers)
         .ok_or_else(|| api_error(StatusCode::UNAUTHORIZED, "Missing session token"))?;
-    let claims = verify_session_token(&state, &token)
+    let claims = verify_session_with_revocation_check(&state, &token)
+        .await
         .map_err(|_| api_error(StatusCode::UNAUTHORIZED, "Invalid or expired session"))?;
     let address = claims.address;
 
@@ -1634,7 +1479,7 @@ pub async fn change_pin(
         return Err(api_error(StatusCode::UNAUTHORIZED, "Incorrect current PIN"));
     }
 
-    let new_pin_hash = hash_transaction_pin(&address, &payload.new_pin, &state.encryption_key);
+    let new_pin_hash = hash_transaction_pin(&address, &payload.new_pin, &state.encryption_key, None);
     let _ = sqlx::query("UPDATE cards SET pin_hash = $1 WHERE chain_address = $2")
         .bind(&new_pin_hash)
         .bind(&address)

@@ -129,6 +129,26 @@ pub async fn receive_commit(
         .commit_block(&commit.block, &commit.signatures)
         .map_err(|e| api_error(StatusCode::BAD_REQUEST, &e.to_string()))?;
 
+    // Apply block transactions to update local account state
+    for tx in &committed.transactions {
+        // Auto-create account for AccountCreate txs if needed
+        if tx.tx_type == crate::block::TxType::AccountCreate
+            && chain.get_account(&tx.to).is_none()
+        {
+            chain.create_account(crate::account::ChainAccount {
+                address: tx.to.clone(),
+                public_key: String::new(),
+                balance: 0,
+                tx_count: 0,
+                account_type: crate::account::AccountType::User,
+                created_at: crate::chain::now_ts(),
+                is_active: true,
+                kyc_hash: String::new(),
+            });
+        }
+        let _ = chain.apply_transaction(tx);
+    }
+
     // Update SQLite state for committed accounts
     for tx in &committed.transactions {
         let _ = state.sqlite_state.record_transaction(tx, committed.index);

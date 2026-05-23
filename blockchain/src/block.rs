@@ -95,6 +95,7 @@ impl Block {
     }
 
     /// Check if a specific validator has signed this block.
+    #[allow(dead_code)]
     pub fn has_signature_from(&self, validator_address: &str) -> bool {
         if !self.signatures.is_empty() {
             return self
@@ -107,6 +108,7 @@ impl Block {
     }
 
     /// Check if a proposed block is valid and ready for the proposer's own signature.
+    #[allow(dead_code)]
     pub fn is_proposal_valid(&self) -> bool {
         !self.hash.is_empty()
             && self.index > 0

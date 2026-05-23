@@ -13,6 +13,7 @@ RUN apt-get update \
 
 COPY Cargo.toml Cargo.toml
 COPY src src
+COPY assets assets
 
 RUN cargo build --release
 
@@ -27,6 +28,10 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/nexapay-node /usr/local/bin/nexapay-node
+
+RUN mkdir -p /app/chain_data /app/chain_state
+# USER nexapay  # <-- set via docker-compose security_opt or K8s securityContext in prod
+WORKDIR /app
 
 EXPOSE 8080
 CMD ["nexapay-node"]

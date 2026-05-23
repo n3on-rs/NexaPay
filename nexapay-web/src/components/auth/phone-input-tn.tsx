@@ -29,7 +29,7 @@ export function PhoneInputTN({
   return (
     <div
       className={cn(
-        "flex h-12 w-full items-stretch overflow-hidden rounded-xl border border-white/[0.08] bg-[#0a0b0e] transition-colors focus-within:border-[#00FF88]/55 focus-within:ring-2 focus-within:ring-[#00FF88]/20",
+        "flex h-12 w-full items-stretch overflow-hidden rounded-xl border border-white/[0.08] bg-[#0a0b0e] transition-colors focus-within:border-[#00d4aa]/55 focus-within:ring-2 focus-within:ring-[#00d4aa]/20",
         invalid && "border-red-500 ring-2 ring-red-500/25",
       )}
     >

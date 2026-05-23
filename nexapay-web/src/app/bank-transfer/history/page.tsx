@@ -35,8 +35,8 @@ function relativeTime(ts: string): string {
 function statusBadge(status: string) {
   if (status === "completed" || status === "success") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-[#00FF88]/10 px-2 py-0.5 text-[10px] font-bold text-[#00FF88]">
-        <span className="h-1.5 w-1.5 rounded-full bg-[#00FF88]" /> Completed
+      <span className="inline-flex items-center gap-1 rounded-full bg-[#00d4aa]/10 px-2 py-0.5 text-[10px] font-bold text-[#00d4aa]">
+        <span className="h-1.5 w-1.5 rounded-full bg-[#00d4aa]" /> Completed
       </span>
     );
   }
@@ -83,7 +83,7 @@ function BankTransferHistoryInner() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#080808] text-white font-inter selection:bg-[#00FF88] selection:text-black">
+    <div className="min-h-screen bg-[#0b0b0b] text-white font-inter selection:bg-[#00d4aa] selection:text-black">
       <main className="mx-auto max-w-lg px-4 pt-8 pb-24 md:pb-8">
         {/* Header */}
         <div className="flex items-center gap-3">
@@ -113,7 +113,7 @@ function BankTransferHistoryInner() {
             <div className="flex flex-col items-center justify-center rounded-2xl border border-white/[0.04] bg-[#111] py-16">
               <Building2 className="h-12 w-12 text-[#333]" />
               <p className="mt-3 text-sm text-[#888]">No bank transfers yet</p>
-              <Link href="/bank-transfer" className="mt-4 rounded-full bg-[#00FF88] px-5 py-2 text-sm font-bold text-[#080808] transition-all hover:bg-[#00FF88]/90">
+              <Link href="/bank-transfer" className="mt-4 rounded-full bg-[#00d4aa] px-5 py-2 text-sm font-bold text-[#0b0b0b] transition-all hover:bg-[#00d4aa]/90">
                 Make a Transfer
               </Link>
             </div>
@@ -147,7 +147,7 @@ function BankTransferHistoryInner() {
       <nav className="md:hidden fixed inset-x-0 bottom-0 z-40 flex h-16 items-center justify-around border-t border-white/[0.06] bg-[#0d0d0d] pb-[env(safe-area-inset-bottom)]">
         <Link href="/dashboard" className="flex flex-col items-center gap-1"><Home className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">Home</span></Link>
         <Link href="/send" className="flex flex-col items-center gap-1"><ArrowUpRight className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">Send</span></Link>
-        <Link href="/fund" className="relative -top-3 flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[#00FF88] text-[#080808] shadow-[0_8px_24px_rgba(0,255,136,0.35)]"><Plus className="h-5 w-5" /></Link>
+        <Link href="/fund" className="relative -top-3 flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[#00d4aa] text-[#0b0b0b] shadow-[0_8px_24px_rgba(0,255,136,0.35)]"><Plus className="h-5 w-5" /></Link>
         <Link href="/history" className="flex flex-col items-center gap-1"><Clock className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">History</span></Link>
         <Link href="/profile" className="flex flex-col items-center gap-1"><User className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">Profile</span></Link>
       </nav>

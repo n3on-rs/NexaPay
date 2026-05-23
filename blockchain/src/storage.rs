@@ -29,6 +29,7 @@ impl BlockStorage {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn get_block(&self, index: u64) -> Result<Option<Block>, StorageError> {
         let key = index.to_be_bytes();
         match self.db.get(key)? {
@@ -55,6 +56,7 @@ impl BlockStorage {
         Ok(all.into_iter().skip(start).take(safe_limit).collect())
     }
 
+    #[allow(dead_code)]
     pub fn height(&self) -> Result<u64, StorageError> {
         let count = self.db.len();
         if count == 0 {

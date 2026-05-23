@@ -125,7 +125,7 @@ export function TransactionDetailModal({ tx, onClose }: TransactionDetailModalPr
             <div
               className={cn(
                 "flex h-10 w-10 items-center justify-center rounded-full",
-                isCredit ? "bg-[#00FF88]/10 text-[#00FF88]" : "bg-red-500/10 text-red-400"
+                isCredit ? "bg-[#00d4aa]/10 text-[#00d4aa]" : "bg-red-500/10 text-red-400"
               )}
             >
               {isCredit ? <ArrowDownLeft className="h-5 w-5" /> : <ArrowUpLeft className="h-5 w-5" />}
@@ -144,13 +144,13 @@ export function TransactionDetailModal({ tx, onClose }: TransactionDetailModalPr
         </div>
 
         {/* Amount */}
-        <div className="flex flex-col items-center rounded-2xl border border-white/[0.04] bg-[#0a0a0a] py-6">
-          <p className={cn("font-space-grotesk text-[32px] font-extrabold", isCredit ? "text-[#00FF88]" : "text-white")}>
+        <div className="flex flex-col items-center rounded-2xl border border-white/[0.04] bg-[#0b0b0b] py-6">
+          <p className={cn("font-space-grotesk text-[32px] font-extrabold", isCredit ? "text-[#00d4aa]" : "text-white")}>
             {isCredit ? "+" : "-"}{tx.amount_display}
           </p>
-          <div className="mt-2 flex items-center gap-1.5 rounded-full bg-[#00FF88]/10 px-3 py-1">
-            <div className="h-1.5 w-1.5 rounded-full bg-[#00FF88]" />
-            <span className="text-[12px] font-medium text-[#00FF88]">Confirmed on chain</span>
+          <div className="mt-2 flex items-center gap-1.5 rounded-full bg-[#00d4aa]/10 px-3 py-1">
+            <div className="h-1.5 w-1.5 rounded-full bg-[#00d4aa]" />
+            <span className="text-[12px] font-medium text-[#00d4aa]">Confirmed on chain</span>
           </div>
         </div>
 
@@ -200,9 +200,9 @@ export function TransactionDetailModal({ tx, onClose }: TransactionDetailModalPr
                     <code className="truncate text-[11px] text-[#555]">Doc: {parseTransactionMemo(tx.memo).docHash!.slice(0, 16)}...</code>
                     <button
                       onClick={() => handleCopy(parseTransactionMemo(tx.memo).docHash!, "docHash")}
-                      className="text-[#888] hover:text-[#00FF88] transition-colors shrink-0"
+                      className="text-[#888] hover:text-[#00d4aa] transition-colors shrink-0"
                     >
-                      {copiedKey === "docHash" ? <Check className="h-3 w-3 text-[#00FF88]" /> : <Copy className="h-3 w-3" />}
+                      {copiedKey === "docHash" ? <Check className="h-3 w-3 text-[#00d4aa]" /> : <Copy className="h-3 w-3" />}
                     </button>
                   </div>
                 )}
@@ -219,9 +219,9 @@ export function TransactionDetailModal({ tx, onClose }: TransactionDetailModalPr
                 <code className="truncate text-[13px] text-[#888]">{tx.hash.slice(0, 14)}...{tx.hash.slice(-8)}</code>
                 <button
                   onClick={() => handleCopy(tx.hash, "hash")}
-                  className="text-[#888] hover:text-[#00FF88] transition-colors shrink-0"
+                  className="text-[#888] hover:text-[#00d4aa] transition-colors shrink-0"
                 >
-                  {copiedKey === "hash" ? <Check className="h-3.5 w-3.5 text-[#00FF88]" /> : <Copy className="h-3.5 w-3.5" />}
+                  {copiedKey === "hash" ? <Check className="h-3.5 w-3.5 text-[#00d4aa]" /> : <Copy className="h-3.5 w-3.5" />}
                 </button>
               </div>
             </div>
@@ -236,9 +236,9 @@ export function TransactionDetailModal({ tx, onClose }: TransactionDetailModalPr
                 <code className="truncate text-[13px] text-[#888]">{tx.id}</code>
                 <button
                   onClick={() => handleCopy(tx.id, "id")}
-                  className="text-[#888] hover:text-[#00FF88] transition-colors shrink-0"
+                  className="text-[#888] hover:text-[#00d4aa] transition-colors shrink-0"
                 >
-                  {copiedKey === "id" ? <Check className="h-3.5 w-3.5 text-[#00FF88]" /> : <Copy className="h-3.5 w-3.5" />}
+                  {copiedKey === "id" ? <Check className="h-3.5 w-3.5 text-[#00d4aa]" /> : <Copy className="h-3.5 w-3.5" />}
                 </button>
               </div>
             </div>

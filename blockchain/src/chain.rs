@@ -10,6 +10,7 @@ use crate::crypto::{sha256_hex, sign_hex, verify_multi_signature, verify_signatu
 use crate::storage::{BlockStorage, StorageError};
 
 #[derive(Debug, Error)]
+#[allow(dead_code)]
 pub enum ChainError {
     #[error("storage error")]
     Storage(#[from] StorageError),
@@ -598,7 +599,7 @@ impl Blockchain {
         )
     }
 
-    fn apply_transaction(&mut self, tx: &Transaction) -> Result<(), ChainError> {
+    pub fn apply_transaction(&mut self, tx: &Transaction) -> Result<(), ChainError> {
         match tx.tx_type {
             TxType::AccountCreate => {
                 if let Some(account) = self.accounts.get_mut(&tx.to) {

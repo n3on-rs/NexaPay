@@ -77,7 +77,7 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
     >
       <span className="text-[14px] text-white">{label}</span>
       {checked ? (
-        <ToggleRight className="h-6 w-6 text-[#00FF88]" />
+        <ToggleRight className="h-6 w-6 text-[#00d4aa]" />
       ) : (
         <ToggleLeft className="h-6 w-6 text-[#555]" />
       )}
@@ -191,7 +191,7 @@ function ProfileInner() {
   };
 
   return (
-    <div className="min-h-screen bg-[#080808] text-white font-inter selection:bg-[#00FF88] selection:text-black">
+    <div className="min-h-screen bg-[#0b0b0b] text-white font-inter selection:bg-[#00d4aa] selection:text-black">
       <main className="mx-auto max-w-lg px-4 pt-8 pb-24 md:pb-8">
         {/* Header */}
         <div className="flex items-center gap-3">
@@ -206,12 +206,12 @@ function ProfileInner() {
           <button
             onClick={handleAvatarClick}
             disabled={avatarUploading}
-            className="relative flex h-24 w-24 items-center justify-center rounded-full border border-white/[0.08] bg-[#111] overflow-hidden transition-all hover:ring-2 hover:ring-[#00FF88]/30 disabled:opacity-60"
+            className="relative flex h-24 w-24 items-center justify-center rounded-full border border-white/[0.08] bg-[#111] overflow-hidden transition-all hover:ring-2 hover:ring-[#00d4aa]/30 disabled:opacity-60"
           >
             {account?.avatar_url ? (
               <img src={account.avatar_url} alt="Avatar" className="h-full w-full object-cover" />
             ) : (
-              <span className="text-[#00FF88] text-[28px] font-extrabold">{getInitials(fullName)}</span>
+              <span className="text-[#00d4aa] text-[28px] font-extrabold">{getInitials(fullName)}</span>
             )}
             <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity hover:opacity-100">
               <Camera className="h-6 w-6 text-white" />
@@ -226,9 +226,9 @@ function ProfileInner() {
           />
           <h2 className="mt-4 font-space-grotesk text-[20px] font-bold text-white">{fullName}</h2>
           <p className="mt-1 text-[13px] text-[#888]">{account?.account_type === "company" ? "Company Account" : "Personal Account"}</p>
-          <div className="mt-3 flex items-center gap-2 rounded-full border border-[#00FF88]/20 bg-[#00FF88]/10 px-4 py-1.5">
-            <div className="h-2 w-2 rounded-full bg-[#00FF88]" />
-            <span className="text-[12px] font-medium text-[#00FF88]">Verified</span>
+          <div className="mt-3 flex items-center gap-2 rounded-full border border-[#00d4aa]/20 bg-[#00d4aa]/10 px-4 py-1.5">
+            <div className="h-2 w-2 rounded-full bg-[#00d4aa]" />
+            <span className="text-[12px] font-medium text-[#00d4aa]">Verified</span>
           </div>
         </div>
 
@@ -249,7 +249,7 @@ function ProfileInner() {
             <p className="text-[12px] font-bold uppercase tracking-widest text-[#555]">Location</p>
             <button
               onClick={() => setShowEditModal(true)}
-              className="flex items-center gap-1 text-[12px] text-[#00FF88] hover:underline"
+              className="flex items-center gap-1 text-[12px] text-[#00d4aa] hover:underline"
             >
               <Pencil className="h-3 w-3" /> Edit
             </button>
@@ -340,10 +340,10 @@ function ProfileInner() {
             if (isApproved) {
               return (
                 <div className="mt-3 flex items-center gap-3 rounded-2xl border border-white/[0.04] bg-[#111] px-4 py-3.5">
-                  <Briefcase className="h-5 w-5 shrink-0 text-[#00FF88]" />
+                  <Briefcase className="h-5 w-5 shrink-0 text-[#00d4aa]" />
                   <div className="flex-1">
                     <p className="text-[14px] text-white">Agent Account</p>
-                    <p className="text-[12px] text-[#00FF88]">Approved</p>
+                    <p className="text-[12px] text-[#00d4aa]">Approved</p>
                   </div>
                 </div>
               );
@@ -408,7 +408,7 @@ function ProfileInner() {
               <p className="text-[13px] text-[#888]">Contact Support</p>
               <p className="text-[14px] font-medium text-white">+216 31 335 500</p>
             </div>
-            <Phone className="h-4 w-4 text-[#00FF88]" />
+            <Phone className="h-4 w-4 text-[#00d4aa]" />
           </a>
         </section>
 
@@ -507,13 +507,13 @@ function ProfileInner() {
               {agentStatus.tax_document_path && (
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-widest text-[#555]">Submitted Business License</p>
-                  <p className="mt-1 truncate text-[#00FF88]">{agentStatus.tax_document_path}</p>
+                  <p className="mt-1 truncate text-[#00d4aa]">{agentStatus.tax_document_path}</p>
                 </div>
               )}
               {agentStatus.rne_document_path && (
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-widest text-[#555]">Submitted RNE Document</p>
-                  <p className="mt-1 truncate text-[#00FF88]">{agentStatus.rne_document_path}</p>
+                  <p className="mt-1 truncate text-[#00d4aa]">{agentStatus.rne_document_path}</p>
                 </div>
               )}
             </div>
@@ -522,7 +522,7 @@ function ProfileInner() {
                 setShowRejectModal(false);
                 router.push("/agent");
               }}
-              className="mt-6 flex h-14 w-full items-center justify-center rounded-full bg-[#00FF88] text-[14px] font-semibold text-[#080808] transition-all hover:bg-[#00e67a]"
+              className="mt-6 flex h-14 w-full items-center justify-center rounded-full bg-[#00d4aa] text-[14px] font-semibold text-[#0b0b0b] transition-all hover:bg-[#00e67a]"
             >
               File New Application
             </button>
@@ -534,9 +534,9 @@ function ProfileInner() {
       <nav className="md:hidden fixed inset-x-0 bottom-0 z-40 flex h-16 items-center justify-around border-t border-white/[0.06] bg-[#0d0d0d] pb-[env(safe-area-inset-bottom)]">
         <Link href="/dashboard" className="flex flex-col items-center gap-1"><Home className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">Home</span></Link>
         <Link href="/send" className="flex flex-col items-center gap-1"><ArrowUpRight className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">Send</span></Link>
-        <Link href="/fund" className="relative -top-3 flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[#00FF88] text-[#080808] shadow-[0_8px_24px_rgba(0,255,136,0.35)]"><Plus className="h-5 w-5" /></Link>
+        <Link href="/fund" className="relative -top-3 flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[#00d4aa] text-[#0b0b0b] shadow-[0_8px_24px_rgba(0,255,136,0.35)]"><Plus className="h-5 w-5" /></Link>
         <Link href="/history" className="flex flex-col items-center gap-1"><Clock className="h-5 w-5 text-[#555555]" /><span className="text-[10px] text-[#555555]">History</span></Link>
-        <div className="flex flex-col items-center gap-1"><User className="h-5 w-5 text-[#00FF88]" /><span className="text-[10px] text-[#00FF88]">Profile</span></div>
+        <div className="flex flex-col items-center gap-1"><User className="h-5 w-5 text-[#00d4aa]" /><span className="text-[10px] text-[#00d4aa]">Profile</span></div>
       </nav>
     </div>
   );
@@ -632,14 +632,10 @@ function EditProfileModal({
               <label className="text-[12px] text-[#888]">Email</label>
               <input readOnly value={account?.email || "---"} className="mt-1 h-12 w-full rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 text-[14px] text-[#888] outline-none" />
             </div>
-            <div>
-              <label className="text-[12px] text-[#888]">KYC Status</label>
-              <input readOnly value={account?.kyc_status === "verified" ? "Verified" : "Pending"} className="mt-1 h-12 w-full rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 text-[14px] text-[#888] outline-none" />
-            </div>
           </div>
 
           {/* Editable section */}
-          <p className="mt-6 text-[12px] font-bold uppercase tracking-widest text-[#00FF88]">Location (Editable)</p>
+          <p className="mt-6 text-[12px] font-bold uppercase tracking-widest text-[#00d4aa]">Location (Editable)</p>
           <div className="mt-3 space-y-3">
             <div>
               <label className="text-[12px] text-[#888]">Address Line</label>
@@ -647,7 +643,7 @@ function EditProfileModal({
                 value={addressLine}
                 onChange={(e) => setAddressLine(e.target.value)}
                 placeholder="Street, building, apartment..."
-                className="mt-1 h-12 w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 text-[14px] text-white outline-none transition-all focus:border-[#00FF88]/30 focus:bg-white/[0.04]"
+                className="mt-1 h-12 w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 text-[14px] text-white outline-none transition-all focus:border-[#00d4aa]/30 focus:bg-white/[0.04]"
               />
             </div>
             <div>
@@ -657,7 +653,7 @@ function EditProfileModal({
                   value={governorate}
                   onChange={(e) => { setGovernorate(e.target.value); setDelegation(""); }}
                   disabled={govLoading}
-                  className="h-12 w-full appearance-none rounded-xl border border-white/10 bg-white/[0.03] px-4 pr-10 text-[14px] text-white outline-none transition-all focus:border-[#00FF88]/30 disabled:opacity-50"
+                  className="h-12 w-full appearance-none rounded-xl border border-white/10 bg-white/[0.03] px-4 pr-10 text-[14px] text-white outline-none transition-all focus:border-[#00d4aa]/30 disabled:opacity-50"
                 >
                   <option value="" className="bg-[#111] text-white">Select governorate</option>
                   {municipalities.map((m) => (
@@ -674,7 +670,7 @@ function EditProfileModal({
                   value={delegation}
                   onChange={(e) => setDelegation(e.target.value)}
                   disabled={!governorate}
-                  className="h-12 w-full appearance-none rounded-xl border border-white/10 bg-white/[0.03] px-4 pr-10 text-[14px] text-white outline-none transition-all focus:border-[#00FF88]/30 disabled:opacity-50"
+                  className="h-12 w-full appearance-none rounded-xl border border-white/10 bg-white/[0.03] px-4 pr-10 text-[14px] text-white outline-none transition-all focus:border-[#00d4aa]/30 disabled:opacity-50"
                 >
                   <option value="" className="bg-[#111] text-white">Select delegation</option>
                   {delegations.map((d, idx) => (
@@ -692,7 +688,7 @@ function EditProfileModal({
           <button
             onClick={handleSave}
             disabled={loading}
-            className="flex h-14 w-full items-center justify-center rounded-full bg-[#00FF88] text-[#080808] font-extrabold text-lg transition-all disabled:opacity-40"
+            className="flex h-14 w-full items-center justify-center rounded-full bg-[#00d4aa] text-[#0b0b0b] font-extrabold text-lg transition-all disabled:opacity-40"
           >
             {loading ? "Saving..." : "Save Changes"}
           </button>

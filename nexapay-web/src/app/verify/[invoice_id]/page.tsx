@@ -53,11 +53,11 @@ export default function VerifyInvoicePage() {
   }, [invoiceId, docHash]);
 
   return (
-    <div className="min-h-screen bg-[#080808] text-white flex flex-col items-center justify-center p-6">
+    <div className="min-h-screen bg-[#0b0b0b] text-white flex flex-col items-center justify-center p-6">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="mx-auto w-16 h-16 bg-[#00FF88]/10 rounded-full flex items-center justify-center mb-4 border border-[#00FF88]/20">
-            <Shield className="w-8 h-8 text-[#00FF88]" />
+          <div className="mx-auto w-16 h-16 bg-[#00d4aa]/10 rounded-full flex items-center justify-center mb-4 border border-[#00d4aa]/20">
+            <Shield className="w-8 h-8 text-[#00d4aa]" />
           </div>
           <h1 className="text-2xl font-space-grotesk font-bold">Invoice Verification</h1>
           <p className="text-[#888] text-sm mt-1">Verify authenticity on the NexaPay blockchain</p>
@@ -65,15 +65,15 @@ export default function VerifyInvoicePage() {
 
         {result.status === "loading" && (
           <div className="flex flex-col items-center gap-3 py-10">
-            <Loader2 className="animate-spin w-8 h-8 text-[#00FF88]" />
+            <Loader2 className="animate-spin w-8 h-8 text-[#00d4aa]" />
             <p className="text-[#888] text-sm">Verifying on-chain...</p>
           </div>
         )}
 
         {result.status === "verified" && (
-          <div className="bg-[#00FF88]/5 border border-[#00FF88]/20 rounded-2xl p-6 text-center">
-            <ShieldCheck className="w-12 h-12 text-[#00FF88] mx-auto mb-3" />
-            <p className="text-lg font-bold text-[#00FF88] mb-1">Valid ✓</p>
+          <div className="bg-[#00d4aa]/5 border border-[#00d4aa]/20 rounded-2xl p-6 text-center">
+            <ShieldCheck className="w-12 h-12 text-[#00d4aa] mx-auto mb-3" />
+            <p className="text-lg font-bold text-[#00d4aa] mb-1">Valid ✓</p>
             <p className="text-sm text-[#888] mb-4">This invoice is immutably recorded on the NexaPay blockchain.</p>
             {result.data?.invoice_number && (
               <div className="bg-white/5 rounded-xl p-4 text-left space-y-2">
@@ -131,7 +131,7 @@ export default function VerifyInvoicePage() {
         )}
 
         <div className="text-center mt-8">
-          <a href="/" className="text-sm text-[#00FF88] hover:underline font-bold">← Back to NexaPay</a>
+          <a href="/" className="text-sm text-[#00d4aa] hover:underline font-bold">← Back to NexaPay</a>
         </div>
       </div>
     </div>

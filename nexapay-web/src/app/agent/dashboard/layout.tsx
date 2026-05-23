@@ -164,8 +164,8 @@ export default function AgentDashboardLayout({ children }: { children: React.Rea
 
   if (loading) {
     return (
-      <div className="flex h-screen w-full items-center justify-center bg-[#080808]">
-        <Loader2 className="h-8 w-8 animate-spin text-[#00FF88]" />
+      <div className="flex h-screen w-full items-center justify-center bg-[#0b0b0b]">
+        <Loader2 className="h-8 w-8 animate-spin text-[#00d4aa]" />
       </div>
     );
   }
@@ -190,17 +190,17 @@ export default function AgentDashboardLayout({ children }: { children: React.Rea
 
   return (
     <AgentContext.Provider value={{ agent, apiKey, loading, refresh: loadAgent, setApiKey: handleSetApiKey }}>
-      <div className="min-h-screen bg-[#080808] text-white font-inter">
+      <div className="min-h-screen bg-[#0b0b0b] text-white font-inter">
         {/* Mobile Top Bar */}
-        <div className="md:hidden fixed inset-x-0 top-0 z-40 flex h-14 items-center justify-between border-b border-white/[0.06] bg-[#0a0a0a]/90 px-4 backdrop-blur-xl">
+        <div className="md:hidden fixed inset-x-0 top-0 z-40 flex h-14 items-center justify-between border-b border-white/[0.06] bg-[#0b0b0b]/90 px-4 backdrop-blur-xl">
           <button onClick={() => setDrawerOpen(true)} className="flex h-8 w-8 items-center justify-center rounded-full bg-white/[0.05] text-white/70">
             <Menu className="h-5 w-5" />
           </button>
           <div className="flex items-center gap-2">
             <img src="/logo.png" alt="NexaPay" className="h-6 w-6 object-contain" />
-            <span className="font-display text-base tracking-[0.06em] text-[#00FF88]">NexaPay</span>
+            <span className="font-display text-base tracking-[0.06em] text-[#00d4aa]">NexaPay</span>
           </div>
-          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#00FF88] text-[10px] font-bold text-[#080808]">
+          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#00d4aa] text-[10px] font-bold text-[#0b0b0b]">
             {initials}
           </div>
         </div>
@@ -210,12 +210,12 @@ export default function AgentDashboardLayout({ children }: { children: React.Rea
           <aside className="hidden md:flex fixed left-0 top-0 h-screen w-[240px] flex-col border-r border-white/[0.06] bg-[#0d0d0d] px-4 py-6 z-30">
             <div className="mb-2 flex items-center gap-3 px-2">
               <img src="/logo.png" alt="NexaPay" className="h-7 w-7 object-contain" />
-              <span className="font-display text-lg tracking-[0.06em] text-[#00FF88]">NexaPay</span>
+              <span className="font-display text-lg tracking-[0.06em] text-[#00d4aa]">NexaPay</span>
             </div>
             <div className="mb-6 px-2">
-              <p className="text-[14px] font-semibold text-[#00FF88]">{agent?.business_name || "Agent"}</p>
+              <p className="text-[14px] font-semibold text-[#00d4aa]">{agent?.business_name || "Agent"}</p>
               <div className="mt-1 flex items-center gap-2">
-                <span className="inline-flex items-center rounded-full bg-[rgba(0,255,136,0.1)] px-2 py-0.5 text-[10px] font-medium text-[#00FF88]">
+                <span className="inline-flex items-center rounded-full bg-[rgba(0,255,136,0.1)] px-2 py-0.5 text-[10px] font-medium text-[#00d4aa]">
                   Agent Portal
                 </span>
                 {env === "sandbox" ? (
@@ -223,7 +223,7 @@ export default function AgentDashboardLayout({ children }: { children: React.Rea
                     SANDBOX
                   </span>
                 ) : (
-                  <span className="inline-flex items-center rounded-full border border-[rgba(0,255,136,0.3)] bg-[rgba(0,255,136,0.1)] px-2 py-0.5 text-[10px] font-medium text-[#00FF88]">
+                  <span className="inline-flex items-center rounded-full border border-[rgba(0,255,136,0.3)] bg-[rgba(0,255,136,0.1)] px-2 py-0.5 text-[10px] font-medium text-[#00d4aa]">
                     LIVE
                   </span>
                 )}
@@ -250,7 +250,7 @@ export default function AgentDashboardLayout({ children }: { children: React.Rea
                     className={cn(
                       "flex items-center gap-3 px-3 py-2.5 rounded-l-[10px] text-[13px] font-medium transition-colors",
                       isActive(item.href)
-                        ? "bg-[#00FF88]/[0.08] text-[#00FF88] border-r-2 border-r-[#00FF88]"
+                        ? "bg-[#00d4aa]/[0.08] text-[#00d4aa] border-r-2 border-r-[#00d4aa]"
                         : "text-[#555555] hover:text-[#888] hover:bg-white/[0.03]"
                     )}
                   >
@@ -263,12 +263,12 @@ export default function AgentDashboardLayout({ children }: { children: React.Rea
 
             <div className="mt-auto border-t border-white/[0.06] pt-4">
               <div className="mb-3 flex items-center gap-3 px-2">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#00FF88] text-xs font-bold text-[#080808]">
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#00d4aa] text-xs font-bold text-[#0b0b0b]">
                   {initials}
                 </div>
                 <div className="min-w-0">
                   <p className="truncate text-[13px] font-medium text-white">{fullName}</p>
-                  <span className="inline-flex items-center rounded-full bg-[rgba(0,255,136,0.1)] px-1.5 py-0.5 text-[10px] font-medium text-[#00FF88]">
+                  <span className="inline-flex items-center rounded-full bg-[rgba(0,255,136,0.1)] px-1.5 py-0.5 text-[10px] font-medium text-[#00d4aa]">
                     Agent
                   </span>
                 </div>
@@ -291,7 +291,7 @@ export default function AgentDashboardLayout({ children }: { children: React.Rea
                 <button
                   onClick={handleGenerateKey}
                   disabled={genKeyLoading}
-                  className="inline-flex shrink-0 items-center gap-2 rounded-full bg-[#00FF88] px-4 py-2 text-[13px] font-semibold text-[#080808] transition-all hover:bg-[#00e67a] disabled:opacity-50"
+                  className="inline-flex shrink-0 items-center gap-2 rounded-full bg-[#00d4aa] px-4 py-2 text-[13px] font-semibold text-[#0b0b0b] transition-all hover:bg-[#00e67a] disabled:opacity-50"
                 >
                   {genKeyLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                   Generate Key
@@ -310,15 +310,15 @@ export default function AgentDashboardLayout({ children }: { children: React.Rea
               <div className="mb-4 flex items-center justify-between px-2">
                 <div className="flex items-center gap-2">
                   <img src="/logo.png" alt="NexaPay" className="h-6 w-6 object-contain" />
-                  <span className="font-display text-base tracking-[0.06em] text-[#00FF88]">NexaPay</span>
+                  <span className="font-display text-base tracking-[0.06em] text-[#00d4aa]">NexaPay</span>
                 </div>
                 <button onClick={() => setDrawerOpen(false)} className="rounded-full p-2 text-white/50 hover:text-white">
                   <X className="h-5 w-5" />
                 </button>
               </div>
               <div className="mb-4 px-2">
-                <p className="text-[14px] font-semibold text-[#00FF88]">{agent?.business_name || "Agent"}</p>
-                <span className="mt-1 inline-flex items-center rounded-full bg-[rgba(0,255,136,0.1)] px-2 py-0.5 text-[10px] font-medium text-[#00FF88]">
+                <p className="text-[14px] font-semibold text-[#00d4aa]">{agent?.business_name || "Agent"}</p>
+                <span className="mt-1 inline-flex items-center rounded-full bg-[rgba(0,255,136,0.1)] px-2 py-0.5 text-[10px] font-medium text-[#00d4aa]">
                   Agent Portal
                 </span>
               </div>
@@ -343,7 +343,7 @@ export default function AgentDashboardLayout({ children }: { children: React.Rea
                       className={cn(
                         "flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-colors",
                         isActive(item.href)
-                          ? "bg-[#00FF88]/[0.08] text-[#00FF88]"
+                          ? "bg-[#00d4aa]/[0.08] text-[#00d4aa]"
                           : "text-[#555555] hover:text-[#888] hover:bg-white/[0.03]"
                       )}
                     >
@@ -355,12 +355,12 @@ export default function AgentDashboardLayout({ children }: { children: React.Rea
               </div>
               <div className="absolute bottom-0 left-0 right-0 border-t border-white/[0.06] p-4">
                 <div className="mb-3 flex items-center gap-3 px-2">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#00FF88] text-xs font-bold text-[#080808]">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#00d4aa] text-xs font-bold text-[#0b0b0b]">
                     {initials}
                   </div>
                   <div className="min-w-0">
                     <p className="truncate text-[13px] font-medium text-white">{fullName}</p>
-                    <span className="inline-flex items-center rounded-full bg-[rgba(0,255,136,0.1)] px-1.5 py-0.5 text-[10px] font-medium text-[#00FF88]">
+                    <span className="inline-flex items-center rounded-full bg-[rgba(0,255,136,0.1)] px-1.5 py-0.5 text-[10px] font-medium text-[#00d4aa]">
                       Agent
                     </span>
                   </div>

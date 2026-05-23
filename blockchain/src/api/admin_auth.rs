@@ -11,11 +11,10 @@ use sqlx::Row;
 use uuid::Uuid;
 
 use crate::api::middleware::{
-    audit_log, check_auth_rate_limit, extract_client_ip, record_auth_attempt,
+    check_auth_rate_limit, extract_client_ip, record_auth_attempt,
 };
 use crate::api::AppState;
-use crate::api::auth::send_twilio_sms;
-use crate::api::auth::{generate_otp_code as gen_otp, is_valid_otp};
+use crate::api::auth::is_valid_otp;
 use crate::crypto::sha256_hex;
 
 #[derive(Deserialize)]
@@ -91,7 +90,7 @@ pub fn issue_admin_token(
         Duration::from_hours(8),
     );
     state
-        .jwt_key
+        .admin_jwt_key
         .authenticate(claims)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
@@ -100,7 +99,7 @@ pub fn issue_admin_token(
 pub fn verify_admin_token(state: &AppState, token: &str) -> Result<AdminClaims, StatusCode> {
     use jwt_simple::prelude::*;
     let claims = state
-        .jwt_key
+        .admin_jwt_key
         .verify_token::<serde_json::Value>(token, None)
         .map_err(|_| StatusCode::UNAUTHORIZED)?;
 
@@ -129,6 +128,7 @@ pub fn verify_admin_token(state: &AppState, token: &str) -> Result<AdminClaims, 
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct AdminClaims {
     pub admin_id: String,
     pub username: String,
@@ -229,7 +229,7 @@ pub async fn admin_login(
         .try_get::<Uuid, _>("id")
         .map(|u| u.to_string())
         .unwrap_or_default();
-    let role: String = row.try_get("role").unwrap_or_default();
+    let _role: String = row.try_get("role").unwrap_or_default();
 
     let admin_uuid = Uuid::parse_str(&admin_id).unwrap_or_else(|_| Uuid::new_v4());
 
@@ -254,7 +254,7 @@ pub async fn admin_login(
         let secret_bytes = secret.to_bytes().unwrap();
         
         let totp = TOTP::new(
-            Algorithm::SHA1,
+            Algorithm::SHA256,
             6,
             1,
             30,
@@ -274,7 +274,7 @@ pub async fn admin_login(
             .await;
 
         let current_totp = totp.generate_current().unwrap_or_default();
-        dev_otp = if state.env == "development" || state.env == "demo" {
+        dev_otp = if state.env == "development" {
             Some(format!("TOTP Secret: {} | Code: {}", secret_str, current_totp))
         } else { None };
         
@@ -301,7 +301,7 @@ pub async fn admin_login(
             }
         };
         let totp = totp_rs::TOTP::new(
-            totp_rs::Algorithm::SHA1,
+            totp_rs::Algorithm::SHA256,
             6,
             1,
             30,
@@ -312,8 +312,8 @@ pub async fn admin_login(
         
         let current_code = totp.generate_current().unwrap_or_default();
         
-        // Also store as legacy OTP hash for backward compat
-        let otp_hash = sha256_hex(format!("admin:{}:{}", admin_id, current_code).as_bytes());
+        // Store OTP hash with pepper from encryption key for offline brute-force resistance
+        let otp_hash = sha256_hex(format!("admin:{}:{}:{}", admin_id, current_code, state.encryption_key).as_bytes());
         let expires_at = Utc::now() + chrono::Duration::minutes(5);
         
         let _ = sqlx::query(
@@ -325,7 +325,7 @@ pub async fn admin_login(
         .execute(&state.pg_pool)
         .await;
 
-        dev_otp = if state.env == "development" || state.env == "demo" {
+        dev_otp = if state.env == "development" {
             Some(format!("TOTP code: {}", current_code))
         } else { None };
         
@@ -346,8 +346,10 @@ pub async fn admin_login(
 /// POST /admin/login/verify-otp — Step 2: verify OTP, issue admin JWT
 pub async fn admin_verify_otp(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(payload): Json<AdminVerifyOtpRequest>,
 ) -> Result<Json<AdminTokenResponse>, (StatusCode, Json<Value>)> {
+    let ip = crate::api::middleware::extract_client_ip(&headers);
     let admin_uuid = Uuid::parse_str(&payload.admin_id).map_err(|_| {
         (
             StatusCode::BAD_REQUEST,
@@ -444,7 +446,7 @@ pub async fn admin_verify_otp(
     )
     .bind(admin_uuid)
     .bind(&username)
-    .bind("127.0.0.1") // Will be filled by middleware
+    .bind(&ip)
     .execute(&state.pg_pool)
     .await;
 

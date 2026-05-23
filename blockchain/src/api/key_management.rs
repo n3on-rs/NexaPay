@@ -7,9 +7,9 @@ use sqlx::Row;
 use uuid::Uuid;
 
 use crate::api::middleware::{
-    api_principal_kind, api_principal_owner_id, api_principal_prefix, auth_error_response,
-    can_manage_keys, create_structured_api_key, extract_api_key, log_api_call,
-    permissions_to_csv, require_api_key, ApiPrincipal,
+    api_principal_kind, api_principal_owner_id, api_principal_prefix, audit_log,
+    auth_error_response, can_manage_keys, create_structured_api_key, extract_api_key,
+    log_api_call, permissions_to_csv, require_api_key, ApiPrincipal,
 };
 use crate::api::AppState;
 
@@ -84,9 +84,13 @@ pub async fn rotate_api_key(
         let (new_key, new_hash, new_prefix, checksum) = create_structured_api_key(&owner_type);
         let key_name = payload.name.unwrap_or(existing_name);
 
+        // Use a transaction so old key is only deleted if new key insertion succeeds
+        let mut tx = state.pg_pool.begin().await
+            .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to start transaction"))?;
+
         sqlx::query("DELETE FROM api_keys WHERE id = $1")
             .bind(key_id)
-            .execute(&state.pg_pool)
+            .execute(&mut *tx)
             .await
             .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to revoke previous key"))?;
 
@@ -103,13 +107,18 @@ pub async fn rotate_api_key(
         .bind(&permissions)
         .bind(rate_limit_per_minute.max(10))
         .bind(daily_limit.max(1000))
-        .execute(&state.pg_pool)
+        .execute(&mut *tx)
         .await
         .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to persist rotated key"))?;
+
+        tx.commit().await
+            .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to commit key rotation"))?;
 
         sync_legacy_key_row(&state, &owner_type, owner_id, &new_hash, &new_prefix).await;
 
         log_api_call(&state, Some(&principal), "/api-keys/rotate", "POST", 200).await;
+        let _ = audit_log(&state, None, "key_rotate", "api_key", None, &"".to_string(),
+            None, "success", json!({"prefix": new_prefix})).await;
         return Ok(Json(json!({
             "success": true,
             "api_key": new_key,
@@ -379,6 +388,7 @@ async fn scalar_count(state: &AppState, query: &str, prefix: &str) -> i64 {
         .unwrap_or(0)
 }
 
+#[allow(dead_code)]
 async fn scalar_count_by_uuid(state: &AppState, query: &str, owner: Uuid) -> i64 {
     sqlx::query(query)
         .bind(owner)

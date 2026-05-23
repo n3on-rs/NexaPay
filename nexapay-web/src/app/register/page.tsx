@@ -3,636 +3,630 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { postJson, verifyRegistrationOtp } from "@/lib/api";
+import { postJson, getJson } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import {
-  ArrowLeft, User, Mail, Lock, Loader2,
-  CheckCircle2, CreditCard, Calendar, Smartphone
-} from "lucide-react";
-import {
-  extractToken,
-  normalizePhone, isValidTunisianPhone, isValidEmail, isValidDateOfBirth
-} from "@/lib/auth-utils";
+import { ArrowLeft, ArrowRight, ArrowDown, Check, Loader2 } from "lucide-react";
+import { extractToken, normalizePhone, isValidTunisianPhone, isValidEmail, isValidDateOfBirth } from "@/lib/auth-utils";
 import { useAuth } from "@/contexts/auth-context";
+import SignatureCanvas from "@/components/signature-canvas";
 
-// EXTRACTED OUTSIDE COMPONENT TO PREVENT RE-RENDER FOCUS LOSS
-const PillInput = ({ icon: Icon, rightElement, label, ...props }: any) => (
-  <div className="flex flex-col gap-2 relative">
-    {label && <label className="text-[11px] uppercase tracking-wider text-[#888] font-bold">{label}</label>}
-    <div className="relative w-full">
-      {Icon && <Icon className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-[#888] pointer-events-none" />}
-      <input
-        {...props}
-        className={cn(
-          "w-full h-14 rounded-full bg-white/5 border border-white/10 px-6 outline-none transition-all",
-          "text-base text-white placeholder:text-[#555] font-inter tracking-[0.05em]",
-          Icon ? "pl-[3.25rem]" : "", rightElement ? "pr-14" : "",
-          "focus:border-[#00FF88] focus:ring-[3px] focus:ring-[#00FF88]/10"
-        )}
-      />
-      {rightElement && <div className="absolute right-4 top-1/2 -translate-y-1/2">{rightElement}</div>}
-    </div>
-  </div>
-);
+const STEPS = ["Phone", "Details", "Identity", "Sign", "PIN"];
 
 export default function RegisterPage() {
   const router = useRouter();
   const { setAuth } = useAuth();
-  const [step, setStep] = React.useState(1);
+  const [step, setStep] = React.useState(0);
+  const [direction, setDirection] = React.useState<"forward" | "back">("forward");
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState("");
 
-  // Step 1 State
+  // Step 0: Phone
+  const [phone, setPhone] = React.useState("");
+
+  // Step 1: Details
   const [firstName, setFirstName] = React.useState("");
   const [lastName, setLastName] = React.useState("");
-  const [phone, setPhone] = React.useState("");
   const [email, setEmail] = React.useState("");
   const [dob, setDob] = React.useState("");
+
+  // Step 2: Identity
   const [cinNumber, setCinNumber] = React.useState("");
   const [cinIssueDate, setCinIssueDate] = React.useState("");
-  const [addressLine, setAddressLine] = React.useState("");
-  const [delegation, setDelegation] = React.useState("");
-  const [governorate, setGovernorate] = React.useState("");
-  const [loading1, setLoading1] = React.useState(false);
-  const [error1, setError1] = React.useState("");
-  const [fieldErrors, setFieldErrors] = React.useState<Record<string, string>>({});
-  const [municipalities, setMunicipalities] = React.useState<any[]>([]);
-  const [delegations, setDelegations] = React.useState<any[]>([]);
-  const [municipalitiesLoading, setMunicipalitiesLoading] = React.useState(true);
 
-  // Step 2 (PIN) State
+  // Step 3: E-Sign
+  const [contractText, setContractText] = React.useState("");
+  const [contractDocHash, setContractDocHash] = React.useState("");
+  const [signatureBase64, setSignatureBase64] = React.useState("");
+  const [signatureType, setSignatureType] = React.useState<"draw" | "type">("draw");
+  const [termsAccepted, setTermsAccepted] = React.useState(false);
+  const [signedDocId, setSignedDocId] = React.useState("");
+  const [esignLoading, setEsignLoading] = React.useState(false);
+  const [contractLoading, setContractLoading] = React.useState(false);
+  const [signSuccess, setSignSuccess] = React.useState(false);
+  const [hasScrolledToBottom, setHasScrolledToBottom] = React.useState(false);
+  const [scrollProgress, setScrollProgress] = React.useState(0);
+  const contractScrollRef = React.useRef<HTMLDivElement>(null);
+
+  // Step 4: PIN
   const [pin, setPin] = React.useState("");
   const [confirmPin, setConfirmPin] = React.useState("");
-  const [pinStep, setPinStep] = React.useState<"pin" | "success">("pin");
-  const [pinError, setPinError] = React.useState("");
-  const [loading4, setLoading4] = React.useState(false);
-  const [userAddress, setUserAddress] = React.useState("");
+
+  // Account details after init
   const [accountToken, setAccountToken] = React.useState("");
+  const [userAddress, setUserAddress] = React.useState("");
   const [cardLast4, setCardLast4] = React.useState("4242");
   const [cardExpiry, setCardExpiry] = React.useState("12/28");
   const [cardType, setCardType] = React.useState("VISA");
-  const [rib, setRib] = React.useState("");
-  const [iban, setIban] = React.useState("");
-  const [sessionId, setSessionId] = React.useState("");
+  const fullName = `${firstName} ${lastName}`.trim();
 
-  // Step 3 (OTP) State
-  const [otp, setOtp] = React.useState("");
-  const [otpError, setOtpError] = React.useState("");
-  const [otpLoading, setOtpLoading] = React.useState(false);
+  const goNext = () => { setDirection("forward"); setStep((s) => Math.min(s + 1, 5)); };
+  const goBack = () => { setDirection("back"); setError(""); setStep((s) => Math.max(s - 1, 0)); };
 
-  // Fetch Tunisian municipalities for dropdown
-  React.useEffect(() => {
-    fetch("/api/municipalities")
-      .then(r => r.json())
-      .then(d => {
-        if (Array.isArray(d)) {
-          setMunicipalities(d);
-        }
-      })
-      .catch(() => {})
-      .finally(() => setMunicipalitiesLoading(false));
-  }, []);
+  const canSubmitStep0 = isValidTunisianPhone(phone);
+  const canSubmitStep1 = firstName.trim() && lastName.trim() && isValidEmail(email) && isValidDateOfBirth(dob);
+  const canSubmitStep2 = cinNumber.trim().length >= 6 && cinIssueDate;
+  const canSubmitStep3 = signatureBase64.length > 0 && termsAccepted && !esignLoading;
+  const canSubmitStep4 = pin.length === 6 && /^\d{6}$/.test(pin) && pin === confirmPin;
 
-  const onStep1Submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const errs: Record<string, string> = {};
-    if (!firstName.trim()) errs.firstName = "First name is required";
-    if (!lastName.trim()) errs.lastName = "Last name is required";
-    if (!isValidTunisianPhone(phone)) errs.phone = "Enter a valid 8-digit Tunisian phone number";
-    if (!isValidEmail(email)) errs.email = "Enter a valid email address";
-    if (!isValidDateOfBirth(dob)) errs.dob = "You must be at least 18 years old";
-    if (!cinNumber.trim()) errs.cinNumber = "CIN number is required";
-    if (!cinIssueDate) errs.cinIssueDate = "CIN issue date is required";
-    if (!addressLine.trim()) errs.addressLine = "Address is required";
-    if (!delegation.trim()) errs.delegation = "Delegation is required";
-    if (!governorate.trim()) errs.governorate = "Governorate is required";
-    if (Object.keys(errs).length) { setFieldErrors(errs); return; }
+  // ─── Step 0 → Step 1: Just advance ───
+  const submitPhone = () => {
+    if (!canSubmitStep0) return;
+    goNext();
+  };
 
-    setLoading1(true); setError1(""); setFieldErrors({});
+  // ─── Step 2 → Step 3: Init registration + fetch contract ───
+  const submitIdentity = async () => {
+    if (!canSubmitStep2) return;
+    setLoading(true); setError("");
     try {
-      const payload = {
-        full_name: `${firstName.trim()} ${lastName.trim()}`.trim(),
+      const { ok, data } = await postJson("/auth/register/init", {
+        full_name: fullName,
         phone: normalizePhone(phone),
-        email,
+        email: email,
         date_of_birth: dob,
-        cin_number: cinNumber.trim(),
+        cin_number: cinNumber,
         cin_issue_date: cinIssueDate,
-        address_line: addressLine.trim(),
-        delegation: delegation.trim(),
-        governorate: governorate.trim(),
-      };
-      const { ok, data } = await postJson("/auth/register/init", payload);
-      if (!ok) { setError1(String(data.error || data.message || "Failed to initialize registration")); return; }
-      const address = String(data.address || "");
-      const token = extractToken(data);
-      const sid = String(data.session_id || "");
-      if (address) {
-        setUserAddress(address);
+      });
+      if (ok) {
+        const addr = String(data.address || "");
+        const tok = extractToken(data);
+        if (addr) setUserAddress(addr);
+        if (tok) {
+          setAccountToken(tok);
+          // Persist token early so e-sign endpoints work
+          const { persistSession } = await import("@/lib/auth-utils");
+          persistSession(tok, addr, fullName, phone);
+        }
         setCardLast4(String(data.card_last4 || "4242"));
         setCardExpiry(String(data.card_expiry || "12/28"));
         setCardType(String(data.card_type || "VISA"));
-        setRib(String(data.rib || ""));
-        setIban(String(data.iban || ""));
-        if (token) setAccountToken(token);
+        await fetchContract(addr, tok);
+      } else {
+        setError(String(data.error || data.message || "Registration failed"));
       }
-      if (sid) setSessionId(sid);
-      setStep(2);
-    } finally { setLoading1(false); }
+    } finally { setLoading(false); }
   };
 
+  // ─── Fetch contract text from backend ───
+  const fetchContract = async (address: string, token: string) => {
+    setContractLoading(true);
+    try {
+      const { ok, data } = await getJson(
+        `/accounts/${address}/esign/contract`,
+        { "X-Account-Token": token }
+      );
+      if (ok) {
+        setContractText(String(data.contract_text || ""));
+        setContractDocHash(String(data.doc_hash || ""));
+        goNext();
+      } else {
+        setError("Failed to load contract. Please try again.");
+        setStep(2); // stay on identity step
+      }
+    } catch {
+      setError("Network error loading contract.");
+    } finally {
+      setContractLoading(false);
+    }
+  };
+
+  // ─── Scroll tracking for contract review ───
+  const handleContractScroll = React.useCallback(() => {
+    const el = contractScrollRef.current;
+    if (!el) return;
+    const { scrollTop, scrollHeight, clientHeight } = el;
+    const progress = Math.min(((scrollTop + clientHeight) / scrollHeight) * 100, 100);
+    setScrollProgress(progress);
+    if (scrollHeight - scrollTop - clientHeight < 50) {
+      setHasScrolledToBottom(true);
+    }
+  }, []);
+
+  // ─── Submit e-signature ───
+  const submitEsign = async () => {
+    if (!canSubmitStep3) return;
+    setEsignLoading(true); setError("");
+    try {
+      const { ok, data } = await postJson(
+        `/accounts/${userAddress}/esign/account`,
+        {
+          signature_image_base64: signatureBase64,
+          signature_type: signatureType,
+          terms_accepted: termsAccepted,
+        },
+        { "X-Account-Token": accountToken }
+      );
+      if (ok) {
+        const docId = String(data.document_id || "");
+        setSignedDocId(docId);
+        setSignSuccess(true);
+        triggerPdfDownload(userAddress, docId);
+      } else {
+        setError(String(data.error || "Signing failed"));
+      }
+    } catch {
+      setError("Network error during signing.");
+    } finally {
+      setEsignLoading(false);
+    }
+  };
+
+  // ─── PDF Download via fetch+blob ───
+  const triggerPdfDownload = (address: string, docId: string) => {
+    fetch(`/api/accounts/${address}/esign/account/${docId}/pdf`, {
+      headers: { "X-Account-Token": accountToken },
+    })
+      .then((res) => res.blob())
+      .then((blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `nexapay-contract-${docId}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      })
+      .catch(() => { /* silently skip - user can download later */ });
+  };
+
+  // ─── Step 4 → Submit PIN ───
   const submitPin = async () => {
-    if (pin.length !== 6 || !pin.match(/^\d{6}$/) || pin !== confirmPin) return;
-    setLoading4(true);
+    if (!canSubmitStep4) return;
+    setLoading(true); setError("");
     try {
-      const { ok, data } = await postJson("/auth/register/set-pin", {
-        address: userAddress,
-        pin,
-        pin_confirm: confirmPin,
-      });
-      if (!ok) {
-        setPinError(String(data.error || "Failed to set PIN"));
-        return;
-      }
+      const payload: Record<string, unknown> = { address: userAddress, pin, pin_confirm: confirmPin };
+      const { ok, data } = await postJson("/auth/register/set-pin", payload);
+      if (!ok) { setError(String(data.error || "Failed to set PIN")); return; }
       const token = extractToken(data);
-      if (token) {
-        setAuth(token, userAddress, `${firstName} ${lastName}`.trim());
-        setAccountToken(token);
-      }
-      setPinStep("success");
-      setStep(3);
-    } catch {
-      setPinError("Network error. Please try again.");
-    } finally { setLoading4(false); }
+      if (token) setAuth(token, userAddress, fullName, phone);
+      goNext();
+    } catch { setError("Network error. Try again."); }
+    finally { setLoading(false); }
   };
 
-  const submitOtp = async () => {
-    if (otp.length !== 6 || !otp.match(/^\d{6}$/)) {
-      setOtpError("Enter a valid 6-digit code");
-      return;
+  // Auto-redirect after success (step 5)
+  React.useEffect(() => {
+    if (step === 5) {
+      const t = setTimeout(() => router.push("/dashboard"), 2500);
+      return () => clearTimeout(t);
     }
-    if (!sessionId) {
-      setOtpError("Session expired. Please restart registration.");
-      return;
-    }
-    setOtpLoading(true);
-    setOtpError("");
-    try {
-      const { ok, data } = await verifyRegistrationOtp(sessionId, otp);
-      if (!ok) {
-        setOtpError(String(data.error || "Invalid OTP. Please try again."));
-        return;
-      }
-      setStep(4);
-    } catch {
-      setOtpError("Network error. Please try again.");
-    } finally { setOtpLoading(false); }
-  };
+  }, [step, router]);
 
-  const resendOtp = async () => {
-    if (!sessionId) return;
-    try {
-      await postJson("/auth/register/resend-otp", { session_id: sessionId });
-      setOtpError("A new code has been sent.");
-    } catch {
-      setOtpError("Could not resend code. Please try again.");
-    }
-  };
+  const animClass = direction === "forward" ? "animate-in fade-in slide-in-from-right-4 duration-300" : "animate-in fade-in slide-in-from-left-4 duration-300";
 
   return (
-    <div className="min-h-screen bg-[#080808] text-white font-inter relative overflow-hidden flex flex-col items-center selection:bg-[#00FF88] selection:text-black">
-      {/* Progress Bar */}
-      <div className="absolute top-0 left-0 w-full h-[3px] bg-[#222] z-50">
-        <div className="h-full bg-[#00FF88] shadow-[0_0_10px_#00FF88] transition-all duration-500 ease-out" style={{ width: `${(step / 3) * 100}%` }} />
-      </div>
-
-      {step > 1 && step < 3 && (
-        <button onClick={() => setStep(s => s - 1)} className="absolute top-8 left-8 md:left-12 z-50 p-2 text-[#888] hover:text-white transition-colors bg-white/5 rounded-full">
-          <ArrowLeft size={24} />
-        </button>
-      )}
-      {step < 3 && (
-        <div className="absolute top-8 right-8 md:right-12 z-50 text-[#888] font-bold text-sm tracking-wider font-space-grotesk">
-          STEP {step} OF 3
+    <div className="min-h-screen bg-[#0b0b0b] text-white flex flex-col items-center selection:bg-[#00d4aa] selection:text-black">
+      {/* Progress */}
+      {step < 5 && (
+        <div className="w-full max-w-[420px] mt-8 px-6">
+          <div className="flex items-center gap-2 mb-8">
+            {STEPS.map((label, i) => (
+              <React.Fragment key={label}>
+                <div className="flex items-center gap-2">
+                  <div className={cn(
+                    "flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold transition-all",
+                    i < step ? "bg-[#00d4aa] text-black" :
+                    i === step ? "bg-[#00d4aa]/20 text-[#00d4aa] ring-2 ring-[#00d4aa]/30" :
+                    "bg-white/[0.04] text-white/25"
+                  )}>
+                    {i < step ? <Check className="h-3 w-3" /> : i + 1}
+                  </div>
+                  <span className={cn("text-[11px] font-medium hidden sm:inline", i <= step ? "text-white/70" : "text-white/20")}>{label}</span>
+                </div>
+                {i < STEPS.length - 1 && <div className={cn("h-px flex-1 min-w-4", i < step ? "bg-[#00d4aa]/50" : "bg-white/[0.06]")} />}
+              </React.Fragment>
+            ))}
+          </div>
         </div>
       )}
 
-      <div className="relative w-full flex-1 flex transition-transform duration-[400ms] ease-[cubic-bezier(0.32,0.72,0,1)] pt-16">
-        
-        {/* STEP 1 */}
-        {step === 1 && (
-          <div className="w-full flex-1 flex flex-col lg:flex-row animate-in fade-in zoom-in-95 duration-500">
-            <div className="lg:w-1/2 p-4 sm:p-8 lg:p-16 flex flex-col justify-center relative border-b lg:border-b-0 lg:border-r border-white/5">
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,255,136,0.05)_0%,transparent_60%)] pointer-events-none" />
-              <h1 className="text-3xl sm:text-4xl lg:text-[56px] font-space-grotesk font-bold leading-tight mb-6 sm:mb-8">
-                Open your account in minutes
-              </h1>
-              <div className="flex flex-col gap-4">
-                {["Free IBAN & RIB", "Virtual Visa card", "Zero fees"].map(b => (
-                  <div key={b} className="flex items-center gap-3 bg-#111 border border-white/10 px-5 py-3 rounded-full w-max text-sm font-bold shadow-lg shadow-black/50">
-                    <CheckCircle2 size={18} className="text-[#00FF88]" /> {b}
-                  </div>
-                ))}
+      {/* Back button */}
+      {step > 0 && step < 5 && (
+        <div className="w-full max-w-[420px] px-6 mb-2">
+          <button onClick={goBack} className="inline-flex items-center gap-1.5 text-[13px] text-white/40 hover:text-white transition-colors">
+            <ArrowLeft className="h-3.5 w-3.5" /> Back
+          </button>
+        </div>
+      )}
+
+      <div className="flex-1 flex items-start justify-center w-full px-6 pt-2">
+        <div key={step} className={cn("w-full max-w-[420px]", animClass)}>
+
+          {/* STEP 0: Phone */}
+          {step === 0 && (
+            <div className="flex flex-col gap-6">
+              <div>
+                <h1 className="text-2xl font-semibold tracking-tight">Enter your phone number</h1>
+                <p className="mt-1.5 text-[14px] text-white/40">We'll use this to secure your account.</p>
               </div>
+
+              <div className="relative flex items-center h-14 rounded-xl bg-white/[0.04] border border-white/[0.08] overflow-hidden transition-all focus-within:border-[#00d4aa]/50 focus-within:ring-2 focus-within:ring-[#00d4aa]/10">
+                <div className="flex items-center gap-1.5 pl-4 pr-3 border-r border-white/[0.08] h-full shrink-0">
+                  <span className="text-base">🇹🇳</span>
+                  <span className="text-sm font-semibold text-white/70">+216</span>
+                </div>
+                <input
+                  type="tel" maxLength={10} autoFocus
+                  className="flex-1 h-full bg-transparent outline-none px-4 text-base font-medium text-white placeholder:text-white/20 tracking-[0.03em]"
+                  value={phone.replace(/\D/g, '').replace(/(\d{2})(\d{3})(\d{4})/, '$1 $2 $3')}
+                  onChange={(e) => { const raw = e.target.value.replace(/\D/g, '').slice(0, 8); setPhone(raw); }}
+                  placeholder="55 000 000"
+                  onKeyDown={(e) => { if (e.key === "Enter" && canSubmitStep0) submitPhone(); }}
+                />
+              </div>
+
+              {error && <p className="text-red-400 text-[13px] bg-red-500/5 border border-red-500/10 rounded-lg p-3">{error}</p>}
+
+              <button
+                onClick={submitPhone}
+                disabled={!canSubmitStep0}
+                className="flex items-center justify-center gap-2 h-14 rounded-xl bg-[#00d4aa] text-black font-semibold text-[15px] transition-all hover:bg-[#00d4aa]/90 disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                Continue <ArrowRight className="h-4 w-4" />
+              </button>
+
+              <p className="text-center text-[13px] text-white/30">
+                Already have an account? <Link href="/login" className="text-[#00d4aa] font-medium hover:underline">Log in</Link>
+              </p>
             </div>
-            <div className="lg:w-1/2 p-4 sm:p-8 lg:p-16 flex flex-col justify-center items-center">
-              <form onSubmit={onStep1Submit} className="w-full max-w-[420px] flex flex-col gap-4 sm:gap-5">
-                <div className="mb-4">
-                  <h2 className="text-3xl font-space-grotesk font-bold">Create your account</h2>
-                  <p className="text-[#888] mt-2">Let's start with the basics</p>
-                </div>
-                {error1 && <div className="text-red-500 text-sm bg-red-500/10 p-3 rounded-xl border border-red-500/20">{error1}</div>}
-                
-                <div className="flex flex-col sm:flex-row gap-4">
-                  <div className="flex-1 flex flex-col gap-2 relative">
-                    <label className="text-[11px] font-bold text-[#888]">
-                      First Name <span className="text-white/40 font-normal">(الاسم)</span> <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative w-full">
-                      <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#888] pointer-events-none" />
-                      <input type="text" required value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="folan"
-                        className={cn("w-full h-12 rounded-xl bg-white/5 border border-white/10 outline-none pl-10 pr-4 text-base text-white font-inter placeholder:text-white/20 focus:border-[#00FF88] focus:ring-[3px] focus:ring-[#00FF88]/10 transition-all", fieldErrors.firstName ? "border-red-500" : "")} />
-                    </div>
-                    {fieldErrors.firstName && <p className="text-red-500 text-xs">{fieldErrors.firstName}</p>}
-                  </div>
-                  <div className="flex-1 flex flex-col gap-2 relative">
-                    <label className="text-[11px] font-bold text-[#888]">
-                      Last Name <span className="text-white/40 font-normal">(اللقب)</span> <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative w-full">
-                      <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#888] pointer-events-none" />
-                      <input type="text" required value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="el folani"
-                        className={cn("w-full h-12 rounded-xl bg-white/5 border border-white/10 outline-none pl-10 pr-4 text-base text-white font-inter placeholder:text-white/20 focus:border-[#00FF88] focus:ring-[3px] focus:ring-[#00FF88]/10 transition-all", fieldErrors.lastName ? "border-red-500" : "")} />
-                    </div>
-                    {fieldErrors.lastName && <p className="text-red-500 text-xs">{fieldErrors.lastName}</p>}
-                  </div>
-                </div>
+          )}
 
-                <div className="flex flex-col gap-2 relative">
-                  <label className="text-[11px] font-bold text-[#888]">
-                    Phone Number <span className="text-white/40 font-normal">(رقم الهاتف)</span> <span className="text-red-500">*</span>
-                  </label>
-                  <div className={cn("relative w-full flex items-center h-12 rounded-xl bg-white/5 border border-white/10 overflow-hidden transition-all focus-within:border-[#00FF88] focus-within:ring-[3px] focus-within:ring-[#00FF88]/10", fieldErrors.phone ? "border-red-500" : "")}>
-                    <div className="flex items-center gap-1.5 pl-4 pr-3 border-r border-white/10 h-full shrink-0 select-none">
-                      <span className="text-base">🇹🇳</span>
-                      <span className="text-sm font-bold text-white/80">+216</span>
-                    </div>
-                    <input
-                      type="tel"
-                      maxLength={10}
-                      required
-                      className="flex-1 h-full bg-transparent outline-none px-4 text-base text-white tracking-[0.05em] font-inter placeholder:text-white/20"
-                      value={phone.replace(/\D/g, '').replace(/(\d{2})(\d{3})(\d{4})/, '$1 $2 $3')}
-                      onChange={(e) => {
-                        const raw = e.target.value.replace(/\D/g, '').slice(0, 8);
-                        setPhone(raw);
-                      }}
-                      placeholder="55 000 000"
-                    />
-                  </div>
-                  {fieldErrors.phone && <p className="text-red-500 text-xs px-4">{fieldErrors.phone}</p>}
-                </div>
+          {/* STEP 1: Personal Details */}
+          {step === 1 && (
+            <div className="flex flex-col gap-5">
+              <div>
+                <h1 className="text-2xl font-semibold tracking-tight">Tell us about yourself</h1>
+                <p className="mt-1.5 text-[14px] text-white/40">We need a few details to create your account.</p>
+              </div>
 
-                        <div className="flex flex-col sm:flex-row gap-4">
-                  <div className="flex-1">
-                    <PillInput label="Date of Birth" icon={Calendar} type="date" value={dob} onChange={(e: any) => setDob(e.target.value)} error={fieldErrors.dob} required />
-                  </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-white/40">First name</label>
+                  <input type="text" autoFocus value={firstName} onChange={(e) => setFirstName(e.target.value)}
+                    placeholder="Folan"
+                    className="h-12 rounded-xl bg-white/[0.04] border border-white/[0.08] px-4 text-[15px] text-white placeholder:text-white/15 outline-none focus:border-[#00d4aa]/50 focus:ring-2 focus:ring-[#00d4aa]/10 transition-all" />
                 </div>
-
-                <div className="flex flex-col sm:flex-row gap-4">
-                  <div className="flex-1 flex flex-col gap-2 relative">
-                    <label className="text-[11px] font-bold text-[#888]">
-                      CIN Number <span className="text-white/40 font-normal">(رقم بطاقة التعريف)</span> <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative w-full">
-                      <CreditCard className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#888] pointer-events-none" />
-                      <input type="text" required value={cinNumber} onChange={(e) => setCinNumber(e.target.value.replace(/\D/g, ''))} placeholder="14045739" maxLength={20}
-                        className={cn("w-full h-12 rounded-xl bg-white/5 border border-white/10 outline-none pl-10 pr-4 text-base text-white font-inter placeholder:text-white/20 focus:border-[#00FF88] focus:ring-[3px] focus:ring-[#00FF88]/10 transition-all", fieldErrors.cinNumber ? "border-red-500" : "")} />
-                    </div>
-                    {fieldErrors.cinNumber && <p className="text-red-500 text-xs">{fieldErrors.cinNumber}</p>}
-                  </div>
-                  <div className="flex-1 flex flex-col gap-2 relative">
-                    <label className="text-[11px] font-bold text-[#888]">
-                      CIN Issue Date <span className="text-white/40 font-normal">(تاريخ الإصدار)</span> <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative w-full">
-                      <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#888] pointer-events-none" />
-                      <input type="date" required value={cinIssueDate} onChange={(e) => setCinIssueDate(e.target.value)}
-                        className={cn("w-full h-12 rounded-xl bg-white/5 border border-white/10 outline-none pl-10 pr-4 text-base text-white font-inter placeholder:text-white/20 focus:border-[#00FF88] focus:ring-[3px] focus:ring-[#00FF88]/10 transition-all", fieldErrors.cinIssueDate ? "border-red-500" : "")} />
-                    </div>
-                    {fieldErrors.cinIssueDate && <p className="text-red-500 text-xs">{fieldErrors.cinIssueDate}</p>}
-                  </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-white/40">Last name</label>
+                  <input type="text" value={lastName} onChange={(e) => setLastName(e.target.value)}
+                    placeholder="El Folani"
+                    className="h-12 rounded-xl bg-white/[0.04] border border-white/[0.08] px-4 text-[15px] text-white placeholder:text-white/15 outline-none focus:border-[#00d4aa]/50 focus:ring-2 focus:ring-[#00d4aa]/10 transition-all" />
                 </div>
+              </div>
 
-                <div className="flex flex-col gap-2 relative">
-                  <label className="text-[11px] font-bold text-[#888]">
-                    Address <span className="text-white/40 font-normal">(العنوان)</span> <span className="text-red-500">*</span>
-                  </label>
-                  <input type="text" required value={addressLine} onChange={(e) => setAddressLine(e.target.value)} placeholder="123 Rue Habib Bourguiba"
-                    className={cn("w-full h-12 rounded-xl bg-white/5 border border-white/10 outline-none px-4 text-base text-white font-inter placeholder:text-white/20 focus:border-[#00FF88] focus:ring-[3px] focus:ring-[#00FF88]/10 transition-all", fieldErrors.addressLine ? "border-red-500" : "")} />
-                  {fieldErrors.addressLine && <p className="text-red-500 text-xs">{fieldErrors.addressLine}</p>}
-                </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-white/40">Email</label>
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  className="h-12 rounded-xl bg-white/[0.04] border border-white/[0.08] px-4 text-[15px] text-white placeholder:text-white/15 outline-none focus:border-[#00d4aa]/50 focus:ring-2 focus:ring-[#00d4aa]/10 transition-all" />
+              </div>
 
-                <div className="flex flex-col sm:flex-row gap-4">
-                  <div className="flex-1 flex flex-col gap-2 relative">
-                    <label className="text-[11px] font-bold text-[#888]">
-                      Delegation <span className="text-white/40 font-normal">(المعتمدية)</span> <span className="text-red-500">*</span>
-                    </label>
-                    <select value={delegation} onChange={(e) => setDelegation(e.target.value)}
-                      className={cn("w-full h-12 rounded-xl bg-white/5 border border-white/10 outline-none px-4 text-base text-white font-inter focus:border-[#00FF88] focus:ring-[3px] focus:ring-[#00FF88]/10 transition-all appearance-none", fieldErrors.delegation ? "border-red-500" : "")}
-                      style={{ colorScheme: "dark" }}>
-                      <option value="" className="bg-[#111] text-[#666]">Select delegation</option>
-                      {delegations.map((d: any) => (
-                        <option key={d.Value + d.Name} value={d.Value} className="bg-[#111] text-white">{d.Name}</option>
-                      ))}
-                    </select>
-                    {fieldErrors.delegation && <p className="text-red-500 text-xs">{fieldErrors.delegation}</p>}
-                  </div>
-                  <div className="flex-1 flex flex-col gap-2 relative">
-                    <label className="text-[11px] font-bold text-[#888]">
-                      Governorate <span className="text-white/40 font-normal">(الولاية)</span> <span className="text-red-500">*</span>
-                    </label>
-                    <select value={governorate} onChange={(e) => {
-                      setGovernorate(e.target.value);
-                      setDelegation("");
-                      const gov = municipalities.find((m: any) => m.Value === e.target.value);
-                      setDelegations(gov?.Delegations || []);
-                    }}
-                      className={cn("w-full h-12 rounded-xl bg-white/5 border border-white/10 outline-none px-4 text-base text-white font-inter focus:border-[#00FF88] focus:ring-[3px] focus:ring-[#00FF88]/10 transition-all appearance-none", fieldErrors.governorate ? "border-red-500" : "")}
-                      style={{ colorScheme: "dark" }}>
-                      <option value="" className="bg-[#111] text-[#666]">{municipalitiesLoading ? "Loading..." : "Select governorate"}</option>
-                      {municipalities.map((m: any) => (
-                        <option key={m.Value} value={m.Value} className="bg-[#111] text-white">{m.Name} {m.NameAr}</option>
-                      ))}
-                    </select>
-                    {fieldErrors.governorate && <p className="text-red-500 text-xs">{fieldErrors.governorate}</p>}
-                  </div>
-                </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-white/40">Date of birth</label>
+                <input type="date" value={dob} onChange={(e) => setDob(e.target.value)}
+                  className="h-12 rounded-xl bg-white/[0.04] border border-white/[0.08] px-4 text-[15px] text-white outline-none focus:border-[#00d4aa]/50 focus:ring-2 focus:ring-[#00d4aa]/10 transition-all [color-scheme:dark]" />
+              </div>
 
-                <div className="bg-[#00FF88]/5 border border-[#00FF88]/20 rounded-xl p-3 flex items-start gap-3">
-                  <Smartphone className="w-4 h-4 text-[#00FF88] shrink-0 mt-0.5" />
-                  <p className="text-xs text-[#aaa] leading-relaxed">
-                    
-                  </p>
-                </div>
-
-                <PillInput label="Email Address" icon={Mail} type="email" placeholder="you@example.com" value={email} onChange={(e: any) => setEmail(e.target.value)} error={fieldErrors.email} required />
-
-                <button disabled={loading1} className="w-full h-14 mt-4 rounded-full bg-[#00FF88] text-[#080808] font-extrabold text-lg flex items-center justify-center hover:bg-[#00FF88]/90 transition-all disabled:opacity-50 shadow-[0_0_20px_rgba(0,255,136,0.2)]">
-                  {loading1 ? <Loader2 className="animate-spin w-5 h-5" /> : "Continue \u2192"}
-                </button>
-                <div className="text-center mt-2 text-sm text-[#888]">
-                  Already have an account? <Link href="/login" className="text-white hover:text-[#00FF88] font-bold">Sign in</Link>
-                </div>
-              </form>
+              <button
+                onClick={goNext}
+                disabled={!canSubmitStep1}
+                className="flex items-center justify-center gap-2 h-14 rounded-xl bg-[#00d4aa] text-black font-semibold text-[15px] transition-all hover:bg-[#00d4aa]/90 disabled:opacity-30 disabled:cursor-not-allowed mt-2"
+              >
+                Continue <ArrowRight className="h-4 w-4" />
+              </button>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* STEP 2 - Set PIN */}
-        {step === 2 && (
-          <div className="w-full flex-1 flex flex-col items-center justify-center p-6 animate-in fade-in zoom-in-95 duration-500">
-            {pinStep === "pin" && (
-              <div className="w-full max-w-[440px] text-center z-10">
-                <div className="mx-auto w-20 h-20 bg-[#00FF88]/10 rounded-full flex items-center justify-center mb-6 border border-[#00FF88]/20 shadow-[0_0_40px_rgba(0,255,136,0.15)]">
-                  <Lock className="w-8 h-8 text-[#00FF88]" />
+          {/* STEP 2: Identity */}
+          {step === 2 && (
+            <div className="flex flex-col gap-5">
+              <div>
+                <h1 className="text-2xl font-semibold tracking-tight">Verify your identity</h1>
+                <p className="mt-1.5 text-[14px] text-white/40">We need your CIN to verify your identity per Tunisian regulations.</p>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-white/40">CIN Number</label>
+                <input type="text" autoFocus value={cinNumber} onChange={(e) => setCinNumber(e.target.value.replace(/\D/g, ''))}
+                  placeholder="14045739" maxLength={20}
+                  className="h-12 rounded-xl bg-white/[0.04] border border-white/[0.08] px-4 text-[15px] text-white placeholder:text-white/15 tracking-[0.05em] outline-none focus:border-[#00d4aa]/50 focus:ring-2 focus:ring-[#00d4aa]/10 transition-all" />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-white/40">CIN Issue Date</label>
+                <input type="date" value={cinIssueDate} onChange={(e) => setCinIssueDate(e.target.value)}
+                  className="h-12 rounded-xl bg-white/[0.04] border border-white/[0.08] px-4 text-[15px] text-white outline-none focus:border-[#00d4aa]/50 focus:ring-2 focus:ring-[#00d4aa]/10 transition-all [color-scheme:dark]" />
+              </div>
+
+              {error && <p className="text-red-400 text-[13px] bg-red-500/5 border border-red-500/10 rounded-lg p-3">{error}</p>}
+
+              <button
+                onClick={submitIdentity}
+                disabled={!canSubmitStep2 || loading}
+                className="flex items-center justify-center gap-2 h-14 rounded-xl bg-[#00d4aa] text-black font-semibold text-[15px] transition-all hover:bg-[#00d4aa]/90 disabled:opacity-30 disabled:cursor-not-allowed mt-2"
+              >
+                {loading ? <Loader2 className="animate-spin h-4 w-4" /> : <>Continue <ArrowRight className="h-4 w-4" /></>}
+              </button>
+
+              <p className="text-center text-[12px] text-white/25">
+                Address details can be added later from your profile settings.
+              </p>
+            </div>
+          )}
+
+          {/* STEP 3: E-Sign Contract */}
+          {step === 3 && (
+            <div className="flex flex-col gap-5">
+              <div>
+                <h1 className="text-2xl font-semibold tracking-tight">Review & Sign Contract</h1>
+                <p className="mt-1.5 text-[14px] text-white/40">Please read the account opening agreement below, then sign to accept.</p>
+              </div>
+
+              {contractLoading ? (
+                <div className="flex items-center justify-center gap-3 h-64">
+                  <Loader2 className="animate-spin h-5 w-5 text-[#00d4aa]" />
+                  <span className="text-white/50 text-sm">Loading contract...</span>
                 </div>
-                <h2 className="text-2xl sm:text-[32px] font-space-grotesk font-bold mb-2">Secure your account</h2>
-                <p className="text-[#888] mb-6 sm:mb-8 text-base sm:text-lg">Create a 6-digit PIN for login and payments</p>
-
-                <div className="flex flex-col gap-6">
-                  {/* Create PIN */}
-                  <div className="flex flex-col gap-3">
-                    <label className="text-[11px] uppercase tracking-wider text-[#888] font-bold text-center">Create 6-digit PIN</label>
-                    <div className="flex justify-center items-center gap-1.5 sm:gap-2">
-                      {Array.from({ length: 6 }).map((_, i) => (
-                        <React.Fragment key={i}>
-                          {i === 3 && <div className="w-3 sm:w-4 h-px bg-white/20 mx-0.5 sm:mx-1" />}
-                          <div className="relative">
-                            <input
-                              id={`sp-${i}`}
-                              type="password"
-                              inputMode="numeric"
-                              maxLength={1}
-                              className={cn(
-                                "w-9 h-9 sm:w-10 sm:h-10 md:w-11 md:h-11 rounded-full bg-[#111] border text-center text-base sm:text-lg font-bold text-white outline-none transition-all duration-200 flex items-center justify-center",
-                                pin[i]
-                                  ? "border-[#00FF88]/50 shadow-[0_0_12px_rgba(0,255,136,0.12)]"
-                                  : "border-white/10 shadow-none",
-                                "focus:border-[#00FF88] focus:shadow-[0_0_16px_rgba(0,255,136,0.2)]"
-                              )}
-                              value={pin[i] || ""}
-                              onChange={(e) => {
-                                const val = e.target.value.replace(/\D/g, '');
-                                if (val) {
-                                  const p = pin.split(""); p[i] = val.slice(-1); setPin(p.join(""));
-                                  if (i < 5) document.getElementById(`sp-${i + 1}`)?.focus();
-                                }
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === "Backspace" && !pin[i] && i > 0) {
-                                  document.getElementById(`sp-${i - 1}`)?.focus();
-                                } else if (e.key === "Backspace") {
-                                  const p = pin.split(""); p[i] = ""; setPin(p.join(""));
-                                }
-                              }}
-                            />
-                          </div>
-                        </React.Fragment>
-                      ))}
+              ) : (
+                <>
+                  {/* Contract text */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="flex-1 h-1 bg-white/[0.06] rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-[#00d4aa] rounded-full transition-all duration-200"
+                          style={{ width: `${scrollProgress}%` }}
+                        />
+                      </div>
+                      <span className="text-[11px] text-white/40">
+                        {hasScrolledToBottom ? "Read fully" : `${Math.round(scrollProgress)}%`}
+                      </span>
                     </div>
-                  </div>
-
-                  {/* Confirm PIN */}
-                  <div className="flex flex-col gap-3">
-                    <label className="text-[11px] uppercase tracking-wider text-[#888] font-bold text-center">Confirm PIN</label>
-                    <div className="flex justify-center items-center gap-1.5 sm:gap-2">
-                      {Array.from({ length: 6 }).map((_, i) => (
-                        <React.Fragment key={i}>
-                          {i === 3 && <div className="w-3 sm:w-4 h-px bg-white/20 mx-0.5 sm:mx-1" />}
-                          <div className="relative">
-                            <input
-                              id={`scp-${i}`}
-                              type="password"
-                              inputMode="numeric"
-                              maxLength={1}
-                              className={cn(
-                                "w-9 h-9 sm:w-10 sm:h-10 md:w-11 md:h-11 rounded-full bg-[#111] border text-center text-base sm:text-lg font-bold text-white outline-none transition-all duration-200 flex items-center justify-center",
-                                confirmPin[i]
-                                  ? pin === confirmPin
-                                    ? "border-[#00FF88]/50 shadow-[0_0_12px_rgba(0,255,136,0.12)]"
-                                    : "border-red-500/50 shadow-[0_0_12px_rgba(239,68,68,0.12)]"
-                                  : "border-white/10 shadow-none",
-                                "focus:border-[#00FF88] focus:shadow-[0_0_16px_rgba(0,255,136,0.2)]"
-                              )}
-                              value={confirmPin[i] || ""}
-                              onChange={(e) => {
-                                const val = e.target.value.replace(/\D/g, '');
-                                if (val) {
-                                  const p = confirmPin.split(""); p[i] = val.slice(-1); setConfirmPin(p.join(""));
-                                  if (i < 5) document.getElementById(`scp-${i + 1}`)?.focus();
-                                }
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === "Backspace" && !confirmPin[i] && i > 0) {
-                                  document.getElementById(`scp-${i - 1}`)?.focus();
-                                } else if (e.key === "Backspace") {
-                                  const p = confirmPin.split(""); p[i] = ""; setConfirmPin(p.join(""));
-                                }
-                              }}
-                            />
-                          </div>
-                        </React.Fragment>
-                      ))}
+                    <div
+                      ref={contractScrollRef}
+                      onScroll={handleContractScroll}
+                      className="h-72 overflow-y-auto rounded-xl bg-white/[0.02] border border-white/[0.08] p-4 text-[12px] leading-relaxed text-white/65 font-mono whitespace-pre-wrap"
+                    >
+                      {contractText}
                     </div>
-                    {confirmPin.length === 6 && (
-                      <p className={cn("text-xs text-center font-medium transition-colors", pin === confirmPin ? "text-[#00FF88]" : "text-red-500")}>
-                        {pin === confirmPin ? "PINs match" : "PINs do not match"}
-                      </p>
+                    {!hasScrolledToBottom && (
+                      <div className="flex items-center justify-center gap-2 mt-2 text-xs text-white/30 animate-pulse">
+                        <ArrowDown className="h-3 w-3" /> Scroll to the bottom to continue <ArrowDown className="h-3 w-3" />
+                      </div>
+                    )}
+                    {hasScrolledToBottom && (
+                      <div className="flex items-center gap-1.5 mt-2 text-xs text-[#00d4aa] font-medium">
+                        <Check className="h-3 w-3" /> You have reached the end of the contract
+                      </div>
                     )}
                   </div>
 
-                  {pinError && <p className="text-red-500 text-sm text-center bg-red-500/10 rounded-xl py-2 px-4 border border-red-500/20">{pinError}</p>}
+                  {/* Signature section (visible after scroll-to-bottom) */}
+                  {hasScrolledToBottom && !signSuccess && (
+                    <>
+                      <div className="border-t border-white/[0.06] pt-4">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-white/40 mb-3">Your Signature</p>
+                        <SignatureCanvas
+                          onChange={(dataUrl) => setSignatureBase64(dataUrl)}
+                          onModeChange={(mode) => setSignatureType(mode)}
+                        />
+                      </div>
 
-                  <button onClick={submitPin} disabled={pin.length !== 6 || pin !== confirmPin || loading4} className="w-full h-14 rounded-full bg-[#00FF88] text-[#080808] font-extrabold text-lg flex items-center justify-center hover:bg-[#00FF88]/90 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_30px_rgba(0,255,136,0.25)] mt-2">
-                    {loading4 ? <Loader2 className="animate-spin w-5 h-5" /> : "Create Account →"}
-                  </button>
-                </div>
-              </div>
-            )}
+                      {/* Terms checkbox */}
+                      <label className="flex items-start gap-3 cursor-pointer group">
+                        <input
+                          type="checkbox"
+                          checked={termsAccepted}
+                          onChange={(e) => setTermsAccepted(e.target.checked)}
+                          className="mt-0.5 size-4 shrink-0 rounded border-white/25 bg-[#0a0b0e] text-[#00d4aa] focus:ring-[#00d4aa]/40 focus:ring-offset-0"
+                        />
+                        <span className="text-[13px] text-white/60 group-hover:text-white/80 transition-colors leading-relaxed">
+                          I confirm that I have read, understood, and agree to the{" "}
+                          <span className="text-[#00d4aa]">NexaPay Account Opening Agreement</span>, including
+                          the fee schedule, transaction limits, and data processing terms. My electronic signature
+                          constitutes a legally binding agreement under Tunisian Law No. 2002-50 on Electronic
+                          Exchanges and Commerce.
+                        </span>
+                      </label>
 
-            {pinStep === "success" && (
-              <div className="w-full max-w-[440px] text-center z-10">
-                <Loader2 className="animate-spin w-8 h-8 text-[#00FF88] mx-auto mb-4" />
-                <p className="text-[#888]">Setting up your account...</p>
-              </div>
-            )}
-          </div>
-        )}
+                      {error && <p className="text-red-400 text-[13px] bg-red-500/5 border border-red-500/10 rounded-lg p-3">{error}</p>}
 
-        {/* STEP 3 — OTP Verification */}
-        {step === 2 && (
-          <div className="w-full flex-1 flex flex-col items-center justify-center p-6 animate-in fade-in zoom-in-95 duration-500">
-            <div className="w-full max-w-[440px] text-center z-10">
-              <div className="mx-auto w-20 h-20 bg-[#00FF88]/10 rounded-full flex items-center justify-center mb-6 border border-[#00FF88]/20 shadow-[0_0_40px_rgba(0,255,136,0.15)]">
-                <Smartphone className="w-8 h-8 text-[#00FF88]" />
+                      <button
+                        onClick={submitEsign}
+                        disabled={!canSubmitStep3}
+                        className="flex items-center justify-center gap-2 h-14 rounded-xl bg-[#00d4aa] text-black font-semibold text-[15px] transition-all hover:bg-[#00d4aa]/90 disabled:opacity-30 disabled:cursor-not-allowed"
+                      >
+                        {esignLoading ? (
+                          <><Loader2 className="animate-spin h-4 w-4" /> Signing contract...</>
+                        ) : (
+                          <>Sign & Submit <ArrowRight className="h-4 w-4" /></>
+                        )}
+                      </button>
+                    </>
+                  )}
+
+                  {/* Success state */}
+                  {signSuccess && (
+                    <div className="flex flex-col items-center gap-4 py-4">
+                      <div className="w-16 h-16 rounded-full bg-[#00d4aa]/10 flex items-center justify-center">
+                        <Check className="h-8 w-8 text-[#00d4aa]" />
+                      </div>
+                      <div className="text-center">
+                        <p className="text-lg font-semibold text-white">Contract signed successfully</p>
+                        <p className="mt-1 text-[13px] text-white/40">A signed PDF copy has been downloaded to your device.</p>
+                        <p className="mt-1 text-[11px] text-[#00d4aa]/60 font-mono break-all">Doc ID: {signedDocId}</p>
+                      </div>
+                      <button
+                        onClick={goNext}
+                        className="flex items-center justify-center gap-2 h-14 rounded-xl bg-[#00d4aa] text-black font-semibold text-[15px] transition-all hover:bg-[#00d4aa]/90 w-full mt-2"
+                      >
+                        Continue to PIN Setup <ArrowRight className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+          {/* STEP 4: PIN */}
+          {step === 4 && (
+            <div className="flex flex-col gap-6">
+              <div>
+                <h1 className="text-2xl font-semibold tracking-tight">Set your PIN</h1>
+                <p className="mt-1.5 text-[14px] text-white/40">Choose a 6-digit code for login and payments.</p>
               </div>
-              <h2 className="text-2xl sm:text-[32px] font-space-grotesk font-bold mb-2">Verify your phone</h2>
-              <p className="text-[#888] mb-6 sm:mb-8 text-base sm:text-lg">
-                Enter the 6-digit code we sent to your phone to confirm it's yours.
-              </p>
 
               <div className="flex flex-col gap-6">
-                <div className="flex flex-col gap-3">
-                  <label className="text-[11px] uppercase tracking-wider text-[#888] font-bold text-center">6-digit code</label>
-                  <div className="flex justify-center items-center gap-1.5 sm:gap-2">
+                <div className="flex flex-col items-center gap-3">
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-white/40">Your PIN</label>
+                  <div className="flex justify-center gap-2">
                     {Array.from({ length: 6 }).map((_, i) => (
                       <React.Fragment key={i}>
-                        {i === 3 && <div className="w-3 sm:w-4 h-px bg-white/20 mx-0.5 sm:mx-1" />}
-                        <div className="relative">
-                          <input
-                            id={`otp-${i}`}
-                            type="text"
-                            inputMode="numeric"
-                            maxLength={1}
-                            className={cn(
-                              "w-9 h-9 sm:w-10 sm:h-10 md:w-11 md:h-11 rounded-full bg-[#111] border text-center text-base sm:text-lg font-bold text-white outline-none transition-all duration-200 flex items-center justify-center",
-                              otp[i] ? "border-[#00FF88]/50 shadow-[0_0_12px_rgba(0,255,136,0.12)]" : "border-white/10 shadow-none",
-                              "focus:border-[#00FF88] focus:shadow-[0_0_16px_rgba(0,255,136,0.2)]"
-                            )}
-                            value={otp[i] || ""}
-                            onChange={(e) => {
-                              const val = e.target.value.replace(/\D/g, '');
-                              if (val) {
-                                const o = otp.split(""); o[i] = val.slice(-1); setOtp(o.join(""));
-                                if (i < 5) document.getElementById(`otp-${i + 1}`)?.focus();
-                              }
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === "Backspace" && !otp[i] && i > 0) {
-                                document.getElementById(`otp-${i - 1}`)?.focus();
-                              } else if (e.key === "Backspace") {
-                                const o = otp.split(""); o[i] = ""; setOtp(o.join(""));
-                              }
-                            }}
-                          />
-                        </div>
+                        {i === 3 && <div className="w-3 h-px bg-white/10 self-center" />}
+                        <input
+                          id={`rp-${i}`}
+                          type="password" inputMode="numeric" maxLength={1} autoFocus={i === 0}
+                          className={cn(
+                            "w-11 h-11 rounded-xl bg-white/[0.04] border text-center text-lg font-semibold text-white outline-none transition-all",
+                            pin[i] ? "border-[#00d4aa]/50" : "border-white/[0.08]",
+                            "focus:border-[#00d4aa] focus:ring-2 focus:ring-[#00d4aa]/10"
+                          )}
+                          value={pin[i] || ""}
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/\D/g, "");
+                            if (!val) return;
+                            const newPin = pin.split("");
+                            newPin[i] = val;
+                            setPin(newPin.join(""));
+                            if (i < 5) document.getElementById(`rp-${i + 1}`)?.focus();
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Backspace" && !pin[i] && i > 0) {
+                              document.getElementById(`rp-${i - 1}`)?.focus();
+                            }
+                          }}
+                        />
                       </React.Fragment>
                     ))}
                   </div>
                 </div>
 
-                {otpError && (
-                  <p className={cn("text-sm text-center rounded-xl py-2 px-4 border", otpError.includes("sent") ? "text-[#00FF88] bg-[#00FF88]/5 border-[#00FF88]/20" : "text-red-500 bg-red-500/10 border-red-500/20")}>
-                    {otpError}
+                <div className="flex flex-col items-center gap-3">
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-white/40">Confirm PIN</label>
+                  <div className="flex justify-center gap-2">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <React.Fragment key={i}>
+                        {i === 3 && <div className="w-3 h-px bg-white/10 self-center" />}
+                        <input
+                          id={`rcp-${i}`}
+                          type="password" inputMode="numeric" maxLength={1}
+                          className={cn(
+                            "w-11 h-11 rounded-xl bg-white/[0.04] border text-center text-lg font-semibold text-white outline-none transition-all",
+                            confirmPin[i] ? (
+                              pin[i] === confirmPin[i] ? "border-[#00d4aa]/50" : "border-red-500/50"
+                            ) : "border-white/[0.08]",
+                            "focus:border-[#00d4aa] focus:ring-2 focus:ring-[#00d4aa]/10"
+                          )}
+                          value={confirmPin[i] || ""}
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/\D/g, "");
+                            if (!val) return;
+                            const newPin = confirmPin.split("");
+                            newPin[i] = val;
+                            setConfirmPin(newPin.join(""));
+                            if (i < 5) document.getElementById(`rcp-${i + 1}`)?.focus();
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Backspace" && !confirmPin[i] && i > 0) {
+                              document.getElementById(`rcp-${i - 1}`)?.focus();
+                            }
+                          }}
+                        />
+                      </React.Fragment>
+                    ))}
+                  </div>
+                </div>
+
+                {confirmPin.length === 6 && (
+                  <p className={cn("text-center text-[12px] font-medium", pin === confirmPin ? "text-[#00d4aa]" : "text-red-400")}>
+                    {pin === confirmPin ? "PINs match" : "PINs don't match"}
                   </p>
                 )}
 
-                <button onClick={submitOtp} disabled={otp.length !== 6 || otpLoading} className="w-full h-14 rounded-full bg-[#00FF88] text-[#080808] font-extrabold text-lg flex items-center justify-center hover:bg-[#00FF88]/90 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_30px_rgba(0,255,136,0.25)]">
-                  {otpLoading ? <Loader2 className="animate-spin w-5 h-5" /> : "Verify →"}
-                </button>
+                {error && <p className="text-center text-[13px] text-red-400">{error}</p>}
 
-                <button onClick={resendOtp} className="text-[#888] text-sm hover:text-white transition-colors">
-                  Didn't receive it? Resend code
+                <button
+                  onClick={submitPin}
+                  disabled={!canSubmitStep4 || loading}
+                  className="flex items-center justify-center gap-2 h-14 rounded-xl bg-[#00d4aa] text-black font-semibold text-[15px] transition-all hover:bg-[#00d4aa]/90 disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  {loading ? <Loader2 className="animate-spin h-4 w-4" /> : "Create account"}
                 </button>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* STEP 4 — Success */}
-        {step === 3 && (
-          <div className="w-full flex-1 flex flex-col items-center justify-center p-6 animate-in fade-in zoom-in-95 duration-500">
-            <div className="w-full max-w-[480px] z-10 pt-10">
-              <div className="mx-auto w-20 h-20 bg-[#00FF88] rounded-full flex items-center justify-center mb-6 shadow-[0_0_50px_#00FF88]">
-                <CheckCircle2 className="w-10 h-10 text-black" />
+          {/* STEP 5: Success */}
+          {step === 5 && (
+            <div className="flex flex-col items-center gap-6 py-10">
+              <div className="w-20 h-20 rounded-full bg-[#00d4aa]/10 flex items-center justify-center">
+                <Check className="h-10 w-10 text-[#00d4aa]" />
               </div>
-              <h2 className="text-center text-3xl sm:text-[36px] font-space-grotesk font-bold mb-2">Account activated!</h2>
-              <p className="text-center text-[#888] mb-6 text-sm">
-                Your contract is signed and anchored on the blockchain.
-              </p>
+              <div className="text-center">
+                <h1 className="text-2xl font-semibold tracking-tight">Account created</h1>
+                <p className="mt-2 text-[14px] text-white/40">Welcome to NexaPay. Redirecting to your dashboard...</p>
+              </div>
 
-              <p className="text-center text-[#888] mb-6 text-sm">
-                Your account is ready. You can now send and receive money.
-              </p>
-
-              {/* Virtual Card */}
-              <div className="w-full aspect-[1.58] bg-gradient-to-br from-[#222] to-[#0a0a0a] rounded-2xl sm:rounded-3xl border border-white/10 p-4 sm:p-6 flex flex-col justify-between shadow-2xl relative overflow-hidden mb-6 group">
-                <div className="absolute top-0 right-0 w-32 h-32 sm:w-64 sm:h-64 bg-[#00FF88]/10 blur-[80px] rounded-full" />
-                <div className="flex justify-between items-start z-10">
-                  <div className="font-space-grotesk font-extrabold text-xl sm:text-2xl tracking-tighter">NexaPay</div>
-                  <CreditCard className="text-[#00FF88] w-6 h-6 sm:w-8 sm:h-8 opacity-80" />
+              {/* Card preview */}
+              <div className="w-full h-52 rounded-2xl bg-gradient-to-br from-[#1c1c1c] to-[#0f0f0f] border border-white/[0.06] relative overflow-hidden p-6 flex flex-col justify-between">
+                <div className="absolute top-[-30px] right-[-30px] w-40 h-40 bg-[#00d4aa] rounded-full blur-[60px] opacity-20" />
+                <div className="relative z-10 flex items-center justify-between">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.15em] text-white/30">NexaPay</span>
+                  <span className="text-[11px] font-semibold text-white/50">{cardType}</span>
                 </div>
-                <div className="z-10">
-                   <p className="font-mono text-lg sm:text-xl tracking-widest mb-1 shadow-sm opacity-90 text-white">•••• •••• •••• {cardLast4}</p>
-                   <div className="flex gap-2 sm:gap-4 text-[10px] sm:text-xs font-mono text-[#888]">
-                     <span>VALID {cardExpiry}</span>
-                     <span>CVV ***</span>
-                   </div>
+                <div className="relative z-10">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-white/30 mb-0.5">Card number</p>
+                  <p className="font-space-grotesk text-[16px] font-bold tracking-[0.15em] text-white/80">
+                    •••• •••• •••• {cardLast4}
+                  </p>
                 </div>
-                <div className="z-10 flex justify-between items-end mt-2 sm:mt-4 pt-2 sm:pt-4 border-t border-white/10">
+                <div className="relative z-10 flex items-center gap-8">
                   <div>
-                    <p className="text-[9px] sm:text-[10px] uppercase text-[#666] tracking-widest font-bold">CARD HOLDER</p>
-                    <p className="font-mono text-xs sm:text-sm tracking-widest text-[#bbb]">{((firstName + " " + lastName).trim() || "folan el folani").toUpperCase()}</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-white/30 mb-0.5">Expiry</p>
+                    <p className="text-[13px] font-bold text-white/70">{cardExpiry}</p>
                   </div>
-                  <div className="font-bold text-lg sm:text-xl italic font-serif">{cardType}</div>
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-white/30 mb-0.5">Holder</p>
+                    <p className="text-[13px] font-bold text-white/70">{fullName || "NexaPay User"}</p>
+                  </div>
                 </div>
               </div>
-
-              {/* PIN Display */}
-              <div className="bg-[#00FF88]/5 border border-[#00FF88]/20 rounded-2xl p-6 mb-6">
-                <p className="text-[11px] uppercase tracking-wider text-[#888] font-bold text-center mb-3">Your PIN Code</p>
-                <p className="text-center text-3xl font-mono font-bold tracking-[0.2em] text-[#00FF88]">{pin}</p>
-                <p className="text-center text-xs text-[#888] mt-2">Save this PIN. You'll need it for login and payments.</p>
-              </div>
-
-              <button onClick={() => router.push("/verify")} className="w-full h-14 rounded-full bg-[#00FF88] text-black font-extrabold text-lg flex items-center justify-center hover:bg-[#00FF88]/90 transition-all shadow-[0_0_20px_rgba(0,255,136,0.2)] mb-3">
-                Verify Identity →
-              </button>
-              <button onClick={() => router.push("/dashboard")} className="w-full h-12 rounded-full bg-white/5 text-white font-bold flex items-center justify-center hover:bg-white/10 transition-all">
-                Go to Dashboard
-              </button>
             </div>
-          </div>
-        )}
+          )}
 
+        </div>
       </div>
     </div>
   );
