@@ -3,7 +3,6 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
-import { SandboxBanner } from "@/components/sandbox-banner";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -31,10 +30,5 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     return null;
   }
 
-  return (
-    <>
-      <SandboxBanner />
-      {children}
-    </>
-  );
+  return <>{children}</>;
 }
