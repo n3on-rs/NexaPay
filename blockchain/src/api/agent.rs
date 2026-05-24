@@ -275,7 +275,7 @@ pub async fn status(
                 if let Some(obj) = response.as_object_mut() {
                     obj.insert(
                         "docs_url".to_string(),
-                        serde_json::json!("https://nexapay.space/docs"),
+                        serde_json::json!("https://docs.nexapay.space"),
                     );
                     // Only indicate that an API key exists; the actual key is revealed once on apply
                     let has_key = sqlx::query(
@@ -323,7 +323,7 @@ pub async fn dashboard(
         return (
             axum::http::StatusCode::OK,
             Json(
-                serde_json::json!({"status":"APPROVED","business_name": business_name, "api_key": api_key, "permissions": {}, "monthly_volume_limit": monthly_volume_limit, "docs_url":"https://nexapay.space/docs"}),
+                serde_json::json!({"status":"APPROVED","business_name": business_name, "api_key": api_key, "permissions": {}, "monthly_volume_limit": monthly_volume_limit, "docs_url":"https://docs.nexapay.space"}),
             ),
         );
     }

@@ -180,7 +180,7 @@ export default function AgentDashboardLayout({ children }: { children: React.Rea
     { icon: Key, label: "API Keys", href: "/agent/dashboard/api-keys" },
     { icon: ArrowLeftRight, label: "Transactions", href: "/agent/dashboard/transactions" },
     { icon: Settings, label: "Settings", href: "/agent/dashboard/settings" },
-    { icon: BookOpen, label: "Docs", href: "https://nexapay.space/docs", external: true },
+    { icon: BookOpen, label: "Docs", href: "https://docs.nexapay.space", external: true },
     { icon: ArrowLeft, label: "Back to wallet", href: "/dashboard" },
   ];
 

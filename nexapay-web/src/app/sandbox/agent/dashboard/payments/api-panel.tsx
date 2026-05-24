@@ -810,7 +810,7 @@ console.log(payment.payUrl);`;
       </div>
 
       <a
-        href="https://nexapay.space/docs"
+        href="https://docs.nexapay.space"
         target="_blank"
         rel="noopener noreferrer"
         className="mt-4 inline-flex items-center gap-1 text-sm text-[#00d4aa] hover:underline"

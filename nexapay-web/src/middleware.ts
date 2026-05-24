@@ -17,6 +17,11 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Checkout pages are public on any domain
+  if (pathname.startsWith("/checkout/")) {
+    return NextResponse.rewrite(new URL(`/sandbox${pathname}`, request.url));
+  }
+
   // ─── auth.nexapay.space — Login / Register ───
   if (hostname.startsWith("auth.")) {
     const hasSession = request.cookies.has("nexapay_session");

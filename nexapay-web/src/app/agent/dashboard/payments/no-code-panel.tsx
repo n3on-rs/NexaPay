@@ -630,7 +630,7 @@ function CreateLinkPanel({
         const data = res.data;
         const ref = String(data.intent_id || data.id || "");
         setResult({
-          url: String(data.checkout_url || `https://pay.nexapay.space/p/${ref}`),
+          url: String(data.checkout_url || `https://nexapay.space/p/${ref}`),
           ref,
         });
         onSuccess();
