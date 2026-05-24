@@ -649,8 +649,9 @@ pub async fn withdraw_company_balance(
         return Err(api_error(StatusCode::BAD_REQUEST, "amount must be positive"));
     }
 
+    // Wallet withdrawal: transfer to owner's chain address (no bank details needed)
     let destination = company_destination(&company)
-        .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, "Complete company settlement settings before withdrawing"))?;
+        .unwrap_or_else(|| owner.chain_address.clone());
 
     let available = company_available_balance(&state, company.id).await? as u64;
     if payload.amount > available {
