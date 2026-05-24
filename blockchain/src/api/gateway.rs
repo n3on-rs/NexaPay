@@ -1063,8 +1063,9 @@ pub async fn download_payment_receipt_pdf(
     let description: String = row.try_get("description").unwrap_or_default();
 
     let amount_display = format!("{:.3} {}", (amount as f64) / 1000.0, currency);
+    let tnd = format!("{:.3}", (amount as f64) / 1000.0);
 
-    // Generate PDF receipt
+    // Generate professional invoice-style PDF receipt
     let (doc, page1, layer1) = printpdf::PdfDocument::new(
         "NexaPay Payment Receipt",
         printpdf::Mm(148.0), printpdf::Mm(210.0), // A5
@@ -1077,42 +1078,66 @@ pub async fn download_payment_receipt_pdf(
 
     let layer = doc.get_page(page1).get_layer(layer1);
     let mut y = printpdf::Mm(190.0);
+    let left = printpdf::Mm(12.0);
+    let right = printpdf::Mm(80.0);
 
-    layer.use_text("NEXAPAY PAYMENT RECEIPT", 14.0, printpdf::Mm(10.0), y, &font_bold);
+    // Header
+    layer.use_text("NEXAPAY", 18.0, left, y, &font_bold);
+    y -= printpdf::Mm(6.0);
+    layer.use_text("Payment Receipt", 10.0, left, y, &font);
+    y -= printpdf::Mm(10.0);
+
+    // Divider
+    layer.use_text("──────────────────────────────────────────", 7.0, left, y, &font);
     y -= printpdf::Mm(8.0);
-    layer.use_text("──────────────────────────────", 8.0, printpdf::Mm(10.0), y, &font);
+
+    // Merchant & Customer side by side
+    layer.use_text("FROM", 7.0, left, y, &font_bold);
+    layer.use_text("TO", 7.0, right, y, &font_bold);
+    y -= printpdf::Mm(5.0);
+    layer.use_text(&merchant_name, 9.0, left, y, &font);
+    layer.use_text(&customer_name, 9.0, right, y, &font);
+    y -= printpdf::Mm(5.0);
+    layer.use_text("NexaPay Merchant", 7.0, left, y, &font);
+    layer.use_text("Customer", 7.0, right, y, &font);
     y -= printpdf::Mm(10.0);
 
-    layer.use_text(&format!("Receipt: {}", intent_id), 9.0, printpdf::Mm(10.0), y, &font_bold);
-    y -= printpdf::Mm(5.0);
-    layer.use_text(&format!("Date: {}", created_at.format("%Y-%m-%d %H:%M UTC")), 8.0, printpdf::Mm(10.0), y, &font);
-    y -= printpdf::Mm(10.0);
+    // Divider
+    layer.use_text("──────────────────────────────────────────", 7.0, left, y, &font);
+    y -= printpdf::Mm(8.0);
 
-    layer.use_text(&format!("Merchant: {}", merchant_name), 9.0, printpdf::Mm(10.0), y, &font);
+    // Invoice details
+    layer.use_text("RECEIPT DETAILS", 7.0, left, y, &font_bold);
     y -= printpdf::Mm(5.0);
+    layer.use_text(&format!("Receipt No:  {}", intent_id), 7.0, left, y, &font);
+    y -= printpdf::Mm(4.5);
+    layer.use_text(&format!("Date:        {}", created_at.format("%d %b %Y — %H:%M UTC")), 7.0, left, y, &font);
+    y -= printpdf::Mm(4.5);
+    layer.use_text(&format!("Card:        {} ···· ···· ···· {}", card_brand, card_last4), 7.0, left, y, &font);
+    y -= printpdf::Mm(4.5);
     if !description.is_empty() {
-        layer.use_text(&format!("Description: {}", description), 8.0, printpdf::Mm(10.0), y, &font);
-        y -= printpdf::Mm(5.0);
+        layer.use_text(&format!("Description: {}", description), 7.0, left, y, &font);
+        y -= printpdf::Mm(4.5);
     }
-    y -= printpdf::Mm(8.0);
+    y -= printpdf::Mm(6.0);
 
-    layer.use_text("──────────────────────────────", 8.0, printpdf::Mm(10.0), y, &font);
-    y -= printpdf::Mm(8.0);
-
-    layer.use_text("Amount Paid:", 10.0, printpdf::Mm(10.0), y, &font_bold);
+    // Amount box
+    layer.use_text("──────────────────────────────────────────", 7.0, left, y, &font);
+    y -= printpdf::Mm(6.0);
+    layer.use_text("AMOUNT PAID", 7.0, left, y, &font_bold);
+    y -= printpdf::Mm(2.0);
+    layer.use_text(&format!("{} TND", tnd), 22.0, left, y, &font_bold);
     y -= printpdf::Mm(4.0);
-    layer.use_text(&amount_display, 16.0, printpdf::Mm(10.0), y, &font_bold);
+    layer.use_text(&format!("({} {} total)", tnd, currency), 7.0, left, y, &font);
+    y -= printpdf::Mm(8.0);
+    layer.use_text("──────────────────────────────────────────", 7.0, left, y, &font);
+    y -= printpdf::Mm(8.0);
+
+    // Status and footer
+    layer.use_text(&format!("Status: {}", status.to_uppercase()), 7.0, left, y, &font_bold);
     y -= printpdf::Mm(10.0);
-
-    layer.use_text(&format!("Card: {} **** **** {}", card_brand, card_last4), 8.0, printpdf::Mm(10.0), y, &font);
-    y -= printpdf::Mm(5.0);
-    layer.use_text(&format!("Customer: {}", customer_name), 8.0, printpdf::Mm(10.0), y, &font);
-    y -= printpdf::Mm(5.0);
-    layer.use_text(&format!("Status: {}", status.to_uppercase()), 8.0, printpdf::Mm(10.0), y, &font);
-    y -= printpdf::Mm(15.0);
-
-    layer.use_text("Thank you for your payment.", 8.0, printpdf::Mm(10.0), y, &font);
-    y -= printpdf::Mm(5.0);
+    layer.use_text("Thank you for your payment.", 7.0, left, y, &font);
+    y -= printpdf::Mm(4.0);
     layer.use_text("This is a computer-generated receipt.", 7.0, printpdf::Mm(10.0), y, &font);
     y -= printpdf::Mm(5.0);
     layer.use_text("Built by Glitch Inc — BackendGlitch Division", 7.0, printpdf::Mm(10.0), y, &font);
