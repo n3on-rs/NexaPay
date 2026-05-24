@@ -8,7 +8,8 @@ import {
   Zap,
   Key,
   ArrowLeftRight,
-  BookOpen,
+
+
   ArrowLeft,
   LogOut,
   Menu,
@@ -180,7 +181,6 @@ export default function AgentDashboardLayout({ children }: { children: React.Rea
     { icon: Key, label: "API Keys", href: "/agent/dashboard/api-keys" },
     { icon: ArrowLeftRight, label: "Transactions", href: "/agent/dashboard/transactions" },
     { icon: Settings, label: "Settings", href: "/agent/dashboard/settings" },
-    { icon: BookOpen, label: "Docs", href: "https://docs.nexapay.space", external: true },
     { icon: ArrowLeft, label: "Back to wallet", href: "/dashboard" },
   ];
 
@@ -232,19 +232,7 @@ export default function AgentDashboardLayout({ children }: { children: React.Rea
             </div>
 
             <div className="flex flex-1 flex-col gap-1">
-              {navItems.map((item) =>
-                item.external ? (
-                  <a
-                    key={item.href}
-                    href={item.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-3 px-3 py-2.5 rounded-l-[10px] text-[13px] font-medium text-[#555555] transition-colors hover:text-[#888] hover:bg-white/[0.03]"
-                  >
-                    <item.icon className="w-[18px] h-[18px] shrink-0" />
-                    <span className="truncate">{item.label}</span>
-                  </a>
-                ) : (
+              {navItems.map((item) => (
                   <Link
                     key={item.href}
                     href={item.href}
@@ -258,8 +246,7 @@ export default function AgentDashboardLayout({ children }: { children: React.Rea
                     <item.icon className="w-[18px] h-[18px] shrink-0" />
                     <span className="truncate">{item.label}</span>
                   </Link>
-                )
-              )}
+                ))}
             </div>
 
             <div className="mt-auto border-t border-white/[0.06] pt-4">
@@ -325,19 +312,7 @@ export default function AgentDashboardLayout({ children }: { children: React.Rea
                 </span>
               </div>
               <div className="flex flex-col gap-1">
-                {navItems.map((item) =>
-                  item.external ? (
-                    <a
-                      key={item.href}
-                      href={item.href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium text-[#555555] transition-colors hover:text-[#888] hover:bg-white/[0.03]"
-                    >
-                      <item.icon className="w-[18px] h-[18px] shrink-0" />
-                      <span className="truncate">{item.label}</span>
-                    </a>
-                  ) : (
+                {navItems.map((item) => (
                     <Link
                       key={item.href}
                       href={item.href}
@@ -352,8 +327,7 @@ export default function AgentDashboardLayout({ children }: { children: React.Rea
                       <item.icon className="w-[18px] h-[18px] shrink-0" />
                       <span className="truncate">{item.label}</span>
                     </Link>
-                  )
-                )}
+                ))}
               </div>
               <div className="absolute bottom-0 left-0 right-0 border-t border-white/[0.06] p-4">
                 <div className="mb-3 flex items-center gap-3 px-2">
