@@ -765,6 +765,33 @@ pub async fn confirm_intent(
             let auto_first = name_parts.first().map(|s| s.to_string());
             let auto_last = if name_parts.len() > 1 { name_parts.last().map(|s| s.to_string()) } else { None };
 
+            // Deduct from payer's chain wallet: transfer to SYSTEM
+            // (merchant balance is tracked in Postgres, settled on withdrawal)
+            if let Some(pay_amount) = payload.amount {
+                let mut chain = state.chain.lock().await;
+                if let Some(payer_acc) = chain.get_account(&chain_address) {
+                    if payer_acc.balance >= pay_amount as u64 {
+                        let tx_hash = sha256_hex(
+                            format!("{}:SYSTEM:{}:{}", chain_address, pay_amount, crate::chain::now_ts()).as_bytes(),
+                        );
+                        let tx = crate::block::Transaction {
+                            id: Uuid::new_v4().to_string(),
+                            tx_type: crate::block::TxType::Transfer,
+                            from: chain_address.clone(),
+                            to: "SYSTEM".to_string(),
+                            amount: pay_amount as u64,
+                            fee: 0,
+                            timestamp: crate::chain::now_ts(),
+                            signature: String::new(),
+                            memo: format!("Wallet payment: {}", intent_id),
+                            hash: tx_hash.clone(),
+                        };
+                        let _ = chain.apply_transaction(&tx);
+                        chain.add_pending_transaction(tx);
+                    }
+                }
+            }
+
             (true, None, "••••".to_string(), "wallet", auto_first, auto_last)
         } else {
             // Step 1: verify PIN, then send OTP

@@ -700,14 +700,19 @@ pub async fn withdraw_company_balance(
         hash: tx_hash.clone(),
     };
 
+    // Apply transfer to in-memory chain state immediately (credit owner)
+    let _ = chain.apply_transaction(&tx);
     chain.add_pending_transaction(tx.clone());
-    let block = chain
-        .mine_block(
+
+    // In single-validator mode, mine immediately for persistence.
+    // In multi-validator mode, consensus will mine the pending tx.
+    if !state.is_multi_validator {
+        let _ = chain.mine_block(
             &state.validator_address,
             &state.validator_private_key,
             &state.validator_public_key,
-        )
-        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to mine transfer block"))?;
+        );
+    }
 
     if let Some(to_acc) = chain.get_account(&owner.chain_address) {
         let _ = state.sqlite_state.upsert_account(
@@ -719,7 +724,8 @@ pub async fn withdraw_company_balance(
             now_ts(),
         );
     }
-    let _ = state.sqlite_state.record_transaction(&tx, block.index);
+    let block_index = chain.chain_height();
+    let _ = state.sqlite_state.record_transaction(&tx, block_index);
 
     drop(chain);
 
