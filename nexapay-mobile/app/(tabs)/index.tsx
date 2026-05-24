@@ -6,6 +6,7 @@ import { useAuth } from "../../src/auth/AuthContext";
 import { api } from "../../src/api/client";
 import { ArrowUpRight, ArrowDownLeft, Plus, Minus, TrendingUp } from "lucide-react-native";
 import type { AccountDetails, TransactionView } from "../../src/types";
+import { registerForPushNotifications } from "../../src/api/notifications";
 
 const { width: W, height: H } = Dimensions.get("window");
 const ACCENT = "#FF6B35"; // warm amber-orange
@@ -81,7 +82,7 @@ export default function HomeScreen() {
     Animated.spring(ringAnim, { toValue: 1, friction: 4, useNativeDriver: true }).start();
   }, [token, address]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); registerForPushNotifications(); }, [load]);
 
   const balance = account?.balance || 0;
   const tnd = (balance / 1000).toFixed(3);

@@ -7,15 +7,15 @@ export default function AppIndex() {
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, backgroundColor: "#030712", alignItems: "center", justifyContent: "center", gap: 16 }}>
-        <View style={{ width: 60, height: 60, borderRadius: 20, backgroundColor: "rgba(0,212,170,0.1)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(0,212,170,0.2)" }}>
-          <ActivityIndicator size="large" color="#00d4aa" />
+      <View style={{ flex: 1, backgroundColor: "#0A0A14", alignItems: "center", justifyContent: "center", gap: 16 }}>
+        <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: "rgba(255,107,53,0.1)", alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: "rgba(255,107,53,0.15)" }}>
+          <ActivityIndicator size="small" color="#FF6B35" />
         </View>
-        <Text style={{ color: "rgba(255,255,255,0.3)", fontSize: 14, fontWeight: "500" }}>Loading NexaPay</Text>
+        <Text style={{ color: "rgba(255,255,255,0.25)", fontSize: 13, fontWeight: "600" }}>Loading NexaPay</Text>
       </View>
     );
   }
 
-  if (isAuthenticated) return <Redirect href="/(tabs)" />;
-  return <Redirect href="/login" />;
+  if (!isAuthenticated) return <Redirect href="/login" />;
+  return <Redirect href="/(tabs)" />;
 }

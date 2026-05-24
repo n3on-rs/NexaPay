@@ -13,6 +13,7 @@ interface AuthState {
   isBiometricAvailable: boolean;
   login: (phone: string, pin: string) => Promise<{ step: string; devOtp?: string; phoneHint?: string; error?: string }>;
   verifyOtp: (phone: string, otp: string) => Promise<boolean>;
+  setAuth: (token: string, address: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   authenticateWithBiometrics: () => Promise<boolean>;
@@ -96,6 +97,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (token && address) await fetchUser(token, address);
   };
 
+  const setAuth = async (tok: string, addr: string) => {
+    await SecureStore.setItemAsync("nexapay_token", tok);
+    await SecureStore.setItemAsync("nexapay_address", addr);
+    setToken(tok);
+    setAddress(addr);
+    await fetchUser(tok, addr);
+  };
+
   const authenticateWithBiometrics = async () => {
     if (!isBiometricAvailable) return false;
     const result = await LocalAuthentication.authenticateAsync({
@@ -109,7 +118,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     <AuthContext.Provider value={{
       user, token, address,
       isAuthenticated: !!user, isLoading, isBiometricAvailable,
-      login, verifyOtp, logout, refreshUser, authenticateWithBiometrics,
+      login, verifyOtp, setAuth, logout, refreshUser, authenticateWithBiometrics,
     }}>
       {children}
     </AuthContext.Provider>

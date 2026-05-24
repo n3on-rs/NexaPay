@@ -1,9 +1,12 @@
 import { useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Alert } from "react-native";
 import { router } from "expo-router";
+import * as SecureStore from "expo-secure-store";
 import { api } from "../src/api/client";
+import { useAuth } from "../src/auth/AuthContext";
 
 export default function RegisterScreen() {
+  const { setAuth } = useAuth();
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -34,7 +37,14 @@ export default function RegisterScreen() {
     if (pin !== confirmPin || pin.length !== 6) { setError("PINs must match (6 digits)"); return; }
     setLoading(true); setError("");
     const res = await api.post<any>("/auth/register/set-pin", { address: userAddr, pin, pin_confirm: confirmPin });
-    if (res.ok) { Alert.alert("Account created!", "You can now log in."); router.replace("/login"); }
+    if (res.ok && res.data.token) {
+      // Store token and navigate directly to home
+      await SecureStore.setItemAsync("nexapay_token", res.data.token);
+      await SecureStore.setItemAsync("nexapay_address", userAddr);
+      setAuth(res.data.token, userAddr);
+      router.replace("/(tabs)");
+    }
+    else if (res.ok) { Alert.alert("Account created!", "You can now log in."); router.replace("/login"); }
     else setError(res.data?.error || "Failed to set PIN");
     setLoading(false);
   };
