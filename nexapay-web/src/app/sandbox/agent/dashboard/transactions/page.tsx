@@ -17,9 +17,9 @@ import {
   getGatewayTransactions,
   getGatewayBalance,
   createRefund,
-  createPayout,
 } from "@/lib/api";
-import { getSessionAddress } from "@/lib/auth-utils";
+import { postJson } from "@/lib/api";
+import { getSessionAddress, getSessionToken } from "@/lib/auth-utils";
 
 interface GatewayTransaction {
   intent_id: string;
@@ -130,18 +130,26 @@ export default function TransactionsPage() {
   };
 
   const handlePayout = async () => {
-    if (!apiKey) return;
+    const address = getSessionAddress();
+    const token = getSessionToken();
+    if (!address || !token) return;
     const amount = Math.round(parseFloat(payoutAmount) * 1000);
     if (!amount || amount > balance) return;
-    const destination = getSessionAddress();
-    if (!destination) return;
     setActionLoading(true);
     try {
-      const res = await createPayout(apiKey, { amount, destination });
-      if (res.ok) {
+      const { ok, data } = await postJson(
+        `/accounts/${address}/company/withdraw`,
+        { amount },
+        { "X-Account-Token": token }
+      );
+      if (ok) {
         setShowPayout(false);
         setPayoutAmount("");
         loadData();
+        // Also refresh the wallet balance to show the credited amount
+        setTimeout(() => loadData(), 3000);
+      } else {
+        console.error("Withdraw failed:", data);
       }
     } catch { /* ignore */ }
     setActionLoading(false);
