@@ -714,13 +714,18 @@ pub async fn search_accounts(
 
     let results = rows
         .into_iter()
-        .map(|row| SearchAccountItem {
-            chain_address: row
-                .try_get::<String, _>("chain_address")
-                .unwrap_or_default(),
-            full_name: row.try_get::<String, _>("full_name").unwrap_or_default(),
-            cin: row.try_get::<String, _>("cin").unwrap_or_default(),
-            phone: row.try_get::<String, _>("phone").unwrap_or_default(),
+        .map(|row| {
+            let cin: String = row.try_get::<String,_>("cin").unwrap_or_default();
+            let phone: String = row.try_get::<String,_>("phone").unwrap_or_default();
+            // Mask PII — only return enough to identify the recipient
+            let masked_cin = if cin.len() > 4 { format!("***{}", &cin[cin.len()-4..]) } else { "***".to_string() };
+            let masked_phone = if phone.len() > 4 { format!("***{}", &phone[phone.len()-4..]) } else { "***".to_string() };
+            SearchAccountItem {
+                chain_address: row.try_get::<String,_>("chain_address").unwrap_or_default(),
+                full_name: row.try_get::<String,_>("full_name").unwrap_or_default(),
+                cin: masked_cin,
+                phone: masked_phone,
+            }
         })
         .collect::<Vec<_>>();
 

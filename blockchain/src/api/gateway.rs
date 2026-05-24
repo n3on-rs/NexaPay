@@ -2174,13 +2174,12 @@ fn resolve_portal_url(state: &AppState, headers: &HeaderMap) -> String {
 }
 
 fn extract_request_ip(headers: &HeaderMap) -> String {
+    // Only trust X-Real-IP (set by nginx). X-Forwarded-For can be spoofed.
     headers
-        .get("x-forwarded-for")
-        .or_else(|| headers.get("x-real-ip"))
-        .and_then(|value| value.to_str().ok())
-        .and_then(|raw| raw.split(',').next())
-        .map(|ip| ip.trim().to_string())
-        .filter(|ip| !ip.is_empty())
+        .get("x-real-ip")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "unknown".to_string())
 }
 

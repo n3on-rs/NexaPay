@@ -1,26 +1,31 @@
-use axum::extract::{Multipart, State};
-use axum::http::StatusCode;
+use axum::extract::{Multipart, Path, State};
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use axum::Json;
 use serde_json::json;
 use uuid::Uuid;
 
+use crate::api::middleware::require_account_token;
 use crate::api::AppState;
 use crate::crypto::{hash_transaction_pin, verify_transaction_pin};
 use sqlx::Row;
 
 pub async fn withdraw_to_bank(
     State(state): State<AppState>,
+    Path(address): Path<String>,
+    headers: HeaderMap,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
+    // Authenticate using the URL path address
+    if let Err(e) = require_account_token(&state, &headers, &address).await {
+        return (e, Json(json!({"error": "Unauthorized"})));
+    }
     let mut amount: Option<f64> = None;
     let mut rib: Option<String> = None;
     let mut account_holder_name: Option<String> = None;
     let mut pin: Option<String> = None;
     let mut rib_document_path: Option<String> = None;
     let upload_base = std::env::var("UPLOAD_BASE_PATH").unwrap_or_else(|_| "./uploads".to_string());
-    let mut from_address = None;
-
     while let Some(field) = multipart.next_field().await.unwrap_or(None) {
         let name = field.name().unwrap_or("").to_string();
         if name == "amount" {
@@ -39,10 +44,6 @@ pub async fn withdraw_to_bank(
             pin = Some(field.text().await.unwrap_or_default());
             continue;
         }
-        if name == "from_address" {
-            from_address = Some(field.text().await.unwrap_or_default());
-            continue;
-        }
         if let Some(fname) = field.file_name() {
             let id = Uuid::new_v4();
             let dir = format!("{}/withdrawals/{}", upload_base, id);
@@ -55,15 +56,7 @@ pub async fn withdraw_to_bank(
         }
     }
 
-    let from = match from_address {
-        Some(a) => a,
-        None => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({"error": "missing from_address"})),
-            )
-        }
-    };
+    let from = address;
     let amount = match amount {
         Some(a) => a,
         None => {

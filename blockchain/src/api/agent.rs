@@ -67,9 +67,11 @@ pub async fn apply(
                     Json(serde_json::json!({"error": format!("Invalid file type: .{ext}")})),
                 );
             }
+            // Sanitize filename: strip any path components
+            let safe_name = name.replace("..", "").replace('/', "").replace('\\', "");
             let dir = format!("{}/agents/{}", upload_base, address);
             tokio::fs::create_dir_all(&dir).await.ok();
-            let target = format!("{}/{}.{}", dir, name, ext);
+            let target = format!("{}/{}.{}", dir, safe_name, ext);
             let data = field.bytes().await.unwrap_or_default();
             // Enforce size limit
             if data.len() > MAX_FILE_SIZE {
