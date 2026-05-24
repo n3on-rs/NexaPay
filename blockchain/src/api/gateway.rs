@@ -9,6 +9,8 @@ use serde_json::{json, Value};
 use sqlx::Row;
 use uuid::Uuid;
 
+use printpdf;
+
 use crate::api::auth::{
     generate_otp_code, hash_otp, is_valid_otp, login_phone_variants, mask_phone_hint, send_otp_sms,
     verify_pin,
@@ -994,8 +996,109 @@ pub async fn confirm_intent(
         "status": final_status,
         "failure_reason": failure_reason,
         "env": state.env,
-        "redirect_url": format!("{}/payment/success?intent_id={}&status={}", resolve_portal_url(&state, &headers), intent_id, redirect_status)
+        "redirect_url": format!("{}/checkout/{}?status={}", resolve_portal_url(&state, &headers), intent_id, redirect_status),
+        "receipt_pdf_url": if approved {
+            format!("{}/gateway/v1/intents/{}/receipt/pdf", resolve_portal_url(&state, &headers), intent_id)
+        } else { String::new() }
     })))
+}
+
+pub async fn download_payment_receipt_pdf(
+    State(state): State<AppState>,
+    Path(intent_id): Path<String>,
+) -> Result<(StatusCode, HeaderMap, Vec<u8>), (StatusCode, HeaderMap, Json<Value>)> {
+    let row = sqlx::query(
+        "SELECT pi.intent_id, pi.amount, pi.currency, pi.status, pi.created_at,
+                pi.customer_first_name, pi.customer_last_name,
+                pi.agent_name, pi.card_brand, pi.card_last4,
+                pi.description
+         FROM payment_intents pi
+         WHERE pi.intent_id = $1 AND pi.status = 'succeeded' LIMIT 1"
+    )
+    .bind(&intent_id)
+    .fetch_optional(&state.pg_pool)
+    .await
+    .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Database error"))?;
+
+    let row = row.ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Receipt not found"))?;
+
+    let amount: i64 = row.try_get("amount").unwrap_or(0);
+    let currency: String = row.try_get("currency").unwrap_or_else(|_| "TND".to_string());
+    let status: String = row.try_get("status").unwrap_or_default();
+    let created_at: chrono::DateTime<chrono::Utc> = row.try_get("created_at").unwrap_or_else(|_| chrono::Utc::now());
+    let first: String = row.try_get("customer_first_name").unwrap_or_default();
+    let last: String = row.try_get("customer_last_name").unwrap_or_default();
+    let agent_name: String = row.try_get("agent_name").unwrap_or_else(|_| "NexaPay".to_string());
+    let card_brand: String = row.try_get("card_brand").unwrap_or_default();
+    let card_last4: String = row.try_get("card_last4").unwrap_or_default();
+    let description: String = row.try_get("description").unwrap_or_default();
+
+    let amount_display = format!("{:.3} {}", (amount as f64) / 1000.0, currency);
+
+    // Generate PDF receipt
+    let (doc, page1, layer1) = printpdf::PdfDocument::new(
+        "NexaPay Payment Receipt",
+        printpdf::Mm(148.0), printpdf::Mm(210.0), // A5
+        "Layer 1",
+    );
+    let font = doc.add_builtin_font(printpdf::BuiltinFont::Helvetica)
+        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "PDF font error"))?;
+    let font_bold = doc.add_builtin_font(printpdf::BuiltinFont::HelveticaBold)
+        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "PDF font error"))?;
+
+    let layer = doc.get_page(page1).get_layer(layer1);
+    let mut y = printpdf::Mm(190.0);
+
+    layer.use_text("NEXAPAY PAYMENT RECEIPT", 14.0, printpdf::Mm(10.0), y, &font_bold);
+    y -= printpdf::Mm(8.0);
+    layer.use_text("──────────────────────────────", 8.0, printpdf::Mm(10.0), y, &font);
+    y -= printpdf::Mm(10.0);
+
+    layer.use_text(&format!("Receipt: {}", intent_id), 9.0, printpdf::Mm(10.0), y, &font_bold);
+    y -= printpdf::Mm(5.0);
+    layer.use_text(&format!("Date: {}", created_at.format("%Y-%m-%d %H:%M UTC")), 8.0, printpdf::Mm(10.0), y, &font);
+    y -= printpdf::Mm(10.0);
+
+    layer.use_text(&format!("Merchant: {}", agent_name), 9.0, printpdf::Mm(10.0), y, &font);
+    y -= printpdf::Mm(5.0);
+    if !description.is_empty() {
+        layer.use_text(&format!("Description: {}", description), 8.0, printpdf::Mm(10.0), y, &font);
+        y -= printpdf::Mm(5.0);
+    }
+    y -= printpdf::Mm(8.0);
+
+    layer.use_text("──────────────────────────────", 8.0, printpdf::Mm(10.0), y, &font);
+    y -= printpdf::Mm(8.0);
+
+    layer.use_text("Amount Paid:", 10.0, printpdf::Mm(10.0), y, &font_bold);
+    y -= printpdf::Mm(4.0);
+    layer.use_text(&amount_display, 16.0, printpdf::Mm(10.0), y, &font_bold);
+    y -= printpdf::Mm(10.0);
+
+    layer.use_text(&format!("Card: {} **** **** {}", card_brand, card_last4), 8.0, printpdf::Mm(10.0), y, &font);
+    y -= printpdf::Mm(5.0);
+    layer.use_text(&format!("Customer: {} {}", first, last), 8.0, printpdf::Mm(10.0), y, &font);
+    y -= printpdf::Mm(5.0);
+    layer.use_text(&format!("Status: {}", status.to_uppercase()), 8.0, printpdf::Mm(10.0), y, &font);
+    y -= printpdf::Mm(15.0);
+
+    layer.use_text("Thank you for your payment.", 8.0, printpdf::Mm(10.0), y, &font);
+    y -= printpdf::Mm(5.0);
+    layer.use_text("This is a computer-generated receipt.", 7.0, printpdf::Mm(10.0), y, &font);
+    y -= printpdf::Mm(5.0);
+    layer.use_text("Built by Glitch Inc — BackendGlitch Division", 7.0, printpdf::Mm(10.0), y, &font);
+
+    let pdf_bytes = doc.save_to_bytes()
+        .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "PDF generation failed"))?;
+
+    let mut resp_headers = HeaderMap::new();
+    resp_headers.insert("Content-Type", "application/pdf".parse().unwrap());
+    resp_headers.insert(
+        "Content-Disposition",
+        format!("attachment; filename=\"nexapay-receipt-{}.pdf\"", intent_id).parse().unwrap(),
+    );
+
+    Ok((StatusCode::OK, resp_headers, pdf_bytes))
 }
 
 pub async fn create_refund(

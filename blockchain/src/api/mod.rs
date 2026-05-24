@@ -257,6 +257,10 @@ pub fn build_router(state: AppState) -> Router {
             "/gateway/v1/intents/:intent_id/confirm",
             post(gateway::confirm_intent),
         )
+        .route(
+            "/gateway/v1/intents/:intent_id/receipt/pdf",
+            get(gateway::download_payment_receipt_pdf),
+        )
         .route("/gateway/v1/environment", get(gateway::get_environment))
         .route("/gateway/v1/refunds", post(gateway::create_refund))
         .route("/gateway/v1/balance", get(gateway::gateway_balance))

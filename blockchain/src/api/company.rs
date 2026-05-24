@@ -662,24 +662,12 @@ pub async fn withdraw_company_balance(
         &sha256_hex(format!("{}:{}", company.id, Utc::now().timestamp()).as_bytes())[..16]
     );
 
-    // Transfer funds on-chain from company developer wallet to owner personal wallet
-    let email_hash = sha256_hex(company.email.as_bytes());
+    // Transfer funds on-chain: SYSTEM → owner personal wallet.
+    // Company balance is tracked in Postgres (not on-chain), so we mint
+    // the withdrawal amount directly to the owner's chain account.
     let mut chain = state.chain.lock().await;
 
-    let company_wallet_addr = chain
-        .accounts
-        .values()
-        .find(|acc| acc.account_type == AccountType::Developer && acc.kyc_hash == email_hash)
-        .map(|acc| acc.address.clone());
-
-    let company_address = match company_wallet_addr {
-        Some(addr) => addr,
-        None => {
-            drop(chain);
-            return Err(api_error(StatusCode::NOT_FOUND, "Company wallet not found on chain"));
-        }
-    };
-
+    // Ensure owner's chain account exists
     if chain.get_account(&owner.chain_address).is_none() {
         chain.create_account(ChainAccount {
             address: owner.chain_address.clone(),
@@ -693,25 +681,15 @@ pub async fn withdraw_company_balance(
         });
     }
 
-    let from_balance = chain
-        .get_account(&company_address)
-        .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Company wallet not found"))?
-        .balance;
-
-    if from_balance < payload.amount {
-        drop(chain);
-        return Err(api_error(StatusCode::BAD_REQUEST, "Insufficient on-chain balance"));
-    }
-
     let tx_hash = sha256_hex(
-        format!("{}{}{}{}", company_address, owner.chain_address, payload.amount, now_ts())
+        format!("SYSTEM{}:{}:{}", owner.chain_address, payload.amount, now_ts())
             .as_bytes(),
     );
 
     let tx = Transaction {
         id: Uuid::new_v4().to_string(),
         tx_type: TxType::Transfer,
-        from: company_address.clone(),
+        from: "SYSTEM".to_string(),
         to: owner.chain_address.clone(),
         amount: payload.amount,
         fee: 0,
@@ -730,16 +708,6 @@ pub async fn withdraw_company_balance(
         )
         .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to mine transfer block"))?;
 
-    if let Some(from_acc) = chain.get_account(&company_address) {
-        let _ = state.sqlite_state.upsert_account(
-            &from_acc.address,
-            from_acc.balance,
-            from_acc.tx_count,
-            &from_acc.account_type,
-            from_acc.is_active,
-            now_ts(),
-        );
-    }
     if let Some(to_acc) = chain.get_account(&owner.chain_address) {
         let _ = state.sqlite_state.upsert_account(
             &to_acc.address,

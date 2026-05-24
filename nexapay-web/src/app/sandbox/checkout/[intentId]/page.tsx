@@ -1369,24 +1369,11 @@ function SuccessOverlay({
       <div className="mt-8 flex w-full max-w-xs flex-col gap-3">
         <button
           onClick={() => {
-            const receipt = `
-<!DOCTYPE html><html><head><title>Receipt</title></head>
-<body style="font-family:sans-serif;max-width:400px;margin:40px auto;padding:20px;border:1px solid #eee;border-radius:12px;">
-<h2 style="text-align:center;margin-bottom:24px;">NexaPay Receipt</h2>
-<p><strong>Merchant:</strong> ${intent.agent_name}</p>
-<p><strong>Amount:</strong> ${formatAmount(amount)}</p>
-<p><strong>Status:</strong> Paid</p>
-<p><strong>Date:</strong> ${new Date().toLocaleString()}</p>
-${intent.order_id ? `<p><strong>Order:</strong> #${intent.order_id}</p>` : ""}
-<p style="margin-top:24px;text-align:center;color:#888;font-size:12px;">Secured by NexaPay</p>
-</body></html>`;
-            const blob = new Blob([receipt], { type: "text/html" });
-            const url = URL.createObjectURL(blob);
+            // Download PDF receipt from backend
             const a = document.createElement("a");
-            a.href = url;
-            a.download = `receipt-${intent.intent_id}.html`;
+            a.href = `/api/gateway/v1/intents/${intent.intent_id}/receipt/pdf`;
+            a.download = `nexapay-receipt-${intent.intent_id}.pdf`;
             a.click();
-            URL.revokeObjectURL(url);
           }}
           className={cn(
             "flex w-full items-center justify-center gap-2 rounded-xl border py-3 text-sm font-medium transition-all",
