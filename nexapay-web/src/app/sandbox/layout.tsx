@@ -5,9 +5,13 @@ import { SandboxBanner } from "@/components/sandbox-banner";
 
 export default function SandboxLayout({ children }: { children: React.ReactNode }) {
   return (
-    <AuthProvider>
+    <div className="flex flex-col h-screen">
       <SandboxBanner />
-      {children}
-    </AuthProvider>
+      <div className="flex-1 relative" style={{ transform: "translateZ(0)" }}>
+        <AuthProvider>
+          {children}
+        </AuthProvider>
+      </div>
+    </div>
   );
 }
