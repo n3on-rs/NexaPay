@@ -768,9 +768,10 @@ pub async fn confirm_intent(
             // Deduct from payer's chain wallet: transfer to SYSTEM
             // (merchant balance is tracked in Postgres, settled on withdrawal)
             let pay_amount = final_amount as u64;
+            {
                 let mut chain = state.chain.lock().await;
                 if let Some(payer_acc) = chain.get_account(&chain_address) {
-                    if payer_acc.balance >= pay_amount as u64 {
+                    if payer_acc.balance >= pay_amount {
                         let tx_hash = sha256_hex(
                             format!("{}:SYSTEM:{}:{}", chain_address, pay_amount, crate::chain::now_ts()).as_bytes(),
                         );
@@ -779,7 +780,7 @@ pub async fn confirm_intent(
                             tx_type: crate::block::TxType::Transfer,
                             from: chain_address.clone(),
                             to: "SYSTEM".to_string(),
-                            amount: pay_amount as u64,
+                            amount: pay_amount,
                             fee: 0,
                             timestamp: crate::chain::now_ts(),
                             signature: String::new(),
