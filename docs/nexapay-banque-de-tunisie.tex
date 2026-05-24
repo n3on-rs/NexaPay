@@ -13,7 +13,8 @@
 \geometry{margin=2.2cm}
 \hypersetup{colorlinks=true,linkcolor=black,urlcolor=blue!50!black}
 
-\definecolor{nexagreen}{HTML}{00D4AA}
+\definecolor{nexablue}{HTML}{1E3A5F}
+\definecolor{nexalightblue}{HTML}{3B82F6}
 \definecolor{nexadark}{HTML}{0B0B0B}
 \definecolor{nexagray}{HTML}{666666}
 
@@ -29,13 +30,18 @@
 
 % ─── COVER ───
 \begin{center}
-\vspace*{3cm}
+\vspace*{2cm}
+
+\includegraphics[width=3.5cm]{logo.png}
+
+\vspace{0.8cm}
+
 {\Huge\bfseries NexaPay}\\[0.3cm]
-{\Large\color{nexagreen}\bfseries Plateforme de Paiement Num\'erique}\\[0.6cm]
+{\Large\color{nexablue}\bfseries Plateforme de Paiement Num\'erique}\\[0.6cm]
 {\large Whitepaper Technique}\\[0.3cm]
 {\large\color{nexagray} Pr\'epar\'e pour}\\[0.2cm]
 {\Large\bfseries La Banque de Tunisie}\\[1cm]
-{\color{nexagreen}\rule{10cm}{2pt}}\\[0.8cm]
+{\color{nexablue}\rule{10cm}{2pt}}\\[0.8cm]
 {\large\color{nexagray} Mai 2026}\\[1.5cm]
 {\normalsize\bfseries Glitch Inc --- BackendGlitch Division}\\[0.2cm]
 {\small\color{nexagray} backendglitch.com $|$ contact@backendglitch.com}\\[0.2cm]
@@ -352,6 +358,58 @@ curl -X POST https://backend.nexapay.space/gateway/v1/intents \
 \newpage
 
 % ═══════════════════════════════════════════════════════
+\section{Administration et Supervision}
+
+NexaPay dispose d'un \textbf{panneau d'administration} complet permettant aux administrateurs de la plateforme (Banque de Tunisie) de superviser l'ensemble de l'\'ecosyst\`eme en temps r\'eel.
+
+\subsection{Tableau de Bord Administrateur}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Vue d'ensemble} --- Nombre total d'utilisateurs, comptes cr\'e\'es aujourd'hui, utilisateurs actifs
+    \item \textbf{Volume des transactions} --- Montant total transf\'er\'e, nombre de transactions par jour/semaine/mois
+    \item \textbf{Agents} --- Nombre d'agents approuv\'es, en attente, volume trait\'e par agent
+    \item \textbf{Solde syst\`eme} --- Vue globale des fonds en circulation
+\end{itemize}
+
+\subsection{Gestion des Utilisateurs}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Liste compl\`ete des comptes} --- Recherche par nom, t\'el\'ephone, CIN, ou adresse blockchain
+    \item \textbf{Fiche d\'etaill\'ee par utilisateur} --- Informations personnelles, solde, historique des transactions, statut KYC, documents soumis
+    \item \textbf{Gel de compte} --- L'administrateur peut \textbf{geler un compte} imm\'ediatement en cas d'activit\'e suspecte. Le compte gel\'e ne peut plus effectuer de transactions
+    \item \textbf{D\'egel de compte} --- Apr\`es v\'erification manuelle, l'administrateur peut r\'eactiver le compte
+    \item \textbf{Journal d'audit} --- Toute action administrative est enregistr\'ee avec horodatage, identit\'e de l'administrateur, et raison fournie
+\end{itemize}
+
+\subsection{Surveillance des Transactions}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Historique complet} --- Toutes les transactions de la plateforme sont visibles avec : exp\'editeur, destinataire, montant, horodatage, type, statut
+    \item \textbf{Filtrage} --- Par date, statut, montant, type de transaction
+    \item \textbf{Gel de transaction} --- L'administrateur peut \textbf{geler une transaction sp\'ecifique} pour v\'erification avant qu'elle ne soit d\'efinitivement confirm\'ee
+    \item \textbf{Tra\c{c}abilit\'e blockchain} --- Chaque transaction a un hash on-chain v\'erifiable ind\'ependamment
+\end{itemize}
+
+\subsection{Gestion des Agents}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Candidatures en attente} --- Liste des demandes d'agents avec score de risque
+    \item \textbf{Approbation / Rejet manuel} --- Pour les cas litigieux, l'administrateur peut approuver ou rejeter avec un commentaire
+    \item \textbf{Limites de volume} --- Ajustement du plafond mensuel par agent
+    \item \textbf{Suspension d'agent} --- D\'esactivation temporaire d'un compte agent
+\end{itemize}
+
+\subsection{S\'ecurit\'e Administrative}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Authentification renforc\'ee} --- Login administrateur avec mot de passe + TOTP (code temporaire \`a 6 chiffres, SHA-256)
+    \item \textbf{Cl\'e JWT s\'epar\'ee} --- Les tokens administrateur utilisent une cl\'e cryptographique distincte des tokens utilisateur
+    \item \textbf{Audit trail} --- Chaque action administrative est journalis\'ee (qui, quoi, quand, pourquoi)
+    \item \textbf{Protection anti-seed} --- La cr\'eation du premier compte admin n\'ecessite une cl\'e secr\`ete (\texttt{NEXAPAY\_ADMIN\_SEED\_KEY})
+\end{itemize}
+
+\newpage
+
 \section{Pourquoi NexaPay ? --- Avantages Concurrentiels}
 
 \subsection{Comparaison avec les E-Wallets Existants}
@@ -427,10 +485,13 @@ curl -X POST https://backend.nexapay.space/gateway/v1/intents \
 \end{tabular}
 
 \vspace{1.5cm}
-{\color{nexagreen}\rule{8cm}{1pt}}
+{\color{nexablue}\rule{8cm}{1pt}}
 
 \vspace{0.5cm}
-{\large\bfseries\color{nexagreen} Merci de votre attention.}
+{\large\bfseries\color{nexablue} Merci de votre attention.}
+
+\vspace{0.3cm}
+{\normalsize\color{nexagray} Disponible pour d\'emonstration en direct et questions techniques.}
 
 \vspace{0.3cm}
 {\normalsize\color{nexagray} Disponible pour d\'emonstration en direct et questions techniques.}
