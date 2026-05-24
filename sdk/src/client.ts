@@ -55,9 +55,11 @@ export class NexaPayClient {
     // API key is now optional - some endpoints don't require authentication
     // Validation happens at the API level, not in the SDK
 
-    // Set default configuration
+    // Set default configuration — baseURL from env var, then config, then default
+    const defaultBaseURL = process.env.NEXAPAY_API_URL || "https://backend.nexapay.space";
+
     this.config = {
-      baseURL: config.baseURL || "https://backend.nexapay.space",
+      baseURL: config.baseURL || defaultBaseURL,
       timeout: config.timeout || 30000,
       ...config,
     };
@@ -65,7 +67,7 @@ export class NexaPayClient {
     // Build headers based on whether API key is provided
     const baseHeaders: Record<string, string> = {
       "Content-Type": "application/json",
-      "User-Agent": `NexaPay-Node-SDK/0.1.1`,
+      "User-Agent": `NexaPay-Node-SDK/0.1.2`,
       ...this.config.headers,
     };
 
@@ -110,7 +112,7 @@ export class NexaPayClient {
    * Get the base URL
    */
   public getBaseURL(): string {
-    return this.config.baseURL || "https://backend.nexapay.space";
+    return this.config.baseURL || process.env.NEXAPAY_API_URL || "https://backend.nexapay.space";
   }
 
   /**
