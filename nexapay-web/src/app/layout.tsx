@@ -25,8 +25,9 @@ export const metadata: Metadata = {
   description:
     "Open a full bank account in minutes. No branches. No paperwork. Built by Glitch Inc.",
   icons: {
-    icon: "/logo.png",
-    apple: "/logo.png",
+    icon: "/favicon.ico",
+    shortcut: "/favicon.ico",
+    apple: "/apple-touch-icon.png",
   },
   openGraph: {
     title: "NexaPay — Digital Banking for Tunisia",
