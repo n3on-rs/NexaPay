@@ -1,6 +1,6 @@
 {
   "name": "@nexapay/node-sdk",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Official Node.js SDK for NexaPay Tunisian Payment Gateway",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

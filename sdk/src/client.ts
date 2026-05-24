@@ -67,7 +67,7 @@ export class NexaPayClient {
     // Build headers based on whether API key is provided
     const baseHeaders: Record<string, string> = {
       "Content-Type": "application/json",
-      "User-Agent": `NexaPay-Node-SDK/0.1.2`,
+      "User-Agent": `NexaPay-Node-SDK/0.3.0`,
       ...this.config.headers,
     };
 

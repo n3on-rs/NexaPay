@@ -5,25 +5,24 @@ All notable changes to the NexaPay Node.js SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.0] - 2026-05-24
 
 ### Added
-- Nothing yet
+- Per-intent webhook URLs: `webhook_url`, `success_webhook_url`, `failure_webhook_url` fields on `CreatePaymentIntentRequest`
+- `NEXAPAY_API_URL` environment variable support for base URL configuration
+- Webhook retry with exponential backoff (up to 3 attempts)
 
 ### Changed
-- Nothing yet
+- Default `baseURL` now checks `NEXAPAY_API_URL` env var first, then config, then default
+- User-Agent updated to 0.3.0
 
 ### Fixed
-- Nothing yet
+- Version string in User-Agent header was hardcoded to 0.1.1 (now reads from correct version)
 
-### Deprecated
-- Nothing yet
+## [0.2.0] - 2026-05-18
 
-### Removed
-- Nothing yet
-
-### Security
-- Nothing yet
+### Added
+- SDK published to npm as `@nexapay/node-sdk`
 
 ## [0.1.1] - 2026-04-21
 
