@@ -93,6 +93,7 @@ function SendInner() {
   const [otpCode, setOtpCode] = React.useState("");
   const [otpLoading, setOtpLoading] = React.useState(false);
   const [otpShake, setOtpShake] = React.useState(false);
+  const [devOtp, setDevOtp] = React.useState("");
 
   // Idempotency key (generated once per transfer attempt)
   const [idempotencyKey] = React.useState(() => crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2));
@@ -213,6 +214,7 @@ function SendInner() {
       );
       if (res.ok) {
         setOtpId(String((res.data as any).otp_id || ""));
+        if ((res.data as any).dev_otp) setDevOtp(String((res.data as any).dev_otp));
         setStep(4);
       } else {
         const msg = String((res.data as any).error || (res.data as any).message || "");
@@ -622,6 +624,10 @@ function SendInner() {
             <p className="mt-1 text-center text-[13px] text-[#888]">
               We sent a 6-digit code to your phone
             </p>
+
+            {devOtp && (
+              <p className="mt-3 text-center text-xs text-[#00d4aa] font-mono bg-[#00d4aa]/5 py-2 rounded-lg border border-[#00d4aa]/10">Dev code: {devOtp}</p>
+            )}
 
             {/* OTP inputs */}
             <div className={cn("mt-6 flex justify-center items-center gap-2", otpShake && "animate-shake")}>
