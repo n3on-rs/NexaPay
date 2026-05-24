@@ -22,6 +22,11 @@ export function middleware(request: NextRequest) {
     return NextResponse.rewrite(new URL(`/sandbox${pathname}`, request.url));
   }
 
+  // Docs page is public on any domain
+  if (pathname.startsWith("/docs")) {
+    return NextResponse.next();
+  }
+
   // ─── auth.nexapay.space — Login / Register ───
   if (hostname.startsWith("auth.")) {
     const hasSession = request.cookies.has("nexapay_session");
