@@ -1,253 +1,122 @@
 # NexaPay
 
-NexaPay is a full-stack fintech platform that combines:
+Open-source fintech platform for Tunisia — digital wallet, payment gateway, and 3-validator BFT blockchain engine.
 
-- A custom Rust blockchain engine for account state and transaction history
-- A developer and customer API layer for wallets, accounts, and payment gateway workflows
-- A Next.js web portal for end users and developers (e-wallet + checkout)
-- A docs-site (Docusaurus) for API and platform documentation
-
-The platform supports user onboarding, account and card management, wallet transfers, merchant payment intents, refunds, payouts, and webhook delivery—positioned as a Tunisia-focused payments and developer API layer (similar in spirit to Stripe-style acquiring and checkout, adapted for local rails).
-
-## Live Website
-
-The NexaPay website is available online.
-
-- Main app: https://nexapay.space
+**Live:** [nexapay.space](https://nexapay.space) · **Sandbox:** [sandbox.nexapay.space](https://sandbox.nexapay.space) · **API:** [backend.nexapay.space](https://backend.nexapay.space) · **Docs:** [nexapay.space/docs](https://nexapay.space/docs)
 
 ---
 
-## 1) System Architecture
+## Architecture
 
-```mermaid
-flowchart LR
-    U[End Users / Merchants] --> P[Portal - Next.js App Router]
-    U --> D[Docs Site - Docusaurus]
-
-    P --> NAPI[Next API Routes\nAuth + proxy helpers]
-    P --> BAPI[Rust API Layer - Axum]
-    NAPI --> BAPI
-
-    BAPI --> PG[(PostgreSQL)]
-    BAPI --> SQ[(SQLite)]
-    BAPI --> CH[(Sled Block Storage)]
-    BAPI --> TW[Twilio OTP]
-
-    BAPI --> BC[Blockchain Engine\nState + Blocks + Pending TX]
-    BC --> CH
+```
+┌─────────────────────────────────────────────────────┐
+│  nexapay.space (Landing)  │  sandbox.nexapay.space  │
+│  auth.nexapay.space (Auth)│  (Dashboard + Agent)    │
+│         Next.js 16 App Router + React 19            │
+│                  Port :3001                         │
+└──────────────────────┬──────────────────────────────┘
+                       │ /api/* proxy
+┌──────────────────────▼──────────────────────────────┐
+│              Nginx Load Balancer :8088              │
+└───────┬──────────────┬──────────────┬───────────────┘
+        │              │              │
+   Validator 0    Validator 1    Validator 2
+   Port :8090     Port :8091     Port :8092
+        │              │              │
+        └──────────────┼──────────────┘
+                       │ BFT Consensus (3/3)
+┌──────────────────────▼──────────────────────────────┐
+│  Rust / Axum API  │  PostgreSQL  │  Sled + SQLite  │
+│  JWT + Cookie Auth │  Rate Limiting │  AES-256-GCM │
+└─────────────────────────────────────────────────────┘
 ```
 
-### Runtime components
+## Features
 
-- Portal on port 3000 in container (published as 3001 in current compose)
-- Blockchain/API node on port 8080 in container (published as 8088 in current compose)
-- PostgreSQL for transactional business data
-- SQLite + Sled used by the chain engine and local node persistence
+### Wallet & Banking
+- Tunisian IBAN/RIB generation (virtual bank accounts)
+- Virtual Visa card with encrypted storage (AES-256-GCM)
+- PIN-based auth with Argon2id hashing + random per-user salt
+- Instant on-chain transfers (zero domestic fees)
+- Bank transfer support with OTP verification
+- Contract e-signature with PDF generation (Tunisian Law No. 2002-50)
 
----
+### Payment Gateway (Agent/Developer)
+- Payment Intents API (Stripe-like) — create, confirm, refund
+- No-Code payment links + QR codes
+- Card and wallet payment methods
+- Webhook delivery with HMAC-SHA256 signatures + 3-attempt retry
+- Per-intent `success_webhook_url` / `failure_webhook_url`
+- Merchant balance tracking with payouts
 
-## 2) Blockchain Engine Architecture
+### Security (49 audited + patched)
+- Separate JWT keys for user/admin tokens
+- httpOnly session cookies with `Domain=.nexapay.space`
+- Rate limiting on all auth + fund endpoints
+- Webhook SSRF protection, file upload validation
+- Timing-safe OTP comparison, SHA256 TOTP
+- DB errors sanitized, CORS headers restricted
 
-The engine is implemented in Rust under blockchain/src and is centered around a Blockchain struct with:
+### Blockchain Engine
+- 3-validator BFT consensus (Ed25519 signatures)
+- Custom append-only chain with Sled persistence
+- 12 transaction types: Transfer, AccountCreate, EsignAccount, InvoiceAnchor, etc.
+- Pending tx mempool (500 max, 5-min expiry)
+- On-chain document anchoring for e-signatures
 
-- blocks: immutable block history
-- accounts: in-memory account state map
-- pending_transactions: mempool-like queue
-- storage: persistent block store (Sled)
+### SDK
+- `@nexapay/node-sdk` on [npm](https://www.npmjs.com/package/@nexapay/node-sdk)
+- Full TypeScript definitions
+- `NEXAPAY_API_URL` env-based configuration
+- Webhook verification utilities
 
-```mermaid
-flowchart TD
-    TX[Incoming Transaction] --> V[Validate + Hash]
-    V --> Q[Append Pending Transaction]
-    Q --> C[Consensus Ticker - every 5s]
-    C --> M[Mine Block]
-    M --> A[Apply Transactions to State]
-    A --> R[Compute State Root]
-    R --> S[Sign Block with Validator Key]
-    S --> P[Persist Block to Sled]
-    P --> H[Update Chain Height / Stats]
-```
-
-### Core modules
-
-- blockchain/src/chain.rs: chain state, mining, block validation, tx application
-- blockchain/src/consensus.rs: periodic block production ticker
-- blockchain/src/block.rs: block and transaction domain model
-- blockchain/src/storage.rs: persistent block IO on top of Sled
-- blockchain/src/crypto.rs: hashing and signature helpers
-
-### Transaction types currently modeled
-
-- Transfer
-- AccountCreate
-- LoanDisburse
-- LoanRepay
-- BankJoin
-- DevRegister
-
----
-
-## 3) API Layer and Business Domains
-
-The Axum router exposes grouped capabilities:
-
-- Auth: register, password login, OTP request/verify
-- Accounts: details, public profile, search, transactions, wallet transfer
-- Developer portal: register, login, merchant registration, key rotation, usage overview
-- Developer: key management and docs snippets
-- Payment Gateway: merchant onboarding, intents, confirm, refunds, payouts, webhooks
-- Chain Observability: chain stats, blocks, transaction lookup
-
-```mermaid
-flowchart LR
-    AUTH[Auth + OTP] --> ACC[Account APIs]
-    DEV[Developer APIs] --> GW[Gateway APIs]
-    CHAIN[Chain APIs] --> OBS[Explorer / Monitoring]
-```
-
----
-
-## 4) Online Payment Flows
-
-NexaPay supports two main online payment patterns:
-
-- Merchant hosted checkout via Payment Intents
-- Direct wallet funding/payment by card for a target wallet
-
-### 4.1 Merchant payment intent lifecycle
-
-```mermaid
-sequenceDiagram
-    participant M as Merchant Backend
-    participant G as NexaPay Gateway API
-    participant C as Checkout Page
-    participant L as Ledger / Chain
-    participant W as Webhook Endpoint
-
-    M->>G: POST /gateway/v1/intents (amount, metadata)
-    G-->>M: intent_id + checkout_url
-    M->>C: Redirect customer to checkout_url
-    C->>G: Confirm payment (card details)
-    G->>L: Record settlement transaction
-    G-->>C: Payment success/failure
-    G->>W: Send webhook event
-```
-
-### 4.2 Wallet payment by card (guest flow)
-
-```mermaid
-sequenceDiagram
-    participant U as Guest User
-    participant P as Portal /pay/:address
-    participant A as Accounts API
-    participant L as Chain Engine
-
-    U->>P: Open wallet payment page
-    P->>A: GET public account details
-    U->>P: Enter card + amount
-    P->>A: POST /wallets/:address/pay-by-card
-    A->>L: Create and apply transaction
-    A-->>P: tx_hash + status + updated balance
-    P-->>U: Payment result
-```
-
----
-
-## 5) Technology Stack
-
-### Backend / Node
-
-- Rust 2021
-- Axum (HTTP API)
-- Tokio (async runtime)
-- SQLx + PostgreSQL (primary relational data)
-- Rusqlite (local state)
-- Sled (block persistence)
-- JWT (jwt-simple)
-- AES-GCM (sensitive field encryption)
-- Ed25519 signatures
-- Tower HTTP (CORS, tracing)
-
-### Frontend
-
-- Next.js 14 (App Router)
-- React 18
-- TypeScript
-- Tailwind CSS
-- Axios
-- jsPDF (contract download as PDF)
-
-### Documentation
-
-- Docusaurus 3
-
-### Infrastructure
-
-- Docker + Docker Compose
-- Nginx reverse proxy (recommended for production)
-- Azure VPS deployment target
-
----
-
-## 6) Repository Layout
-
-```text
-blockchain/   Rust node, API modules, chain engine, migrations
-portal/       Next.js web app (customer wallet, developer portal, checkout)
-docs-site/    Docusaurus documentation site
-docs/         Additional markdown docs
-scripts/      Demo and operational helper scripts
-```
-
----
-
-## 7) Local Run (Current Compose)
-
-Prerequisites:
-
-- Docker + Docker Compose plugin
-
-Start services:
+## Quick Start
 
 ```bash
+# Clone and start everything
+git clone https://github.com/Samer-Gassouma/NexaPay.git
+cd NexaPay
+
+# Set required environment variables
+cp .env.example .env  # edit with your secrets
+
+# Start (3 validators + LB + frontend + PostgreSQL)
 docker compose up -d --build
 ```
 
-Current published ports (from compose):
+**Published ports:** Frontend `:3001` | Backend LB `:8088` | PostgreSQL `:5433` | Validators `:8090-8092`
 
-- Portal: http://localhost:3001
-- Backend API: https://backend.nexapay.space
-- PostgreSQL: localhost:5433
+## Repository Structure
 
-Stop services:
-
-```bash
-docker compose down
+```
+blockchain/       Rust API node, chain engine, consensus, crypto, DB migrations
+nexapay-web/      Next.js 16 frontend (App Router, Tailwind v4)
+sdk/              Node.js SDK (@nexapay/node-sdk)
+deploy/nginx/     Nginx configs for LB + production
 ```
 
----
+## Technology Stack
 
-## 8) Production Notes (Judge Demo)
+| Layer | Tech |
+|-------|------|
+| Backend | Rust 2021, Axum 0.7, Tokio, SQLx, Sled |
+| Frontend | Next.js 16, React 19, Tailwind CSS v4, TypeScript |
+| Database | PostgreSQL 16 (primary), SQLite (chain state), Sled (blocks) |
+| Auth | HS256 JWT, Argon2id PIN hashing, httpOnly cookies |
+| Crypto | AES-256-GCM, Ed25519, SHA-256, HMAC |
+| Infra | Docker Compose, Nginx, Let's Encrypt, Azure VPS |
 
-For public deployment on nexapay.space:
+## Documentation
 
-- Set portal NEXT_PUBLIC_API_URL to https://nexapay.space/backend
-- Put backend behind Nginx location /backend/
-- Keep Next.js frontend at /
-- Enable TLS with Certbot
-- Replace all default secrets before production
+- [API Reference](https://nexapay.space/docs) — REST endpoints, SDK usage, test cards
+- [SDK on npm](https://www.npmjs.com/package/@nexapay/node-sdk)
+- [Agent Dashboard](https://sandbox.nexapay.space/agent/dashboard) — API keys, payments, webhooks
 
----
+## Support
 
-## 9) Key Platform Highlights
+- Email: [contact@backendglitch.com](mailto:contact@backendglitch.com)
+- Developer: [Glitch Inc / BackendGlitch Division](https://backendglitch.com)
 
-- Wallet, developer, and gateway APIs in one node
-- Signed, append-only block persistence with periodic consensus ticks
-- OTP-based user auth with optional Twilio integration
-- Merchant-grade payment intent lifecycle with refund, payout, and webhook support
+## License
 
----
-
-## 10) License
-
-No license file is currently defined in this repository. Add one before public distribution.
+MIT
