@@ -1,7 +1,7 @@
 {
   "name": "@nexapay/node-sdk",
-  "version": "0.3.0",
-  "description": "Official Node.js SDK for NexaPay Tunisian Payment Gateway",
+  "version": "0.3.1",
+  "description": "Official Node.js SDK for NexaPay — Tunisian payment gateway. Create intents, process card/wallet payments, manage webhooks, refunds, and payouts. Full TypeScript support.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
@@ -15,18 +15,22 @@
     "tunisia",
     "fintech",
     "sdk",
-    "nexapay"
+    "nexapay",
+    "tnd",
+    "digital-wallet",
+    "webhooks",
+    "typescript"
   ],
-  "author": "NexaPay <contact@backendglitch.com>",
+  "author": "Glitch Inc <contact@backendglitch.com>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/nexapay/nexapay-node-sdk.git"
+    "url": "git+https://github.com/Samer-Gassouma/NexaPay.git"
   },
   "bugs": {
-    "url": "https://github.com/nexapay/nexapay-node-sdk/issues"
+    "url": "https://github.com/Samer-Gassouma/NexaPay/issues"
   },
-  "homepage": "https://nexapay.space/docs/sdk",
+  "homepage": "https://nexapay.space/docs",
   "engines": {
     "node": ">=14.0.0"
   },

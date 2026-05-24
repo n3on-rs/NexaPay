@@ -1,6 +1,6 @@
 {
   "name": "nexapay",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "NexaPay is a full-stack fintech platform that combines:",
   "main": "test-sdk-local.js",
   "directories": {

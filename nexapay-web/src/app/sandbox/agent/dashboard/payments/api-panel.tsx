@@ -714,22 +714,24 @@ function SdkSection() {
     setTimeout(() => setPkgCopied(false), 2000);
   };
 
-  const installCode = `npm install @nexapay/sdk`;
+  const installCode = `npm install @nexapay/node-sdk`;
 
-  const quickStart = `import { NexaPayClient } from '@nexapay/sdk';
+  const quickStart = `import NexaPay from '@nexapay/node-sdk';
 
-const client = new NexaPayClient({
+const client = new NexaPay({
   apiKey: 'nxp_live_your_key_here'
 });
 
 // Create a payment
-const payment = await client.paymentIntents.create({
+const { data } = await client.paymentIntents.create({
   amount: 10000, // 10.000 TND
   description: 'Order #1234',
-  webhook: 'https://yoursite.com/webhook'
+  success_webhook_url: 'https://yoursite.com/webhook/success',
+    failure_webhook_url: 'https://yoursite.com/webhook/failed'
 });
 
-console.log(payment.payUrl);`;
+console.log(data.checkout_url)
+// → https://nexapay.space/checkout/pi_abc123...;`;
 
   return (
     <section className="rounded-2xl border border-white/[0.06] bg-[#111] p-6">
@@ -764,7 +766,7 @@ console.log(payment.payUrl);`;
       </div>
 
       <a
-        href="https://docs.nexapay.space"
+        href="/docs"
         target="_blank"
         rel="noopener noreferrer"
         className="mt-4 inline-flex items-center gap-1 text-sm text-[#00d4aa] hover:underline"

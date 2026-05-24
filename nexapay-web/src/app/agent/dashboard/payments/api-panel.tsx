@@ -280,64 +280,18 @@ function GettingStarted({
       <div className="mt-6 rounded-xl bg-[#0b0b0b] border border-white/[0.06] p-4">
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-medium uppercase tracking-wider text-[#666]">Your API Key</span>
-          <a
-            href="/agent/dashboard/api-keys"
-            className="text-xs text-[#00d4aa] hover:underline"
-          >
-            Manage Keys
-          </a>
+          <a href="/agent/dashboard/api-keys" className="text-xs text-[#00d4aa] hover:underline">Manage</a>
         </div>
-
-        {/* Key selector */}
-        {keyOptions.length > 0 ? (
-          <div className="relative mb-3">
-            <select
-              value={(selectedOpt?.fullKey || selectedOpt?.prefix) || (selected?.fullKey || selected?.prefix) || safeApiKey}
-              onChange={(e) => {
-                const opt = keyOptions.find((o) => (o.fullKey || o.prefix) === e.target.value);
-                if (opt) handleSelect(opt);
-              }}
-              className={cn(
-                "w-full appearance-none rounded-lg border border-white/[0.08] bg-[#111] px-3 py-2 pr-10 text-sm text-white outline-none transition-colors",
-                "focus:border-[#00d4aa]/40 hover:border-white/[0.12]"
-              )}
-            >
-              {keyOptions.map((opt) => (
-                <option key={opt.prefix} value={opt.fullKey || opt.prefix}>
-                  {opt.name} — {opt.prefix.slice(0, 8)}...{opt.prefix.slice(-4)}{opt.fullKey ? "" : " (not stored in this browser)"}
-                </option>
-              ))}
-            </select>
-            <ChevronRight className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 rotate-90 text-[#666]" />
-          </div>
-        ) : safeApiKey ? (
-          <div className="mb-3 flex items-center gap-2 rounded-lg border border-[#00d4aa]/10 bg-[#00d4aa]/5 px-3 py-2 text-sm text-[#00d4aa]">
-            <Key className="h-4 w-4" />
-            <span>Active Key</span>
-            <span className="text-[#666]">({safeApiKey.slice(0, 8)}...{safeApiKey.slice(-6)})</span>
-          </div>
-        ) : (
-          <div className="mb-3 rounded-lg border border-white/[0.08] bg-[#111] px-3 py-2 text-sm text-[#666]">
-            No active API key — create one in Manage Keys
-          </div>
-        )}
-
-        {selectedOpt && !selectedOpt.fullKey ? (
-          <div className="flex items-center gap-2 rounded-lg border border-yellow-500/20 bg-yellow-500/10 px-3 py-2 text-sm text-yellow-400">
-            <AlertTriangle className="h-4 w-4 shrink-0" />
-            <span>This key was created in another browser. Go to <a href="/agent/dashboard/api-keys" className="underline hover:text-yellow-300">Manage Keys</a> to create a new one you can copy.</span>
-          </div>
-        ) : (
-          <div className="flex items-center gap-3">
-            <code className="flex-1 rounded-lg bg-[#111] px-3 py-2 text-sm font-mono text-[#00d4aa]">
-              {maskedKey}
-            </code>
-            <button
-              onClick={handleCopy}
-              className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/[0.04] text-[#888] transition-colors hover:text-white"
-            >
+        {safeApiKey ? (
+          <div className="flex items-center gap-2">
+            <code className="flex-1 rounded-lg bg-[#111] px-3 py-2 text-[13px] font-mono text-[#00d4aa] break-all select-all">{safeApiKey}</code>
+            <button onClick={handleCopy} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/[0.04] text-[#888] transition-colors hover:text-white">
               {copied ? <Check className="h-4 w-4 text-[#00d4aa]" /> : <Copy className="h-4 w-4" />}
             </button>
+          </div>
+        ) : (
+          <div className="rounded-lg border border-white/[0.08] bg-[#111] px-3 py-2 text-sm text-[#666]">
+            No API key — <a href="/agent/dashboard/api-keys" className="text-[#00d4aa] hover:underline">generate one</a>
           </div>
         )}
       </div>
@@ -760,22 +714,24 @@ function SdkSection() {
     setTimeout(() => setPkgCopied(false), 2000);
   };
 
-  const installCode = `npm install @nexapay/sdk`;
+  const installCode = `npm install @nexapay/node-sdk`;
 
-  const quickStart = `import { NexaPayClient } from '@nexapay/sdk';
+  const quickStart = `import NexaPay from '@nexapay/node-sdk';
 
-const client = new NexaPayClient({
+const client = new NexaPay({
   apiKey: 'nxp_live_your_key_here'
 });
 
 // Create a payment
-const payment = await client.paymentIntents.create({
+const { data } = await client.paymentIntents.create({
   amount: 10000, // 10.000 TND
   description: 'Order #1234',
-  webhook: 'https://yoursite.com/webhook'
+  success_webhook_url: 'https://yoursite.com/webhook/success',
+    failure_webhook_url: 'https://yoursite.com/webhook/failed'
 });
 
-console.log(payment.payUrl);`;
+console.log(data.checkout_url)
+// → https://nexapay.space/checkout/pi_abc123...;`;
 
   return (
     <section className="rounded-2xl border border-white/[0.06] bg-[#111] p-6">
@@ -810,7 +766,7 @@ console.log(payment.payUrl);`;
       </div>
 
       <a
-        href="https://docs.nexapay.space"
+        href="/docs"
         target="_blank"
         rel="noopener noreferrer"
         className="mt-4 inline-flex items-center gap-1 text-sm text-[#00d4aa] hover:underline"
