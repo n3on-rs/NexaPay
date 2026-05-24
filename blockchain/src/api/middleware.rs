@@ -203,20 +203,25 @@ pub async fn verify_session_with_revocation_check(
 }
 
 pub fn extract_account_token(headers: &HeaderMap) -> Option<String> {
-    // 1. Try X-Account-Token header first (API clients / mobile apps)
-    if let Some(token) = headers
-        .get("X-Account-Token")
-        .and_then(|v| v.to_str().ok())
-    {
-        return Some(token.to_string());
-    }
-    // 2. Try Cookie header (browser clients with httpOnly cookies)
+    // 1. Try Cookie first (browser clients with httpOnly cookies) —
+    //    cookie JWTs are always valid if present, while X-Account-Token
+    //    may contain a placeholder from the frontend.
     if let Some(cookie_header) = headers.get(http::header::COOKIE).and_then(|v| v.to_str().ok()) {
         for part in cookie_header.split(';') {
             let kv = part.trim();
             if let Some(value) = kv.strip_prefix("nexapay_session=") {
                 return Some(value.to_string());
             }
+        }
+    }
+    // 2. Try X-Account-Token header (API clients / mobile apps)
+    if let Some(token) = headers
+        .get("X-Account-Token")
+        .and_then(|v| v.to_str().ok())
+    {
+        // Skip placeholder values set by the browser frontend
+        if token != "cookie" {
+            return Some(token.to_string());
         }
     }
     None

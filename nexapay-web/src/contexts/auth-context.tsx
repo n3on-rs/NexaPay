@@ -88,6 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const addr = String(cookieRes.data.address || cookieRes.data.chain_address || "");
         if (addr && typeof window !== "undefined") {
           localStorage.setItem("nexapay_address", addr);
+          localStorage.setItem("nexapay_token", "cookie"); // placeholder — backend reads cookie
           if (cookieRes.data.full_name) localStorage.setItem("nexapay_full_name", String(cookieRes.data.full_name));
           if (cookieRes.data.phone) localStorage.setItem("nexapay_phone", String(cookieRes.data.phone));
         }
