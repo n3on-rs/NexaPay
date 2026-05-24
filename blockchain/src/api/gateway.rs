@@ -786,7 +786,9 @@ pub async fn confirm_intent(
                             memo: format!("Wallet payment: {}", intent_id),
                             hash: tx_hash.clone(),
                         };
-                        let _ = chain.apply_transaction(&tx);
+                        if let Err(e) = chain.apply_transaction(&tx) {
+                            tracing::warn!("Wallet payment apply_transaction failed: {:?}", e);
+                        }
                         chain.add_pending_transaction(tx);
                     }
                 }
