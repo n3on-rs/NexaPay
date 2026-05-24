@@ -642,12 +642,15 @@ impl Blockchain {
                     from_acc.tx_count = from_acc.tx_count.saturating_add(1);
                 }
 
-                let to_acc = self
-                    .accounts
-                    .get_mut(&tx.to)
-                    .ok_or(ChainError::AccountNotFound)?;
-                to_acc.balance = to_acc.balance.saturating_add(tx.amount);
-                to_acc.tx_count = to_acc.tx_count.saturating_add(1);
+                // SYSTEM as recipient = burnt (settlement pool for merchant payouts)
+                if tx.to != "SYSTEM" {
+                    let to_acc = self
+                        .accounts
+                        .get_mut(&tx.to)
+                        .ok_or(ChainError::AccountNotFound)?;
+                    to_acc.balance = to_acc.balance.saturating_add(tx.amount);
+                    to_acc.tx_count = to_acc.tx_count.saturating_add(1);
+                }
                 Ok(())
             }
             TxType::LoanDisburse => {
@@ -756,18 +759,20 @@ impl Blockchain {
                                 .saturating_sub(tx.amount.saturating_add(tx.fee));
                             from_entry.tx_count = from_entry.tx_count.saturating_add(1);
                         }
-                        let to_entry = self.accounts.entry(tx.to.clone()).or_insert(ChainAccount {
-                            address: tx.to.clone(),
-                            public_key: String::new(),
-                            balance: 0,
-                            tx_count: 0,
-                            account_type: AccountType::User,
-                            created_at: now_ts(),
-                            is_active: true,
-                            kyc_hash: String::new(),
-                        });
-                        to_entry.balance = to_entry.balance.saturating_add(tx.amount);
-                        to_entry.tx_count = to_entry.tx_count.saturating_add(1);
+                        if tx.to != "SYSTEM" {
+                            let to_entry = self.accounts.entry(tx.to.clone()).or_insert(ChainAccount {
+                                address: tx.to.clone(),
+                                public_key: String::new(),
+                                balance: 0,
+                                tx_count: 0,
+                                account_type: AccountType::User,
+                                created_at: now_ts(),
+                                is_active: true,
+                                kyc_hash: String::new(),
+                            });
+                            to_entry.balance = to_entry.balance.saturating_add(tx.amount);
+                            to_entry.tx_count = to_entry.tx_count.saturating_add(1);
+                        }
                     }
                     TxType::LoanDisburse | TxType::AccountCreate => {
                         let entry = self.accounts.entry(tx.to.clone()).or_insert(ChainAccount {
