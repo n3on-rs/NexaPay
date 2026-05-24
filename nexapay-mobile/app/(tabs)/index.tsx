@@ -5,7 +5,6 @@ import { useAuth } from "../../src/auth/AuthContext";
 import { api } from "../../src/api/client";
 import { ArrowUpRight, ArrowDownLeft, Send, QrCode, CreditCard, TrendingUp, ChevronRight, Sparkles, Zap, History, Scan } from "lucide-react-native";
 import type { AccountDetails, TransactionView } from "../../src/types";
-import { BlurView } from "expo-blur";
 
 const { width: W } = Dimensions.get("window");
 
