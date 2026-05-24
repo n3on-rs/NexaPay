@@ -16,45 +16,39 @@ const MUTED = "rgba(255,255,255,0.35)";
 // ─── Animated ring component ───
 function BalanceRing({ balance, size = 200 }: { balance: number; size?: number }) {
   const anim = useRef(new Animated.Value(0)).current;
-  const strokeW = 6;
+  const strokeW = 5;
   const radius = (size - strokeW) / 2;
   const circumference = 2 * Math.PI * radius;
-  const maxBalance = 500000; // 500 TND visual cap
+  const maxBalance = 500000;
   const progress = Math.min(balance / maxBalance, 1);
-  const animatedProgress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.timing(animatedProgress, { toValue: progress, duration: 1200, useNativeDriver: false }).start();
     Animated.loop(
       Animated.sequence([
-        Animated.timing(anim, { toValue: 1, duration: 8000, useNativeDriver: true }),
-        Animated.timing(anim, { toValue: 0, duration: 8000, useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 1, duration: 10000, useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 0, duration: 10000, useNativeDriver: true }),
       ])
     ).start();
-  }, [balance]);
+  }, []);
 
-  const strokeDashoffset = animatedProgress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [circumference, 0],
-  });
-
-  const rotate = anim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] });
+  const orbit1Deg = anim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] });
+  const orbit2Deg = anim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "-360deg"] });
 
   return (
     <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
       {/* Decorative dots orbiting */}
-      <Animated.View style={{ position: "absolute", transform: [{ rotate }] }}>
-        <View style={{ width: size - 20, height: size - 20, alignItems: "center", justifyContent: "flex-start" }}>
-          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: ACCENT, opacity: 0.6 }} />
+      <Animated.View style={{ position: "absolute", transform: [{ rotate: orbit1Deg }] }}>
+        <View style={{ width: size - 16, height: size - 16, alignItems: "center", justifyContent: "flex-start" }}>
+          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: ACCENT, opacity: 0.7 }} />
         </View>
       </Animated.View>
-      <Animated.View style={{ position: "absolute", transform: [{ rotate: Animated.multiply(anim, -1) }] }}>
-        <View style={{ width: size - 30, height: size - 30, alignItems: "center", justifyContent: "flex-start" }}>
-          <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: "rgba(255,107,53,0.4)", marginTop: 20 }} />
+      <Animated.View style={{ position: "absolute", transform: [{ rotate: orbit2Deg }] }}>
+        <View style={{ width: size - 28, height: size - 28, alignItems: "center", justifyContent: "flex-start" }}>
+          <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: "rgba(255,107,53,0.5)", marginTop: 24 }} />
         </View>
       </Animated.View>
 
-      {/* Ring */}
+      {/* Ring — static progress arc */}
       <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
         <Defs>
           <SvgGrad id="ringGrad" x1="0" y1="0" x2="1" y2="1">
@@ -63,16 +57,10 @@ function BalanceRing({ balance, size = 200 }: { balance: number; size?: number }
           </SvgGrad>
         </Defs>
         <Circle cx={size/2} cy={size/2} r={radius} fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth={strokeW} />
-        <AnimatedCircle cx={size/2} cy={size/2} r={radius} fill="none" stroke="url(#ringGrad)" strokeWidth={strokeW} strokeDasharray={circumference} strokeDashoffset={strokeDashoffset} strokeLinecap="round" />
+        <Circle cx={size/2} cy={size/2} r={radius} fill="none" stroke="url(#ringGrad)" strokeWidth={strokeW} strokeDasharray={circumference} strokeDashoffset={circumference * (1 - progress)} strokeLinecap="round" />
       </Svg>
     </View>
   );
-}
-
-// SVG animated circle wrapper for React Native
-function AnimatedCircle(props: any) {
-  const Component = Circle;
-  return <Component {...props} />;
 }
 
 export default function HomeScreen() {
