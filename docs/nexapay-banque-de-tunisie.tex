@@ -1,0 +1,340 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{geometry}
+\usepackage{fancyhdr}
+\usepackage{enumitem}
+\setlength{\parskip}{6pt}
+\setlength{\parindent}{0pt}
+
+\geometry{margin=2.2cm}
+\hypersetup{colorlinks=true,linkcolor=black,urlcolor=blue!50!black}
+
+\definecolor{nexagreen}{HTML}{00D4AA}
+\definecolor{nexadark}{HTML}{0B0B0B}
+\definecolor{nexagray}{HTML}{666666}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\color{nexagray} NexaPay --- Whitepaper Technique}
+\fancyhead[R]{\small\color{nexagray} La Banque de Tunisie}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\familydefault}{\sfdefault}
+
+\begin{document}
+
+% ─── COVER ───
+\begin{center}
+\vspace*{3cm}
+{\Huge\bfseries NexaPay}\\[0.3cm]
+{\Large\color{nexagreen}\bfseries Plateforme de Paiement Num\'erique}\\[0.6cm]
+{\large Whitepaper Technique}\\[0.3cm]
+{\large\color{nexagray} Pr\'epar\'e pour}\\[0.2cm]
+{\Large\bfseries La Banque de Tunisie}\\[1cm]
+{\color{nexagreen}\rule{10cm}{2pt}}\\[0.8cm]
+{\large\color{nexagray} Mai 2026}\\[1.5cm]
+{\normalsize\bfseries Glitch Inc --- BackendGlitch Division}\\[0.2cm]
+{\small\color{nexagray} backendglitch.com $|$ contact@backendglitch.com}\\[0.2cm]
+{\small\color{nexagray} nexapay.space $|$ sandbox.nexapay.space}
+\end{center}
+\newpage
+
+% ─── TOC ───
+\tableofcontents
+\newpage
+
+% ═══════════════════════════════════════════════════════
+\section{Pr\'esentation de NexaPay}
+
+NexaPay est une plateforme fintech compl\`ete con\c{c}ue pour le march\'e tunisien. Elle combine un portefeuille num\'erique, une passerelle de paiement pour commer\c{c}ants, et un moteur blockchain propri\'etaire avec consensus BFT \`a 3 validateurs.
+
+\subsection{URLs Publiques}
+
+\begin{description}[leftmargin=*,style=nextline]
+    \item[\href{https://nexapay.space}{nexapay.space}] Page d'accueil publique
+    \item[\href{https://sandbox.nexapay.space}{sandbox.nexapay.space}] Plateforme principale (dashboard, envois, carte)
+    \item[\href{https://auth.nexapay.space}{auth.nexapay.space}] Authentification (login, inscription)
+    \item[\href{https://backend.nexapay.space}{backend.nexapay.space}] API Backend
+    \item[\href{https://nexapay.space/docs}{nexapay.space/docs}] Documentation API \& SDK
+\end{description}
+
+\subsection{Architecture}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Frontend} --- Next.js 16 avec routage par sous-domaines
+    \item \textbf{Backend} --- Rust/Axum avec JWT, cookies httpOnly, AES-256-GCM
+    \item \textbf{Blockchain} --- Cha\^ine append-only, 3 validateurs BFT, signatures Ed25519
+    \item \textbf{Base de donn\'ees} --- PostgreSQL 16 + SQLite + Sled
+    \item \textbf{SDK} --- \texttt{@nexapay/node-sdk} sur npm
+\end{itemize}
+
+\newpage
+
+% ═══════════════════════════════════════════════════════
+\section{S\'ecurit\'e}
+
+NexaPay a \'et\'e audit\'e pour plus de 49 vuln\'erabilit\'es. Toutes les vuln\'erabilit\'es critiques et \'elev\'ees sont r\'esolues.
+
+\subsection{Mesures de S\'ecurit\'e}
+
+\textbf{Authentification et Sessions :}
+\begin{itemize}[leftmargin=*]
+    \item JWT HS256 avec cl\'es s\'epar\'ees utilisateur/admin
+    \item Cookies httpOnly avec Domain, Secure, SameSite=Lax
+    \item Sessions r\'eversibles (r\'evocation c\^ot\'e serveur)
+    \item Rate limiting par IP sur toutes les routes sensibles
+\end{itemize}
+
+\textbf{Donn\'ees Sensibles :}
+\begin{itemize}[leftmargin=*]
+    \item PIN hach\'e avec Argon2id + salt al\'eatoire par utilisateur
+    \item Cartes bancaires chiffr\'ees AES-256-GCM (seul last4 visible)
+    \item Cl\'es priv\'ees Ed25519 chiffr\'ees avec cl\'e d\'eriv\'ee du PIN
+    \item Comparaison OTP en temps constant (side-channel resistant)
+\end{itemize}
+
+\textbf{Infrastructure :}
+\begin{itemize}[leftmargin=*]
+    \item CORS restrictif (origins explicites, credentials activ\'es)
+    \item Webhooks sign\'es HMAC-SHA256 avec 3 tentatives de retry
+    \item Uploads valid\'es (taille max 5 Mo, extensions whitelist, sanitization)
+    \item Requ\^etes SQL param\'etr\'ees (SQLx), erreurs sanitiz\'ees
+    \item Headers s\'ecurit\'e : X-Content-Type-Options, X-Frame-Options, Referrer-Policy
+\end{itemize}
+
+\subsection{Flux d'Authentification}
+
+\begin{enumerate}[leftmargin=*]
+    \item Utilisateur entre t\'el\'ephone + PIN (6 chiffres)
+    \item V\'erification PIN avec Argon2id
+    \item Envoi OTP 6 chiffres par SMS (Twilio)
+    \item V\'erification OTP avec comparaison en temps constant
+    \item Cookie httpOnly + JWT stock\'e dans SecureStore (mobile) / localStorage (web)
+\end{enumerate}
+
+\newpage
+
+% ═══════════════════════════════════════════════════════
+\section{Processus KYC (Know Your Customer)}
+
+\textbf{Note :} Le module KYC complet est disponible mais \textbf{d\'esactiv\'e pour la d\'emo}. Les utilisateurs sont auto-v\'erifi\'es en mode sandbox. Le flux ci-dessous sera activ\'e en production.
+
+\subsection{\'Etapes du KYC}
+
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Soumission des documents}
+    \begin{itemize}
+        \item Photographie du \textbf{recto} et \textbf{verso} de la CIN
+        \item Upload s\'ecuris\'e avec validation (PNG, JPG, max 5 Mo)
+        \item Stockage chiffr\'e des documents
+    \end{itemize}
+
+    \item \textbf{Extraction automatique (OCR)}
+    \begin{itemize}
+        \item Nom, pr\'enom, num\'ero CIN, date de naissance, date d'\'emission, lieu de naissance
+        \item Croisement avec le formulaire d'inscription
+    \end{itemize}
+
+    \item \textbf{Test de vivacit\'e (Liveness Detection)}
+    \begin{itemize}
+        \item V\'erification via cam\'era (clignement, rotation t\^ete, sourire)
+        \item Score de correspondance faciale entre photo CIN et selfie
+        \item Protection anti-photo et anti-vid\'eo
+    \end{itemize}
+
+    \item \textbf{V\'erification et approbation}
+    \begin{itemize}
+        \item Score de vivacit\'e $>$ seuil requis ET donn\'ees CIN correspondantes
+        \item Compte marqu\'e \texttt{kyc\_status = verified}
+        \item Acc\`es complet \`a la plateforme
+    \end{itemize}
+\end{enumerate}
+
+\subsection{Donn\'ees KYC Stock\'ees}
+
+\begin{description}[leftmargin=*]
+    \item[\texttt{kyc\_cin\_front\_path}] Chemin recto CIN
+    \item[\texttt{kyc\_cin\_back\_path}] Chemin verso CIN
+    \item[\texttt{kyc\_face\_match\_score}] Score correspondance faciale
+    \item[\texttt{kyc\_liveness\_passed}] R\'esultat test vivacit\'e
+    \item[\texttt{kyc\_verified\_at}] Date/heure v\'erification
+\end{description}
+
+\subsection{Conformit\'e R\'eglementaire}
+
+Le processus est conforme avec la r\'eglementation BCT, les directives LCB-FT, et la Loi n$^\circ$ 2004-63.
+
+\newpage
+
+% ═══════════════════════════════════════════════════════
+\section{Parcours Utilisateur}
+
+\subsection{Inscription (6 \'etapes)}
+
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{T\'el\'ephone} --- Num\'ero tunisien (+216 XX XXX XXX)
+    \item \textbf{Informations personnelles} --- Nom, pr\'enom, email, date de naissance
+    \item \textbf{Identit\'e} --- Num\'ero CIN et date d'\'emission
+    \item \textbf{Contrat} --- Signature \'electronique du contrat (Loi n$^\circ$ 2002-50)
+    \item \textbf{PIN} --- Code 6 chiffres pour transactions
+    \item \textbf{Activation} --- IBAN/RIB tunisien + carte Visa virtuelle + 150 TND offerts
+\end{enumerate}
+
+\subsection{Fonctionnalit\'es Utilisateur}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Portefeuille} --- Solde TND, IBAN/RIB, carte Visa virtuelle
+    \item \textbf{Envoi d'argent} --- Transferts instantan\'es et gratuits entre utilisateurs
+    \item \textbf{Virement bancaire} --- Vers n'importe quel RIB tunisien
+    \item \textbf{Rechargement} --- D\'ep\^ot esp\`eces en agence bancaire partenaire
+    \item \textbf{Paiement en ligne} --- Checkout NexaPay chez les commer\c{c}ants
+    \item \textbf{Historique} --- Transactions on-chain, v\'erifiables
+    \item \textbf{Carte virtuelle} --- Achats en ligne, gel/d\'egel
+\end{itemize}
+
+\subsection{D\'ep\^ot d'Argent en Agence}
+
+\begin{enumerate}[leftmargin=*]
+    \item Le client se rend dans une agence de \textbf{La Banque de Tunisie}
+    \item Il fournit son num\'ero de t\'el\'ephone ou son adresse NexaPay
+    \item L'agent bancaire v\'erifie l'identit\'e du client
+    \item Le d\'ep\^ot en esp\`eces est effectu\'e au guichet
+    \item L'agent cr\'edite le compte via l'interface administrateur
+    \item Le solde est mis \`a jour en temps r\'eel
+\end{enumerate}
+
+\newpage
+
+% ═══════════════════════════════════════════════════════
+\section{Programme Agent / Commer\c{c}ant}
+
+\subsection{Devenir Agent}
+
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Candidature} --- Formulaire avec nom commercial, type d'activit\'e, matricule fiscal, adresse, volume estim\'e. Upload licence commerciale (PDF) et extrait RNE (PDF)
+    \item \textbf{Scoring} --- \'Evaluation automatique du risque
+    \item \textbf{Approbation} --- Automatique en sandbox, r\'evision manuelle en production
+    \item \textbf{Activation} --- Cl\'e API unique, dashboard agent, limite de volume
+\end{enumerate}
+
+\subsection{Capacit\'es de l'Agent}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Liens de paiement} --- Cr\'eation de liens/QR codes pour accepter des paiements
+    \item \textbf{API REST} --- Int\'egration via API ou SDK Node.js
+    \item \textbf{Remboursements} --- Partiels ou totaux
+    \item \textbf{Solde} --- Disponible, volume brut, retraits
+    \item \textbf{Retraits} --- Transfert solde commercial $\rightarrow$ portefeuille personnel (on-chain)
+    \item \textbf{Webhooks} --- Notifications temps r\'eel (succ\`es/\'echec)
+    \item \textbf{Statistiques} --- Volume total, taux de succ\`es, transactions du jour
+    \item \textbf{Export} --- CSV des transactions et clients
+\end{itemize}
+
+\subsection{Int\'egration Technique}
+
+Trois modes d'int\'egration :
+
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{No-Code} --- Liens/QR codes depuis le dashboard
+    \item \textbf{SDK Node.js} --- \texttt{npm install @nexapay/node-sdk}
+    \item \textbf{REST API} --- Endpoints HTTP avec cl\'e API
+\end{enumerate}
+
+\subsubsection{Exemple API}
+
+\begin{verbatim}
+curl -X POST https://backend.nexapay.space/gateway/v1/intents \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: nxp_developer_CLE_API" \
+  -d '{"amount":42000,"currency":"TND","description":"Cmd #42",
+       "success_webhook_url":"https://maboutique.tn/hook/success"}'
+\end{verbatim}
+
+\newpage
+
+% ═══════════════════════════════════════════════════════
+\section{Blockchain et Tra\c{c}abilit\'e}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Consensus BFT} --- 3 validateurs, quorum 3/3, signatures Ed25519
+    \item \textbf{Registre immuable} --- Toutes les transactions on-chain (append-only)
+    \item \textbf{12 types de transactions} --- Transfer, AccountCreate, EsignAccount, InvoiceAnchor, etc.
+    \item \textbf{Ancrage} --- Contrats sign\'es et factures hash\'es et ancr\'es on-chain
+    \item \textbf{Mempool} --- 500 transactions max, expiration 5 minutes
+    \item \textbf{Persistance} --- Sled (blocs) + SQLite (snapshots)
+\end{itemize}
+
+\subsection{Propri\'et\'es}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Int\'egrit\'e} --- Chaque bloc r\'ef\'erence le hash du bloc pr\'ec\'edent
+    \item \textbf{Non-r\'epudiation} --- Signatures Ed25519 sur transactions utilisateur
+    \item \textbf{Auditabilit\'e} --- Toute transaction v\'erifiable ind\'ependamment
+    \item \textbf{R\'esilience} --- 3 validateurs redondants
+\end{itemize}
+
+\newpage
+
+% ═══════════════════════════════════════════════════════
+\section{D\'eploiement}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Serveur} --- Azure VPS (Ubuntu 24.04)
+    \item \textbf{Conteneurisation} --- Docker Compose (6 conteneurs)
+    \item \textbf{Proxy} --- Nginx + Let's Encrypt (HTTPS/TLS 1.3)
+    \item \textbf{Base de donn\'ees} --- PostgreSQL 16 (volume persistant)
+\end{itemize}
+
+\subsection{Services Docker}
+
+\begin{verbatim}
+postgres        :5432   Base de donn\'ees principale
+validator-0     :8090   Validateur blockchain n0
+validator-1     :8091   Validateur blockchain n1
+validator-2     :8092   Validateur blockchain n2
+validator-lb    :8088   Load balancer Nginx
+nexapay-web     :3001   Frontend Next.js
+\end{verbatim}
+
+\newpage
+
+% ═══════════════════════════════════════════════════════
+\section{Contact}
+
+\begin{center}
+{\Large\bfseries Glitch Inc --- BackendGlitch Division}
+
+\vspace{0.5cm}
+\begin{tabular}{ll}
+\textbf{Site web} & \href{https://backendglitch.com}{backendglitch.com} \\
+\textbf{Email} & \href{mailto:contact@backendglitch.com}{contact@backendglitch.com} \\
+\textbf{GitHub} & \href{https://github.com/Samer-Gassouma/NexaPay}{github.com/Samer-Gassouma/NexaPay} \\
+\textbf{SDK npm} & \href{https://www.npmjs.com/package/@nexapay/node-sdk}{npmjs.com/package/@nexapay/node-sdk} \\
+\end{tabular}
+
+\vspace{0.8cm}
+\begin{tabular}{ll}
+\textbf{Landing} & \href{https://nexapay.space}{nexapay.space} \\
+\textbf{Sandbox} & \href{https://sandbox.nexapay.space}{sandbox.nexapay.space} \\
+\textbf{API Backend} & \href{https://backend.nexapay.space}{backend.nexapay.space} \\
+\textbf{Documentation} & \href{https://nexapay.space/docs}{nexapay.space/docs} \\
+\end{tabular}
+
+\vspace{1.5cm}
+{\color{nexagreen}\rule{8cm}{1pt}}
+
+\vspace{0.5cm}
+{\large\bfseries\color{nexagreen} Merci de votre attention.}
+
+\vspace{0.3cm}
+{\normalsize\color{nexagray} Disponible pour d\'emonstration en direct et questions techniques.}
+
+\vspace{0.5cm}
+{\small\color{nexagray} Glitch Inc --- BackendGlitch Division \copyright\ 2026}
+\end{center}
+
+\end{document}
