@@ -2056,6 +2056,39 @@ async fn send_webhook(
     .execute(&state.pg_pool)
     .await;
 
+    // Retry failed webhooks up to 2 more times with backoff
+    if !success {
+        for attempt in 2..=3 {
+            tokio::time::sleep(std::time::Duration::from_secs(attempt * 2)).await;
+            let retry_result = state
+                .http_client
+                .post(url)
+                .header("content-type", "application/json")
+                .header("x-nexapay-event", event_type)
+                .header("x-nexapay-signature", &signature)
+                .body(body.clone())
+                .send()
+                .await;
+            let retry_ok = match &retry_result {
+                Ok(r) => (200..300).contains(&(r.status().as_u16() as i32)),
+                Err(_) => false,
+            };
+            let retry_status = retry_result.as_ref().ok().map(|r| r.status().as_u16() as i32);
+            let retry_body = match &retry_result {
+                Ok(r) => r.text().await.unwrap_or_default(),
+                Err(e) => e.to_string(),
+            };
+            let _ = sqlx::query(
+                "INSERT INTO webhook_deliveries (webhook_id, event_type, payload, request_signature, response_status, response_body, success, attempt)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+            )
+            .bind(webhook_id).bind(event_type).bind(payload).bind(&signature)
+            .bind(retry_status).bind(truncate_response(&retry_body)).bind(retry_ok).bind(attempt)
+            .execute(&state.pg_pool).await;
+            if retry_ok { break; }
+        }
+    }
+
     json!({
         "event_type": event_type,
         "response_status": response_status,
