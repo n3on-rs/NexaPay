@@ -49,6 +49,14 @@ export function middleware(request: NextRequest) {
     return NextResponse.rewrite(new URL(targetPath, request.url));
   }
 
+  // ─── admin.nexapay.space — Admin Panel ───
+  if (hostname.startsWith("admin.")) {
+    // Admin uses its own auth (admin_token in localStorage/X-Admin-Token header)
+    // No cookie check needed — admin login page handles its own auth
+    const targetPath = pathname === "/" ? "/sandbox/admin/login" : `/sandbox${pathname}`;
+    return NextResponse.rewrite(new URL(targetPath, request.url));
+  }
+
   // ─── nexapay.space / www — Public landing ───
   // Default / to the landing page
   const landingPath = pathname === "/" ? "/landing" : `/landing${pathname}`;
