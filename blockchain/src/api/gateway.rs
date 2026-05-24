@@ -767,7 +767,7 @@ pub async fn confirm_intent(
 
             // Deduct from payer's chain wallet: transfer to SYSTEM
             // (merchant balance is tracked in Postgres, settled on withdrawal)
-            if let Some(pay_amount) = payload.amount {
+            let pay_amount = final_amount as u64;
                 let mut chain = state.chain.lock().await;
                 if let Some(payer_acc) = chain.get_account(&chain_address) {
                     if payer_acc.balance >= pay_amount as u64 {
