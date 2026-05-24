@@ -273,6 +273,21 @@ export interface CreatePaymentIntentRequest {
    * Idempotency key to prevent duplicate payments (optional)
    */
   idempotency_key?: string;
+
+  /**
+   * URL to receive webhook notifications for all events (optional)
+   */
+  webhook_url?: string;
+
+  /**
+   * URL to receive webhook notifications on successful payment (optional)
+   */
+  success_webhook_url?: string;
+
+  /**
+   * URL to receive webhook notifications on failed payment (optional)
+   */
+  failure_webhook_url?: string;
 }
 
 /**

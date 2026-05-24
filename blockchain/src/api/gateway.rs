@@ -37,6 +37,9 @@ pub struct CreateIntentRequest {
     pub order_id: Option<String>,
     pub checkout_theme: Option<String>,
     pub success_url: Option<String>,
+    pub webhook_url: Option<String>,
+    pub success_webhook_url: Option<String>,
+    pub failure_webhook_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -225,8 +228,8 @@ pub async fn create_intent(
     let expiry_dt: Option<chrono::DateTime<chrono::Utc>> = payload.expiry.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&chrono::Utc)));
 
     sqlx::query(
-        "INSERT INTO payment_intents (intent_id, merchant_id, amount, currency, status, description, customer_email, customer_name, metadata, idempotency_key, payment_method, variable_amount, accepted_methods, expiry, max_usages, order_id, checkout_theme, success_url)
-         VALUES ($1, $2, $3, $4, 'requires_confirmation', $5, $6, $7, $8, $9, 'card', $10, $11, $12, $13, $14, $15, $16)",
+        "INSERT INTO payment_intents (intent_id, merchant_id, amount, currency, status, description, customer_email, customer_name, metadata, idempotency_key, payment_method, variable_amount, accepted_methods, expiry, max_usages, order_id, checkout_theme, success_url, webhook_url, success_webhook_url, failure_webhook_url)
+         VALUES ($1, $2, $3, $4, 'requires_confirmation', $5, $6, $7, $8, $9, 'card', $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)",
     )
     .bind(&intent_id)
     .bind(merchant_id)
@@ -244,6 +247,9 @@ pub async fn create_intent(
     .bind(&order_id)
     .bind(&checkout_theme)
     .bind(&success_url)
+    .bind(payload.webhook_url)
+    .bind(payload.success_webhook_url)
+    .bind(payload.failure_webhook_url)
     .execute(&state.pg_pool)
     .await
     .map_err(|e| {
@@ -982,7 +988,7 @@ pub async fn confirm_intent(
         "customer_email": row.try_get::<Option<String>, _>("customer_email").ok().flatten()
     });
 
-    dispatch_webhooks(&state, merchant_id, event_type, payload_json).await;
+    dispatch_webhooks_for_intent(&state, merchant_id, event_type, &payload_json, Some(&intent_id)).await;
 
     // SSE notification to agent dashboard
     if approved {
@@ -1971,6 +1977,17 @@ async fn ensure_webhook_ownership(
 }
 
 async fn dispatch_webhooks(state: &AppState, merchant_id: Uuid, event_type: &str, payload: Value) {
+    dispatch_webhooks_for_intent(state, merchant_id, event_type, &payload, None).await;
+}
+
+async fn dispatch_webhooks_for_intent(
+    state: &AppState,
+    merchant_id: Uuid,
+    event_type: &str,
+    payload: &Value,
+    intent_id: Option<&str>,
+) {
+    // 1. Registered webhooks for this merchant
     let rows = sqlx::query(
         "SELECT id, url, signing_secret FROM webhooks WHERE merchant_id = $1 AND is_active = TRUE",
     )
@@ -1978,9 +1995,7 @@ async fn dispatch_webhooks(state: &AppState, merchant_id: Uuid, event_type: &str
     .fetch_all(&state.pg_pool)
     .await;
 
-    let Ok(rows) = rows else {
-        return;
-    };
+    let Ok(rows) = rows else { return; };
 
     for row in rows {
         let webhook_id: Uuid = match row.try_get("id") {
@@ -1989,7 +2004,36 @@ async fn dispatch_webhooks(state: &AppState, merchant_id: Uuid, event_type: &str
         };
         let url: String = row.try_get("url").unwrap_or_default();
         let secret: String = row.try_get("signing_secret").unwrap_or_default();
-        let _ = send_webhook(state, webhook_id, &url, event_type, &secret, &payload).await;
+        let _ = send_webhook(state, webhook_id, &url, event_type, &secret, payload).await;
+    }
+
+    // 2. Intent-specific webhook URLs (success/failure)
+    if let Some(iid) = intent_id {
+        let intent_row = sqlx::query(
+            "SELECT success_webhook_url, failure_webhook_url FROM payment_intents WHERE intent_id = $1 LIMIT 1",
+        )
+        .bind(iid)
+        .fetch_optional(&state.pg_pool)
+        .await;
+
+        if let Ok(Some(r)) = intent_row {
+            let is_success = event_type.contains("succeeded");
+            let url: Option<String> = if is_success {
+                r.try_get("success_webhook_url").ok()
+            } else {
+                r.try_get("failure_webhook_url").ok()
+            };
+            let fallback_url: Option<String> = r.try_get("webhook_url").ok();
+            let target_url = url.or(fallback_url);
+
+            if let Some(target) = target_url {
+                if !target.is_empty() {
+                    // Use a temp UUID for intent-level webhooks
+                    let temp_id = Uuid::new_v4();
+                    let _ = send_webhook(state, temp_id, &target, event_type, "", payload).await;
+                }
+            }
+        }
     }
 }
 

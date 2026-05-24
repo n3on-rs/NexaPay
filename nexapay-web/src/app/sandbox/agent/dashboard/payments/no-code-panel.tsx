@@ -593,6 +593,8 @@ function CreateLinkPanel({
   const [addFees, setAddFees] = React.useState(false);
   const [theme, setTheme] = React.useState<"dark" | "light">("dark");
   const [webhookUrl, setWebhookUrl] = React.useState("");
+  const [successWebhookUrl, setSuccessWebhookUrl] = React.useState("");
+  const [failureWebhookUrl, setFailureWebhookUrl] = React.useState("");
   const [loading, setLoading] = React.useState(false);
   const [result, setResult] = React.useState<{ url: string; ref: string } | null>(null);
   const [error, setError] = React.useState("");
@@ -624,6 +626,8 @@ function CreateLinkPanel({
     if (expiry) body.expiry = new Date(expiry).toISOString();
     if (maxUsages) body.max_usages = parseInt(maxUsages);
     if (webhookUrl.trim()) body.webhook_url = webhookUrl.trim();
+    if (successWebhookUrl.trim()) body.success_webhook_url = successWebhookUrl.trim();
+    if (failureWebhookUrl.trim()) body.failure_webhook_url = failureWebhookUrl.trim();
 
     try {
       const res = await postJson("/gateway/v1/intents", body, { "X-API-Key": apiKey });
@@ -845,16 +849,35 @@ function CreateLinkPanel({
                 </div>
               </div>
 
-              {/* Webhook URL */}
-              <Field label="Webhook URL" optional>
-                <input
-                  value={webhookUrl}
-                  onChange={(e) => setWebhookUrl(e.target.value)}
-                  placeholder="Leave empty for NexaPay default webhook"
-                  className="w-full rounded-xl bg-[#111] border border-white/[0.06] px-4 py-3 text-sm text-white placeholder-[#444] outline-none focus:border-[#00d4aa]/50 transition-colors"
-                />
-                <p className="mt-1 text-[11px] text-[#555]">Set your own webhook URL for payment success/failure notifications</p>
-              </Field>
+              {/* Webhook URLs */}
+              <div className="rounded-xl border border-white/[0.06] bg-[#111] p-4 space-y-3">
+                <p className="text-xs font-medium uppercase tracking-wider text-[#666]">Webhook Notifications</p>
+                <Field label="All Events URL" optional>
+                  <input
+                    value={webhookUrl}
+                    onChange={(e) => setWebhookUrl(e.target.value)}
+                    placeholder="Receive all payment events"
+                    className="w-full rounded-xl bg-[#0b0b0b] border border-white/[0.06] px-4 py-3 text-sm text-white placeholder-[#444] outline-none focus:border-[#00d4aa]/50 transition-colors"
+                  />
+                </Field>
+                <Field label="Success URL" optional>
+                  <input
+                    value={successWebhookUrl}
+                    onChange={(e) => setSuccessWebhookUrl(e.target.value)}
+                    placeholder="Only fired when payment succeeds"
+                    className="w-full rounded-xl bg-[#0b0b0b] border border-white/[0.06] px-4 py-3 text-sm text-white placeholder-[#444] outline-none focus:border-[#00d4aa]/50 transition-colors"
+                  />
+                </Field>
+                <Field label="Failure URL" optional>
+                  <input
+                    value={failureWebhookUrl}
+                    onChange={(e) => setFailureWebhookUrl(e.target.value)}
+                    placeholder="Only fired when payment fails"
+                    className="w-full rounded-xl bg-[#0b0b0b] border border-white/[0.06] px-4 py-3 text-sm text-white placeholder-[#444] outline-none focus:border-[#00d4aa]/50 transition-colors"
+                  />
+                </Field>
+                <p className="text-[11px] text-[#555]">Leave empty to use your registered NexaPay webhooks</p>
+              </div>
 
               {/* Preview */}
               <div className="mt-6 rounded-2xl border border-white/[0.06] bg-[#111] p-4">
