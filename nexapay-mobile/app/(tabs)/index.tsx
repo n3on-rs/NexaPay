@@ -1,188 +1,257 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Dimensions, Animated, ImageBackground } from "react-native";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Dimensions, Animated, Pressable } from "react-native";
+import Svg, { Circle, Path, Defs, LinearGradient as SvgGrad, Stop, G, Rect } from "react-native-svg";
 import { router } from "expo-router";
 import { useAuth } from "../../src/auth/AuthContext";
 import { api } from "../../src/api/client";
-import { ArrowUpRight, ArrowDownLeft, Send, QrCode, CreditCard, TrendingUp, ChevronRight, Sparkles, Zap, History, Scan } from "lucide-react-native";
+import { ArrowUpRight, ArrowDownLeft, Plus, Minus, TrendingUp } from "lucide-react-native";
 import type { AccountDetails, TransactionView } from "../../src/types";
 
-const { width: W } = Dimensions.get("window");
+const { width: W, height: H } = Dimensions.get("window");
+const ACCENT = "#FF6B35"; // warm amber-orange
+const BG = "#0A0A14";
+const SURFACE = "#141428";
+const MUTED = "rgba(255,255,255,0.35)";
 
-function Orb({ size, top, left, color, opacity }: any) {
+// ─── Animated ring component ───
+function BalanceRing({ balance, size = 200 }: { balance: number; size?: number }) {
+  const anim = useRef(new Animated.Value(0)).current;
+  const strokeW = 6;
+  const radius = (size - strokeW) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const maxBalance = 500000; // 500 TND visual cap
+  const progress = Math.min(balance / maxBalance, 1);
+  const animatedProgress = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(animatedProgress, { toValue: progress, duration: 1200, useNativeDriver: false }).start();
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(anim, { toValue: 1, duration: 8000, useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 0, duration: 8000, useNativeDriver: true }),
+      ])
+    ).start();
+  }, [balance]);
+
+  const strokeDashoffset = animatedProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [circumference, 0],
+  });
+
+  const rotate = anim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] });
+
   return (
-    <View style={{ position: "absolute", top, left, width: size, height: size, borderRadius: size/2, backgroundColor: color, opacity, transform: [{ scale: 1.5 }] }} />
+    <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
+      {/* Decorative dots orbiting */}
+      <Animated.View style={{ position: "absolute", transform: [{ rotate }] }}>
+        <View style={{ width: size - 20, height: size - 20, alignItems: "center", justifyContent: "flex-start" }}>
+          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: ACCENT, opacity: 0.6 }} />
+        </View>
+      </Animated.View>
+      <Animated.View style={{ position: "absolute", transform: [{ rotate: Animated.multiply(anim, -1) }] }}>
+        <View style={{ width: size - 30, height: size - 30, alignItems: "center", justifyContent: "flex-start" }}>
+          <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: "rgba(255,107,53,0.4)", marginTop: 20 }} />
+        </View>
+      </Animated.View>
+
+      {/* Ring */}
+      <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <Defs>
+          <SvgGrad id="ringGrad" x1="0" y1="0" x2="1" y2="1">
+            <Stop offset="0" stopColor={ACCENT} stopOpacity="1" />
+            <Stop offset="1" stopColor="#FF8F65" stopOpacity="1" />
+          </SvgGrad>
+        </Defs>
+        <Circle cx={size/2} cy={size/2} r={radius} fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth={strokeW} />
+        <AnimatedCircle cx={size/2} cy={size/2} r={radius} fill="none" stroke="url(#ringGrad)" strokeWidth={strokeW} strokeDasharray={circumference} strokeDashoffset={strokeDashoffset} strokeLinecap="round" />
+      </Svg>
+    </View>
   );
+}
+
+// SVG animated circle wrapper for React Native
+function AnimatedCircle(props: any) {
+  const Component = Circle;
+  return <Component {...props} />;
 }
 
 export default function HomeScreen() {
   const { user, token, address } = useAuth();
   const [account, setAccount] = useState<AccountDetails | null>(null);
-  const [recentTx, setRecentTx] = useState<TransactionView[]>([]);
+  const [transactions, setTransactions] = useState<TransactionView[]>([]);
   const [refreshing, setRefreshing] = useState(false);
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const ringAnim = useRef(new Animated.Value(0)).current;
 
-  const loadData = useCallback(async () => {
+  const load = useCallback(async () => {
     if (!token || !address) return;
-    const [accRes, txRes] = await Promise.all([
+    const [a, t] = await Promise.all([
       api.get<any>(`/accounts/${address}`, { "X-Account-Token": token }),
       api.get<any>(`/accounts/${address}/transactions`, { "X-Account-Token": token }),
     ]);
-    if (accRes.ok) setAccount(accRes.data as AccountDetails);
-    if (txRes.ok && txRes.data.transactions) setRecentTx((txRes.data.transactions as TransactionView[]).slice(0, 6));
-    Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
+    if (a.ok) setAccount(a.data as AccountDetails);
+    if (t.ok) setTransactions((t.data.transactions || []).slice(0, 8));
+    Animated.spring(ringAnim, { toValue: 1, friction: 4, useNativeDriver: true }).start();
   }, [token, address]);
 
-  useEffect(() => { loadData(); pulse(); }, [loadData]);
-
-  const pulse = () => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.05, duration: 2000, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 2000, useNativeDriver: true }),
-      ])
-    ).start();
-  };
-
-  const onRefresh = async () => { setRefreshing(true); await loadData(); setRefreshing(false); };
+  useEffect(() => { load(); }, [load]);
 
   const balance = account?.balance || 0;
-  const tndBalance = (balance / 1000).toFixed(3);
-  const [whole, decimal] = tndBalance.split(".");
+  const tnd = (balance / 1000).toFixed(3);
+  const [whole, frac] = tnd.split(".");
+
+  // Group transactions by date
+  const today = new Date().toDateString();
+  const todayTx = transactions.filter(t => new Date(t.timestamp).toDateString() === today);
+  const earlierTx = transactions.filter(t => new Date(t.timestamp).toDateString() !== today);
 
   const quickActions = [
-    { icon: Send, label: "Send", gradient: ["#00d4aa", "#00b894"], onPress: () => router.push("/send") },
-    { icon: QrCode, label: "Receive", gradient: ["#6366f1", "#818cf8"], onPress: () => {} },
-    { icon: Scan, label: "Scan", gradient: ["#f59e0b", "#fbbf24"], onPress: () => {} },
-    { icon: CreditCard, label: "Card", gradient: ["#ec4899", "#f472b6"], onPress: () => router.push("/card") },
+    { label: "Send", icon: ArrowUpRight, route: "/send" },
+    { label: "Request", icon: ArrowDownLeft, route: null },
+    { label: "Add", icon: Plus, route: null },
+    { label: "Card", icon: TrendingUp, route: "/card" },
   ];
 
   return (
-    <View style={s.container}>
-      {/* Background orbs */}
-      <Orb size={300} top={-100} left={-100} color="#00d4aa" opacity={0.04} />
-      <Orb size={250} top={200} left={W - 150} color="#6366f1" opacity={0.04} />
-      <Orb size={200} top={500} left={50} color="#ec4899" opacity={0.03} />
-
+    <View style={S.container}>
       <ScrollView
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00d4aa" colors={["#00d4aa"]} progressViewOffset={80} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await load(); setRefreshing(false); }} tintColor={ACCENT} />}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={s.scroll}
+        contentContainerStyle={S.scroll}
       >
-        {/* Header */}
-        <View style={s.header}>
+        {/* ─── TOP BAR ─── */}
+        <View style={S.topBar}>
           <View>
-            <Text style={s.greeting}>Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}</Text>
-            <Text style={s.name}>{user?.fullName?.split(" ")[0] || "there"} <Sparkles size={16} color="#fbbf24" /></Text>
+            <Text style={S.greeting}>{user?.fullName?.split(" ")[0] || "Welcome"}</Text>
+            <Text style={S.dateLabel}>{new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</Text>
           </View>
-          <TouchableOpacity style={s.avatarRing}>
-            <View style={s.avatar}><Text style={s.avatarText}>{user?.fullName?.charAt(0) || "N"}</Text></View>
+          <TouchableOpacity style={S.avatarBtn}>
+            <View style={S.avatar}>
+              <Text style={S.avText}>{user?.fullName?.charAt(0) || "N"}</Text>
+            </View>
           </TouchableOpacity>
         </View>
 
-        {/* Balance Orb */}
-        <Animated.View style={[s.balanceOrb, { transform: [{ scale: pulseAnim }] }]}>
-          <View style={s.balanceGlow} />
-          <Text style={s.balanceLabel}>TOTAL BALANCE</Text>
-          <View style={s.balanceRow}>
-            <Text style={s.balanceWhole}>{whole}</Text>
-            <Text style={s.balanceDecimal}>.{decimal} <Text style={s.balanceCurrency}>TND</Text></Text>
+        {/* ─── BALANCE WHEEL ─── */}
+        <View style={S.wheelSection}>
+          <BalanceRing balance={balance} size={180} />
+          <View style={S.wheelCenter}>
+            <Text style={S.wheelWhole}>{whole}</Text>
+            <Text style={S.wheelFrac}>.{frac}</Text>
+            <Text style={S.wheelCurrency}>TND</Text>
           </View>
-          <View style={s.addrPill}>
-            <Text style={s.addrText}>{(address || "").slice(0, 8)}...{(address || "").slice(-6)}</Text>
-          </View>
-        </Animated.View>
-
-        {/* Quick Actions */}
-        <View style={s.actions}>
-          {quickActions.map((a, i) => (
-            <TouchableOpacity key={a.label} style={s.actionBtn} onPress={a.onPress} activeOpacity={0.7}>
-              <View style={[s.actionIconWrap, { backgroundColor: `${a.gradient[0]}20` }]}>
-                <a.icon size={22} color={a.gradient[0]} />
-              </View>
-              <Text style={s.actionLabel}>{a.label}</Text>
-            </TouchableOpacity>
-          ))}
         </View>
 
-        {/* Recent Activity */}
-        <View style={s.section}>
-          <View style={s.sectionHead}>
-            <Text style={s.sectionTitle}>Recent Activity</Text>
-            <TouchableOpacity onPress={() => router.push("/history")} style={s.seeAll}>
-              <Text style={s.seeAllText}>History</Text><ChevronRight size={14} color="#00d4aa" />
+        {/* ─── QUICK ACTIONS - staggered asymmetric grid ─── */}
+        <View style={S.actionsGrid}>
+          <TouchableOpacity style={[S.actionBig, { backgroundColor: ACCENT }]} onPress={() => router.push("/send")} activeOpacity={0.8}>
+            <Text style={S.actionBigText}>Send{'\n'}Money</Text>
+            <ArrowUpRight size={28} color="#fff" style={{ position: "absolute", right: 20, bottom: 20 }} />
+          </TouchableOpacity>
+          <View style={S.actionSmallCol}>
+            <TouchableOpacity style={[S.actionSmall, { backgroundColor: "#1E1E3A" }]} activeOpacity={0.8}>
+              <ArrowDownLeft size={18} color="#8B8BFF" />
+              <Text style={S.actionSmallText}>Request</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[S.actionSmall, { backgroundColor: "#1E1E3A" }]} activeOpacity={0.8}>
+              <Plus size={18} color="#5EEAD4" />
+              <Text style={S.actionSmallText}>Top Up</Text>
             </TouchableOpacity>
           </View>
+        </View>
 
-          <Animated.View style={{ opacity: fadeAnim }}>
-            {recentTx.length === 0 ? (
-              <View style={s.emptyState}>
-                <View style={s.emptyIcon}><Zap size={24} color="#333" /></View>
-                <Text style={s.emptyTitle}>No activity yet</Text>
-                <Text style={s.emptySub}>Your transactions will appear here</Text>
-              </View>
-            ) : (
-              <View style={s.txList}>
-                {recentTx.map((tx, i) => (
-                  <View key={tx.id} style={[s.txItem, i === recentTx.length - 1 && { borderBottomWidth: 0 }]}>
-                    <View style={[s.txDot, { backgroundColor: tx.direction === "credit" ? "#00d4aa" : "#f87171" }]}>
-                      {tx.direction === "credit" ? <ArrowDownLeft size={12} color="#fff" /> : <ArrowUpRight size={12} color="#fff" />}
-                    </View>
-                    <View style={s.txInfo}>
-                      <Text style={s.txTitle} numberOfLines={1}>{tx.memo || tx.from_name || tx.to_name || "Transfer"}</Text>
-                      <Text style={s.txTime}>{new Date(tx.timestamp).toLocaleDateString("en-US", { month: "short", day: "numeric" })} · {tx.timestamp.slice(11, 16)}</Text>
-                    </View>
-                    <View style={s.txRight}>
-                      <Text style={[s.txAmt, { color: tx.direction === "credit" ? "#00d4aa" : "#f87171" }]}>{tx.direction === "credit" ? "+" : "−"}{tx.amount_display}</Text>
+        {/* ─── TRANSACTIONS - brutalist list ─── */}
+        <View style={S.txSection}>
+          <Text style={S.sectionTitle}>Activity</Text>
+
+          {todayTx.length > 0 && (
+            <View style={S.txGroup}>
+              <Text style={S.txGroupLabel}>TODAY</Text>
+              {todayTx.map((tx) => (
+                <View key={tx.id} style={S.txRow}>
+                  <View style={S.txLeft}>
+                    <View style={[S.txIndicator, { backgroundColor: tx.direction === "credit" ? ACCENT : "transparent", borderColor: tx.direction === "credit" ? ACCENT : "rgba(255,255,255,0.15)" }]} />
+                    <View>
+                      <Text style={S.txTitle} numberOfLines={1}>{tx.memo || tx.from_name || tx.to_name || "Transfer"}</Text>
+                      <Text style={S.txMeta}>{tx.timestamp.slice(11, 16)} · {tx.direction === "credit" ? "RECEIVED" : "SENT"}</Text>
                     </View>
                   </View>
-                ))}
-              </View>
-            )}
-          </Animated.View>
+                  <Text style={[S.txAmount, { color: tx.direction === "credit" ? ACCENT : "#fff" }]}>
+                    {tx.direction === "credit" ? "+" : "−"} {tx.amount_display.replace("TND", "").trim()}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {earlierTx.length > 0 && (
+            <View style={S.txGroup}>
+              <Text style={S.txGroupLabel}>EARLIER</Text>
+              {earlierTx.slice(0, 5).map((tx) => (
+                <View key={tx.id} style={S.txRow}>
+                  <View style={S.txLeft}>
+                    <View style={[S.txIndicator, { backgroundColor: tx.direction === "credit" ? ACCENT : "transparent", borderColor: tx.direction === "credit" ? ACCENT : "rgba(255,255,255,0.15)" }]} />
+                    <View>
+                      <Text style={S.txTitle} numberOfLines={1}>{tx.memo || tx.from_name || tx.to_name || "Transfer"}</Text>
+                      <Text style={S.txMeta}>{new Date(tx.timestamp).toLocaleDateString("en-US", { month: "short", day: "numeric" })} · {tx.direction === "credit" ? "RECEIVED" : "SENT"}</Text>
+                    </View>
+                  </View>
+                  <Text style={[S.txAmount, { color: tx.direction === "credit" ? ACCENT : "#fff" }]}>
+                    {tx.direction === "credit" ? "+" : "−"} {tx.amount_display.replace("TND", "").trim()}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {transactions.length === 0 && (
+            <View style={S.emptyState}>
+              <View style={S.emptyLine} />
+              <View style={[S.emptyLine, { width: "60%" }]} />
+              <Text style={S.emptyText}>No transactions yet</Text>
+            </View>
+          )}
         </View>
       </ScrollView>
     </View>
   );
 }
 
-const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#030712" },
-  scroll: { paddingBottom: 40 },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 24, paddingTop: 70, paddingBottom: 20 },
-  greeting: { fontSize: 13, color: "rgba(255,255,255,0.35)", fontWeight: "500", letterSpacing: 0.5 },
-  name: { fontSize: 25, fontWeight: "800", color: "#fff", marginTop: 2, letterSpacing: -0.3 },
-  avatarRing: { padding: 2, borderRadius: 30, borderWidth: 1.5, borderColor: "rgba(0,212,170,0.3)" },
-  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: "#00d4aa", alignItems: "center", justifyContent: "center" },
-  avatarText: { fontSize: 18, fontWeight: "800", color: "#030712" },
-  balanceOrb: { marginHorizontal: 24, backgroundColor: "rgba(12,18,28,0.9)", borderRadius: 32, padding: 28, alignItems: "center", borderWidth: 1, borderColor: "rgba(255,255,255,0.06)", overflow: "hidden" },
-  balanceGlow: { position: "absolute", top: -60, width: 200, height: 200, borderRadius: 100, backgroundColor: "rgba(0,212,170,0.06)", transform: [{ scale: 1.5 }] },
-  balanceLabel: { fontSize: 10, fontWeight: "700", color: "rgba(255,255,255,0.3)", letterSpacing: 3, marginBottom: 12 },
-  balanceRow: { flexDirection: "row", alignItems: "flex-end" },
-  balanceWhole: { fontSize: 52, fontWeight: "900", color: "#fff", letterSpacing: -2, lineHeight: 56 },
-  balanceDecimal: { fontSize: 22, fontWeight: "600", color: "rgba(255,255,255,0.5)", paddingBottom: 6 },
-  balanceCurrency: { fontSize: 14, fontWeight: "600", color: "rgba(255,255,255,0.25)" },
-  addrPill: { marginTop: 16, backgroundColor: "rgba(255,255,255,0.04)", paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: "rgba(255,255,255,0.04)" },
-  addrText: { fontSize: 11, color: "rgba(255,255,255,0.2)", fontFamily: "monospace", letterSpacing: 0.5 },
-  actions: { flexDirection: "row", justifyContent: "space-around", paddingHorizontal: 24, marginTop: 28, marginBottom: 8 },
-  actionBtn: { alignItems: "center", gap: 10 },
-  actionIconWrap: { width: 56, height: 56, borderRadius: 20, alignItems: "center", justifyContent: "center" },
-  actionLabel: { fontSize: 12, fontWeight: "600", color: "rgba(255,255,255,0.5)", letterSpacing: 0.3 },
-  section: { marginTop: 28, paddingHorizontal: 24 },
-  sectionHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 18 },
-  sectionTitle: { fontSize: 17, fontWeight: "700", color: "#fff", letterSpacing: -0.2 },
-  seeAll: { flexDirection: "row", alignItems: "center" },
-  seeAllText: { fontSize: 13, color: "#00d4aa", fontWeight: "600" },
-  emptyState: { alignItems: "center", paddingVertical: 48, backgroundColor: "rgba(255,255,255,0.02)", borderRadius: 24, borderWidth: 1, borderColor: "rgba(255,255,255,0.04)", borderStyle: "dashed" },
-  emptyIcon: { width: 48, height: 48, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.03)", alignItems: "center", justifyContent: "center", marginBottom: 12 },
-  emptyTitle: { fontSize: 15, fontWeight: "600", color: "rgba(255,255,255,0.2)" },
-  emptySub: { fontSize: 12, color: "rgba(255,255,255,0.1)", marginTop: 4 },
-  txList: { backgroundColor: "rgba(12,18,28,0.6)", borderRadius: 20, borderWidth: 1, borderColor: "rgba(255,255,255,0.04)", overflow: "hidden" },
-  txItem: { flexDirection: "row", alignItems: "center", paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.03)" },
-  txDot: { width: 32, height: 32, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  txInfo: { flex: 1, marginLeft: 14 },
-  txTitle: { fontSize: 14, fontWeight: "600", color: "#fff" },
-  txTime: { fontSize: 11, color: "rgba(255,255,255,0.25)", marginTop: 3, letterSpacing: 0.2 },
-  txRight: { alignItems: "flex-end" },
-  txAmt: { fontSize: 14, fontWeight: "700", letterSpacing: -0.2 },
+const S = StyleSheet.create({
+  container: { flex: 1, backgroundColor: BG },
+  scroll: { paddingBottom: 120 },
+  topBar: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", paddingHorizontal: 24, paddingTop: 70, paddingBottom: 20 },
+  greeting: { fontSize: 30, fontWeight: "900", color: "#fff", letterSpacing: -1 },
+  dateLabel: { fontSize: 13, color: MUTED, marginTop: 4, fontWeight: "500", letterSpacing: 0.5 },
+  avatarBtn: { width: 48, height: 48, borderRadius: 16, backgroundColor: SURFACE, overflow: "hidden", borderWidth: 2, borderColor: "rgba(255,107,53,0.2)" },
+  avatar: { flex: 1, alignItems: "center", justifyContent: "center" },
+  avText: { fontSize: 20, fontWeight: "800", color: ACCENT },
+
+  wheelSection: { alignItems: "center", justifyContent: "center", marginVertical: 10, height: 240 },
+  wheelCenter: { position: "absolute", alignItems: "center" },
+  wheelWhole: { fontSize: 48, fontWeight: "900", color: "#fff", letterSpacing: -2 },
+  wheelFrac: { fontSize: 20, fontWeight: "600", color: MUTED, marginTop: -4 },
+  wheelCurrency: { fontSize: 11, fontWeight: "700", color: "rgba(255,255,255,0.2)", letterSpacing: 2, marginTop: 4 },
+
+  actionsGrid: { flexDirection: "row", paddingHorizontal: 24, gap: 12, marginTop: 10 },
+  actionBig: { flex: 1, height: 130, borderRadius: 24, padding: 20, justifyContent: "flex-end", position: "relative", overflow: "hidden" },
+  actionBigText: { fontSize: 20, fontWeight: "800", color: "#fff", lineHeight: 24, letterSpacing: -0.3 },
+  actionSmallCol: { gap: 12 },
+  actionSmall: { width: W * 0.35, height: 59, borderRadius: 20, padding: 16, justifyContent: "center", gap: 4 },
+  actionSmallText: { fontSize: 12, fontWeight: "700", color: "#fff" },
+
+  txSection: { paddingHorizontal: 24, marginTop: 32 },
+  sectionTitle: { fontSize: 14, fontWeight: "700", color: MUTED, letterSpacing: 3, marginBottom: 20 },
+
+  txGroup: { marginBottom: 24 },
+  txGroupLabel: { fontSize: 10, fontWeight: "800", color: "rgba(255,255,255,0.15)", letterSpacing: 2, marginBottom: 12 },
+  txRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.04)" },
+  txLeft: { flexDirection: "row", alignItems: "center", gap: 14, flex: 1 },
+  txIndicator: { width: 10, height: 10, borderRadius: 5, borderWidth: 1.5 },
+  txTitle: { fontSize: 14, fontWeight: "600", color: "#fff", maxWidth: W * 0.4 },
+  txMeta: { fontSize: 10, fontWeight: "600", color: "rgba(255,255,255,0.25)", marginTop: 3, letterSpacing: 0.5 },
+  txAmount: { fontSize: 14, fontWeight: "700", letterSpacing: -0.3 },
+
+  emptyState: { paddingVertical: 40, gap: 12, alignItems: "center" },
+  emptyLine: { height: 4, width: "80%", borderRadius: 2, backgroundColor: "rgba(255,255,255,0.04)" },
+  emptyText: { fontSize: 12, color: "rgba(255,255,255,0.15)", marginTop: 8, fontWeight: "600" },
 });
