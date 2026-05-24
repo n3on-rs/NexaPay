@@ -1009,10 +1009,10 @@ pub async fn download_payment_receipt_pdf(
 ) -> Result<(StatusCode, HeaderMap, Vec<u8>), (StatusCode, HeaderMap, Json<Value>)> {
     let row = sqlx::query(
         "SELECT pi.intent_id, pi.amount, pi.currency, pi.status, pi.created_at,
-                pi.customer_first_name, pi.customer_last_name,
-                pi.agent_name, pi.card_brand, pi.card_last4,
-                pi.description
+                pi.customer_name, pi.card_brand, pi.card_last4,
+                pi.description, d.company_name as merchant_name
          FROM payment_intents pi
+         LEFT JOIN developers d ON d.id = pi.merchant_id
          WHERE pi.intent_id = $1 AND pi.status = 'succeeded' LIMIT 1"
     )
     .bind(&intent_id)
@@ -1026,9 +1026,8 @@ pub async fn download_payment_receipt_pdf(
     let currency: String = row.try_get("currency").unwrap_or_else(|_| "TND".to_string());
     let status: String = row.try_get("status").unwrap_or_default();
     let created_at: chrono::DateTime<chrono::Utc> = row.try_get("created_at").unwrap_or_else(|_| chrono::Utc::now());
-    let first: String = row.try_get("customer_first_name").unwrap_or_default();
-    let last: String = row.try_get("customer_last_name").unwrap_or_default();
-    let agent_name: String = row.try_get("agent_name").unwrap_or_else(|_| "NexaPay".to_string());
+    let customer_name: String = row.try_get("customer_name").unwrap_or_default();
+    let merchant_name: String = row.try_get("merchant_name").unwrap_or_else(|_| "NexaPay".to_string());
     let card_brand: String = row.try_get("card_brand").unwrap_or_default();
     let card_last4: String = row.try_get("card_last4").unwrap_or_default();
     let description: String = row.try_get("description").unwrap_or_default();
@@ -1059,7 +1058,7 @@ pub async fn download_payment_receipt_pdf(
     layer.use_text(&format!("Date: {}", created_at.format("%Y-%m-%d %H:%M UTC")), 8.0, printpdf::Mm(10.0), y, &font);
     y -= printpdf::Mm(10.0);
 
-    layer.use_text(&format!("Merchant: {}", agent_name), 9.0, printpdf::Mm(10.0), y, &font);
+    layer.use_text(&format!("Merchant: {}", merchant_name), 9.0, printpdf::Mm(10.0), y, &font);
     y -= printpdf::Mm(5.0);
     if !description.is_empty() {
         layer.use_text(&format!("Description: {}", description), 8.0, printpdf::Mm(10.0), y, &font);
@@ -1077,7 +1076,7 @@ pub async fn download_payment_receipt_pdf(
 
     layer.use_text(&format!("Card: {} **** **** {}", card_brand, card_last4), 8.0, printpdf::Mm(10.0), y, &font);
     y -= printpdf::Mm(5.0);
-    layer.use_text(&format!("Customer: {} {}", first, last), 8.0, printpdf::Mm(10.0), y, &font);
+    layer.use_text(&format!("Customer: {}", customer_name), 8.0, printpdf::Mm(10.0), y, &font);
     y -= printpdf::Mm(5.0);
     layer.use_text(&format!("Status: {}", status.to_uppercase()), 8.0, printpdf::Mm(10.0), y, &font);
     y -= printpdf::Mm(15.0);
