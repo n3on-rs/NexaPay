@@ -592,6 +592,7 @@ function CreateLinkPanel({
   const [methods, setMethods] = React.useState({ wallet: true, card: true, edinar: false });
   const [addFees, setAddFees] = React.useState(false);
   const [theme, setTheme] = React.useState<"dark" | "light">("dark");
+  const [webhookUrl, setWebhookUrl] = React.useState("");
   const [loading, setLoading] = React.useState(false);
   const [result, setResult] = React.useState<{ url: string; ref: string } | null>(null);
   const [error, setError] = React.useState("");
@@ -622,6 +623,7 @@ function CreateLinkPanel({
     };
     if (expiry) body.expiry = new Date(expiry).toISOString();
     if (maxUsages) body.max_usages = parseInt(maxUsages);
+    if (webhookUrl.trim()) body.webhook_url = webhookUrl.trim();
 
     try {
       const res = await postJson("/gateway/v1/intents", body, { "X-API-Key": apiKey });
@@ -842,6 +844,17 @@ function CreateLinkPanel({
                   </div>
                 </div>
               </div>
+
+              {/* Webhook URL */}
+              <Field label="Webhook URL" optional>
+                <input
+                  value={webhookUrl}
+                  onChange={(e) => setWebhookUrl(e.target.value)}
+                  placeholder="Leave empty for NexaPay default webhook"
+                  className="w-full rounded-xl bg-[#111] border border-white/[0.06] px-4 py-3 text-sm text-white placeholder-[#444] outline-none focus:border-[#00d4aa]/50 transition-colors"
+                />
+                <p className="mt-1 text-[11px] text-[#555]">Set your own webhook URL for payment success/failure notifications</p>
+              </Field>
 
               {/* Preview */}
               <div className="mt-6 rounded-2xl border border-white/[0.06] bg-[#111] p-4">
