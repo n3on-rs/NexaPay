@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "name": "NexaPay",
+    "slug": "nexapay",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "nexapay",
+    "userInterfaceStyle": "dark",
+    "splash": { "backgroundColor": "#0b0b0b", "resizeMode": "contain" },
+    "android": {
+      "adaptiveIcon": { "backgroundColor": "#0b0b0b" },
+      "package": "space.nexapay.app"
+    },
+    "plugins": ["expo-router", "expo-secure-store", "expo-local-authentication", "expo-notifications"],
+    "experiments": { "typedRoutes": true }
+  }
+}
