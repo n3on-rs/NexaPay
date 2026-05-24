@@ -9,6 +9,9 @@ use crate::block::{Block, Transaction, TxType, ValidatorInfo, ValidatorSignature
 use crate::crypto::{sha256_hex, sign_hex, verify_multi_signature, verify_signature};
 use crate::storage::{BlockStorage, StorageError};
 
+/// NexaPay revenue account — all transaction fees settle here.
+pub const NEXAPAY_REVENUE: &str = "NXP_REVENUE_NEXAPAY_000000000000";
+
 #[derive(Debug, Error)]
 #[allow(dead_code)]
 pub enum ChainError {
@@ -651,6 +654,25 @@ impl Blockchain {
                     to_acc.balance = to_acc.balance.saturating_add(tx.amount);
                     to_acc.tx_count = to_acc.tx_count.saturating_add(1);
                 }
+
+                // Route fees to NexaPay revenue account
+                if tx.fee > 0 {
+                    let revenue = self
+                        .accounts
+                        .entry(NEXAPAY_REVENUE.to_string())
+                        .or_insert(ChainAccount {
+                            address: NEXAPAY_REVENUE.to_string(),
+                            public_key: String::new(),
+                            balance: 0,
+                            tx_count: 0,
+                            account_type: AccountType::User,
+                            created_at: now_ts(),
+                            is_active: true,
+                            kyc_hash: String::new(),
+                        });
+                    revenue.balance = revenue.balance.saturating_add(tx.fee);
+                    revenue.tx_count = revenue.tx_count.saturating_add(1);
+                }
                 Ok(())
             }
             TxType::LoanDisburse => {
@@ -772,6 +794,23 @@ impl Blockchain {
                             });
                             to_entry.balance = to_entry.balance.saturating_add(tx.amount);
                             to_entry.tx_count = to_entry.tx_count.saturating_add(1);
+                        }
+                        if tx.fee > 0 {
+                            let revenue = self
+                                .accounts
+                                .entry(NEXAPAY_REVENUE.to_string())
+                                .or_insert(ChainAccount {
+                                    address: NEXAPAY_REVENUE.to_string(),
+                                    public_key: String::new(),
+                                    balance: 0,
+                                    tx_count: 0,
+                                    account_type: AccountType::User,
+                                    created_at: now_ts(),
+                                    is_active: true,
+                                    kyc_hash: String::new(),
+                                });
+                            revenue.balance = revenue.balance.saturating_add(tx.fee);
+                            revenue.tx_count = revenue.tx_count.saturating_add(1);
                         }
                     }
                     TxType::LoanDisburse | TxType::AccountCreate => {

@@ -8,6 +8,7 @@ pub mod company;
 pub mod consensus_api;
 pub mod idempotency;
 pub mod esign;
+pub mod fee;
 pub mod fund;
 pub mod gateway;
 pub mod health;
@@ -275,6 +276,7 @@ pub fn build_router(state: AppState) -> Router {
             "/gateway/v1/webhooks/:id/deliveries",
             get(gateway::webhook_deliveries),
         )
+        .route("/gateway/v1/fees/preview", get(gateway::fee_preview))
         .route("/gateway/v1/webhooks/:id/test", post(gateway::test_webhook))
         .route(
             "/gateway/v1/webhooks/:id",

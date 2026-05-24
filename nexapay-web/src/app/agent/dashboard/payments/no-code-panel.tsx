@@ -590,8 +590,27 @@ function CreateLinkPanel({
   const [expiry, setExpiry] = React.useState("");
   const [maxUsages, setMaxUsages] = React.useState("");
   const [methods, setMethods] = React.useState({ wallet: true, card: true, edinar: false });
-  const [addFees, setAddFees] = React.useState(false);
+  const [feeAmount, setFeeAmount] = React.useState<number | null>(null);
+  const [feeDescription, setFeeDescription] = React.useState("");
   const [theme, setTheme] = React.useState<"dark" | "light">("dark");
+
+  // Fetch fee preview when amount changes
+  React.useEffect(() => {
+    if (!amount || parseFloat(amount) <= 0) {
+      setFeeAmount(null);
+      setFeeDescription("");
+      return;
+    }
+    const millimes = Math.round(parseFloat(amount) * 1000);
+    getJson(`/gateway/v1/fees/preview?amount=${millimes}&fee_type=gateway`, { "X-API-Key": apiKey })
+      .then(res => {
+        if (res.ok) {
+          setFeeAmount(Number((res.data as any).fee_amount) ?? null);
+          setFeeDescription(String((res.data as any).fee_description ?? ""));
+        }
+      })
+      .catch(() => {});
+  }, [amount, apiKey]);
   const [loading, setLoading] = React.useState(false);
   const [result, setResult] = React.useState<{ url: string; ref: string } | null>(null);
   const [error, setError] = React.useState("");
@@ -618,7 +637,6 @@ function CreateLinkPanel({
       accepted_methods: Object.entries(methods)
         .filter(([, v]) => v)
         .map(([k]) => k),
-      add_fees_to_amount: addFees,
     };
     if (expiry) body.expiry = new Date(expiry).toISOString();
     if (maxUsages) body.max_usages = parseInt(maxUsages);
@@ -794,23 +812,27 @@ function CreateLinkPanel({
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between rounded-xl bg-[#111] border border-white/[0.06] px-4 py-3">
-                  <span className="text-sm text-[#ccc]">Pass payment fees to customer</span>
-                  <button
-                    onClick={() => setAddFees(!addFees)}
-                    className={cn(
-                      "relative h-6 w-11 rounded-full transition-colors",
-                      addFees ? "bg-[#00d4aa]" : "bg-[#333]"
+                {(amount && parseFloat(amount) > 0) && (
+                  <div className="rounded-xl bg-[#111] border border-white/[0.06] px-4 py-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-[#888]">Customer pays</span>
+                      <span className="text-sm text-white font-medium">
+                        {((parseFloat(amount) * 1000) + (feeAmount ?? 0)).toLocaleString()} millimes
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-[#888]">NexaPay fee</span>
+                      <span className="text-sm text-[#00d4aa] font-medium">
+                        {feeAmount != null ? `${feeAmount.toLocaleString()} millimes` : "..."}
+                      </span>
+                    </div>
+                    {feeDescription && (
+                      <div className="text-[11px] text-[#555] pt-1 border-t border-white/[0.04]">
+                        Fee formula: {feeDescription}
+                      </div>
                     )}
-                  >
-                    <span
-                      className={cn(
-                        "absolute top-1 h-4 w-4 rounded-full bg-white transition-transform",
-                        addFees ? "left-6" : "left-1"
-                      )}
-                    />
-                  </button>
-                </div>
+                  </div>
+                )}
 
                 <div>
                   <label className="mb-2 block text-sm font-medium text-[#ccc]">Checkout theme</label>

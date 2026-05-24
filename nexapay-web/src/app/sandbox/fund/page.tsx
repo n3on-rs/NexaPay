@@ -178,7 +178,18 @@ function FundInner() {
     loadBalance();
   }, [token, address]);
 
-  const fee = rawAmount > 0 ? Math.max(Math.round(rawAmount * 0.005), 100) : 0;
+  const [feeAmount, setFeeAmount] = React.useState(0);
+
+  React.useEffect(() => {
+    if (rawAmount <= 0) { setFeeAmount(0); return; }
+    getJson(`/gateway/v1/fees/preview?amount=${rawAmount}&fee_type=fund`)
+      .then((res) => {
+        if (res.ok && res.data?.fee_amount != null) setFeeAmount(Number(res.data.fee_amount));
+      })
+      .catch(() => {});
+  }, [rawAmount]);
+
+  const fee = feeAmount;
   const total = rawAmount + fee;
 
   const formatCard = (v: string) => {

@@ -23,6 +23,8 @@ import {
 interface IntentData {
   intent_id: string;
   amount: number;
+  fee_amount: number;
+  total: number;
   currency: string;
   description?: string;
   agent_name: string;
@@ -76,6 +78,8 @@ export default function CheckoutPage() {
       const intentData: IntentData = {
         intent_id: String(data.intent_id || ""),
         amount: Number(data.amount || 0),
+        fee_amount: Number(data.fee_amount || 0),
+        total: Number(data.total || data.amount || 0),
         currency: String(data.currency || "TND"),
         description: data.description ? String(data.description) : undefined,
         agent_name: String(data.agent_name || "NexaPay Merchant"),
@@ -105,6 +109,8 @@ export default function CheckoutPage() {
       const intentData: IntentData = {
         intent_id: String(data.intent_id || ""),
         amount: Number(data.amount || 0),
+        fee_amount: Number(data.fee_amount || 0),
+        total: Number(data.total || data.amount || 0),
         currency: String(data.currency || "TND"),
         description: data.description ? String(data.description) : undefined,
         agent_name: String(data.agent_name || "NexaPay Merchant"),
@@ -368,13 +374,35 @@ function CheckoutActive({
               </div>
             </div>
           ) : (
-            <div
-              className="text-4xl font-extrabold"
-              style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-            >
-              <span className={isDark ? "text-[#00d4aa]" : "text-[#00AA55]"}>
-                {formatAmount(intent.amount)}
-              </span>
+            <div className="space-y-2">
+              <div
+                className="text-4xl font-extrabold"
+                style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+              >
+                <span className={isDark ? "text-[#00d4aa]" : "text-[#00AA55]"}>
+                  {formatAmount(intent.amount)}
+                </span>
+              </div>
+              {intent.fee_amount > 0 && (
+                <>
+                  <div className="flex items-center justify-center gap-2 text-sm">
+                    <span className={isDark ? "text-[#666]" : "text-gray-400"}>
+                      NexaPay fee: {formatAmount(intent.fee_amount)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-center gap-2">
+                    <span className={isDark ? "text-[#888]" : "text-gray-500"}>
+                      You pay:{" "}
+                    </span>
+                    <span
+                      className="text-lg font-bold"
+                      style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+                    >
+                      {formatAmount(intent.total)}
+                    </span>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>

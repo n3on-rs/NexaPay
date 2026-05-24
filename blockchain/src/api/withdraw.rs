@@ -143,8 +143,10 @@ pub async fn withdraw_to_bank(
         );
     }
 
-    // Fee calculation
-    let fee = (amount * 0.01).clamp(1.0, 20.0);
+    // Fee calculation using bracket algorithm
+    let amount_millimes = (amount * 1000.0).round() as i64;
+    let fee_millimes = crate::api::fee::calculate_fee(&state.pg_pool, "withdrawal", amount_millimes).await;
+    let fee = fee_millimes as f64 / 1000.0;
     let withdrawal_id = Uuid::new_v4();
     let _ = sqlx::query(
         "INSERT INTO bank_withdrawals (id, from_address, amount, fee, rib, account_holder_name, rib_document_path, status, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,'PENDING_REVIEW', NOW())",

@@ -15,6 +15,7 @@ use crate::api::auth::{
     generate_otp_code, hash_otp, is_valid_otp, login_phone_variants, mask_phone_hint, send_otp_sms,
     verify_pin,
 };
+use crate::api::fee;
 use crate::api::middleware::{
     auth_error_response, has_permission, log_api_call, require_api_key, try_api_key, ApiPrincipal,
 };
@@ -179,7 +180,7 @@ pub async fn create_intent(
 
     if let Some(idempotency_key) = payload.idempotency_key.as_ref() {
         if let Ok(Some(row)) = sqlx::query(
-            "SELECT intent_id, amount, currency, status, description, created_at
+            "SELECT intent_id, amount, fee_amount, currency, status, description, created_at
              FROM payment_intents WHERE merchant_id = $1 AND idempotency_key = $2 LIMIT 1",
         )
         .bind(merchant_id)
@@ -189,6 +190,7 @@ pub async fn create_intent(
         {
             let intent_id: String = row.try_get("intent_id").unwrap_or_default();
             let amount: i64 = row.try_get("amount").unwrap_or(0);
+            let fee_amount: i64 = row.try_get("fee_amount").unwrap_or(0);
             let currency: String = row
                 .try_get("currency")
                 .unwrap_or_else(|_| "TND".to_string());
@@ -201,6 +203,7 @@ pub async fn create_intent(
                 "success": true,
                 "intent_id": intent_id,
                 "amount": amount,
+                "fee_amount": fee_amount,
                 "currency": currency,
                 "status": status,
                 "description": description,
@@ -227,13 +230,21 @@ pub async fn create_intent(
     let success_url = payload.success_url;
     let expiry_dt: Option<chrono::DateTime<chrono::Utc>> = payload.expiry.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&chrono::Utc)));
 
+    // Calculate fee using bracket algorithm (customer always pays)
+    let fee_amount = if amount > 0 {
+        fee::calculate_fee(&state.pg_pool, "gateway", amount as i64).await
+    } else {
+        0
+    };
+
     sqlx::query(
-        "INSERT INTO payment_intents (intent_id, merchant_id, amount, currency, status, description, customer_email, customer_name, metadata, idempotency_key, payment_method, variable_amount, accepted_methods, expiry, max_usages, order_id, checkout_theme, success_url, webhook_url, success_webhook_url, failure_webhook_url)
-         VALUES ($1, $2, $3, $4, 'requires_confirmation', $5, $6, $7, $8, $9, 'card', $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)",
+        "INSERT INTO payment_intents (intent_id, merchant_id, amount, fee_amount, currency, status, description, customer_email, customer_name, metadata, idempotency_key, payment_method, variable_amount, accepted_methods, expiry, max_usages, order_id, checkout_theme, success_url, webhook_url, success_webhook_url, failure_webhook_url)
+         VALUES ($1, $2, $3, $4, $5, 'requires_confirmation', $6, $7, $8, $9, $10, 'card', $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)",
     )
     .bind(&intent_id)
     .bind(merchant_id)
     .bind(amount as i64)
+    .bind(fee_amount)
     .bind(&currency)
     .bind(payload.description)
     .bind(payload.customer_email)
@@ -264,6 +275,7 @@ pub async fn create_intent(
         "intent_id": intent_id,
         "status": "requires_confirmation",
         "amount": amount,
+        "fee_amount": fee_amount,
         "currency": currency,
         "checkout_url": format!("{}/checkout/{}", resolve_portal_url(&state, &headers), intent_id),
         "client_secret": sha256_hex(format!("{}:{}", intent_id, merchant_id).as_bytes()),
@@ -290,7 +302,7 @@ pub async fn get_intent(
     let merchant_id = merchant_id_from_principal(&state, &principal).await?;
 
     let row = sqlx::query(
-        "SELECT intent_id, amount, currency, status, description, customer_email, customer_name, card_last4, card_brand, failure_reason, created_at, confirmed_at
+        "SELECT intent_id, amount, fee_amount, currency, status, description, customer_email, customer_name, card_last4, card_brand, failure_reason, created_at, confirmed_at
          FROM payment_intents WHERE intent_id = $1 AND merchant_id = $2 LIMIT 1",
     )
     .bind(&intent_id)
@@ -304,6 +316,9 @@ pub async fn get_intent(
         None => return Err(api_error(StatusCode::NOT_FOUND, "Payment intent not found")),
     };
 
+    let amount: i64 = row.try_get::<i64, _>("amount").unwrap_or(0);
+    let fee_amount: i64 = row.try_get::<i64, _>("fee_amount").unwrap_or(0);
+
     log_api_call(
         &state,
         Some(&principal),
@@ -316,7 +331,9 @@ pub async fn get_intent(
     Ok(Json(json!({
         "success": true,
         "intent_id": row.try_get::<String, _>("intent_id").unwrap_or_default(),
-        "amount": row.try_get::<i64, _>("amount").unwrap_or(0),
+        "amount": amount,
+        "fee_amount": fee_amount,
+        "total": amount + fee_amount,
         "currency": row.try_get::<String, _>("currency").unwrap_or_else(|_| "TND".to_string()),
         "status": row.try_get::<String, _>("status").unwrap_or_else(|_| "unknown".to_string()),
         "description": row.try_get::<Option<String>, _>("description").ok().flatten(),
@@ -481,7 +498,7 @@ pub async fn get_intent_public(
     headers: HeaderMap,
 ) -> Result<Json<Value>, (StatusCode, HeaderMap, Json<Value>)> {
     let row = sqlx::query(
-        "SELECT intent_id, merchant_id, amount, currency, status, description,
+        "SELECT intent_id, merchant_id, amount, fee_amount, currency, status, description,
                 customer_email, customer_name, card_last4, card_brand,
                 created_at, confirmed_at, variable_amount, accepted_methods,
                 expiry, max_usages, used_count, order_id, checkout_theme,
@@ -519,10 +536,15 @@ pub async fn get_intent_public(
 
     let status: String = row.try_get::<String, _>("status").unwrap_or_else(|_| "unknown".to_string());
 
+    let fee_amount: i64 = row.try_get::<i64, _>("fee_amount").unwrap_or(0);
+    let amount: i64 = row.try_get::<i64, _>("amount").unwrap_or(0);
+
     Ok(Json(json!({
         "success": true,
         "intent_id": row.try_get::<String, _>("intent_id").unwrap_or_default(),
-        "amount": row.try_get::<i64, _>("amount").unwrap_or(0),
+        "amount": amount,
+        "fee_amount": fee_amount,
+        "total": amount + fee_amount,
         "currency": row.try_get::<String, _>("currency").unwrap_or_else(|_| "TND".to_string()),
         "status": status,
         "description": row.try_get::<Option<String>, _>("description").ok().flatten(),
@@ -557,7 +579,7 @@ pub async fn list_intents(
     let merchant_id = merchant_id_from_principal(&state, &principal).await?;
 
     let rows = sqlx::query(
-        "SELECT id, intent_id, amount, currency, status, description, customer_email, customer_name, card_last4, card_brand, failure_reason, created_at, confirmed_at, used_count, max_usages
+        "SELECT id, intent_id, amount, fee_amount, currency, status, description, customer_email, customer_name, card_last4, card_brand, failure_reason, created_at, confirmed_at, used_count, max_usages
          FROM payment_intents
          WHERE merchant_id = $1 AND parent_intent_id IS NULL AND created_at > NOW() - INTERVAL '30 days'
          ORDER BY created_at DESC
@@ -576,6 +598,7 @@ pub async fn list_intents(
                 "id": row.try_get::<String, _>("id").unwrap_or_default(),
                 "intent_id": intent_id,
                 "amount": row.try_get::<i64, _>("amount").unwrap_or(0),
+                "fee_amount": row.try_get::<i64, _>("fee_amount").unwrap_or(0),
                 "currency": row.try_get::<String, _>("currency").unwrap_or_else(|_| "TND".to_string()),
                 "status": row.try_get::<String, _>("status").unwrap_or_else(|_| "unknown".to_string()),
                 "description": row.try_get::<Option<String>, _>("description").ok().flatten(),
@@ -615,7 +638,7 @@ pub async fn confirm_intent(
     enforce_confirm_attempt_limit(&state, &request_ip).await?;
 
     let row = sqlx::query(
-        "SELECT id, merchant_id, amount, currency, status, description, customer_email, created_at
+        "SELECT id, merchant_id, amount, fee_amount, currency, status, description, customer_email, created_at
          FROM payment_intents WHERE intent_id = $1 LIMIT 1",
     )
     .bind(&intent_id)
@@ -639,6 +662,7 @@ pub async fn confirm_intent(
         .unwrap_or_else(|_| "requires_confirmation".to_string());
     let variable_amount: bool = row.try_get::<bool, _>("variable_amount").unwrap_or(false);
     let db_amount: i64 = row.try_get::<i64, _>("amount").unwrap_or(0);
+    let db_fee: i64 = row.try_get::<i64, _>("fee_amount").unwrap_or(0);
     let final_amount = if variable_amount {
         payload.amount.unwrap_or(db_amount)
     } else {
@@ -771,15 +795,17 @@ pub async fn confirm_intent(
             let auto_first = name_parts.first().map(|s| s.to_string());
             let auto_last = if name_parts.len() > 1 { name_parts.last().map(|s| s.to_string()) } else { None };
 
-            // Deduct from payer's chain wallet: transfer to SYSTEM
-            // (merchant balance is tracked in Postgres, settled on withdrawal)
+            // Deduct from payer's chain wallet: transfer amount to SYSTEM (merchant settlement),
+            // fee to NEXAPAY_REVENUE. Customer always pays the fee.
             let pay_amount = final_amount as u64;
+            let tx_fee = db_fee as u64;
+            let total_charge = pay_amount.saturating_add(tx_fee);
             {
                 let mut chain = state.chain.lock().await;
                 if let Some(payer_acc) = chain.get_account(&chain_address) {
-                    if payer_acc.balance >= pay_amount {
+                    if payer_acc.balance >= total_charge {
                         let tx_hash = sha256_hex(
-                            format!("{}:SYSTEM:{}:{}", chain_address, pay_amount, crate::chain::now_ts()).as_bytes(),
+                            format!("{}:SYSTEM:{}:{}:{}", chain_address, pay_amount, tx_fee, crate::chain::now_ts()).as_bytes(),
                         );
                         let tx = crate::block::Transaction {
                             id: Uuid::new_v4().to_string(),
@@ -787,7 +813,7 @@ pub async fn confirm_intent(
                             from: chain_address.clone(),
                             to: "SYSTEM".to_string(),
                             amount: pay_amount,
-                            fee: 0,
+                            fee: tx_fee,
                             timestamp: crate::chain::now_ts(),
                             signature: String::new(),
                             memo: format!("Wallet payment: {}", intent_id),
@@ -2250,6 +2276,38 @@ fn now_ts() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0)
+}
+
+/// Fee preview — returns the fee for a given amount without creating an intent.
+/// Used by the no-code panel and checkout to display fees upfront.
+#[derive(Debug, Deserialize)]
+pub struct FeePreviewQuery {
+    pub amount: Option<u64>,
+    pub fee_type: Option<String>,
+}
+
+pub async fn fee_preview(
+    State(state): State<AppState>,
+    Query(q): Query<FeePreviewQuery>,
+) -> Result<Json<Value>, (StatusCode, HeaderMap, Json<Value>)> {
+    let amount = q.amount.unwrap_or(0) as i64;
+    let fee_type = q.fee_type.as_deref().unwrap_or("gateway");
+
+    if amount <= 0 {
+        return Err(api_error(StatusCode::BAD_REQUEST, "amount query parameter required"));
+    }
+
+    let fee = fee::calculate_fee(&state.pg_pool, fee_type, amount).await;
+    let fee_desc = fee::describe_fee(amount, fee_type);
+
+    Ok(Json(json!({
+        "success": true,
+        "amount": amount,
+        "fee_amount": fee,
+        "total": amount + fee,
+        "fee_description": fee_desc,
+        "fee_type": fee_type,
+    })))
 }
 
 fn api_error(status: StatusCode, message: &str) -> (StatusCode, HeaderMap, Json<Value>) {

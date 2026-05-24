@@ -116,9 +116,9 @@ pub async fn fund(
     }
 
     let tx_id = uuid::Uuid::new_v4().to_string();
-    // Convert to millimes for integer-safe fee calculation
+    // Convert to millimes for bracket-based fee calculation
     let amount_millimes = (payload.amount * 1000.0).round() as i64;
-    let fee_millimes = ((amount_millimes as f64 * 0.005).round() as i64).max(100); // min 0.100 TND = 100 millimes
+    let fee_millimes = crate::api::fee::calculate_fee(&state.pg_pool, "fund", amount_millimes).await;
     let credited_millimes = amount_millimes - fee_millimes;
 
     let _ = sqlx::query(

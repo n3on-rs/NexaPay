@@ -825,7 +825,8 @@ pub async fn transfer(
             ),
         })?;
 
-    let fee = 10u64;
+    // Calculate P2P transfer fee using bracket algorithm
+    let fee = crate::api::fee::calculate_fee(&state.pg_pool, "p2p", payload.amount as i64).await as u64;
     let tx_hash =
         sha256_hex(format!("{}{}{}{}", address, to_address, payload.amount, now_ts()).as_bytes());
 
@@ -1106,7 +1107,8 @@ async fn execute_transfer(
     memo: &str,
     pin: &str,
 ) -> Result<(String, u64, u64), (StatusCode, HeaderMap, Json<Value>)> {
-    let fee = 10u64;
+    // Calculate P2P transfer fee using bracket algorithm
+    let fee = crate::api::fee::calculate_fee(&state.pg_pool, "p2p", amount as i64).await as u64;
     let tx_hash = sha256_hex(format!("{}{}{}{}", address, to_address, amount, now_ts()).as_bytes());
 
     let mut chain = state.chain.lock().await;
@@ -2073,9 +2075,9 @@ async fn sign_with_user_key(
     pin: &str,
     tx_hash: &str,
 ) -> String {
-    // Try to get the user's encrypted private key
+    // Try to get the user's encrypted private key and PIN salt
     let row = sqlx::query(
-        "SELECT encrypted_user_sk FROM cards WHERE chain_address = $1",
+        "SELECT encrypted_user_sk, pin_salt FROM cards WHERE chain_address = $1",
     )
     .bind(chain_address)
     .fetch_optional(&state.pg_pool)
@@ -2083,12 +2085,15 @@ async fn sign_with_user_key(
     .ok()
     .flatten();
 
-    let encrypted_sk: Option<String> = row.and_then(|r| r.try_get("encrypted_user_sk").ok());
+    let encrypted_sk: Option<String> = row.as_ref().and_then(|r| r.try_get("encrypted_user_sk").ok());
+    let pin_salt: Option<String> = row.and_then(|r| r.try_get("pin_salt").ok());
+
+    let salt_ref = pin_salt.as_deref().filter(|s| !s.is_empty());
 
     match encrypted_sk {
         Some(ref enc) if !enc.is_empty() => {
-            // Derive encryption key from PIN
-            match derive_user_key_encryption_key(chain_address, pin, &state.encryption_key, None) {
+            // Derive encryption key from PIN (with salt if available)
+            match derive_user_key_encryption_key(chain_address, pin, &state.encryption_key, salt_ref) {
                 Ok(enc_key) => {
                     // Decrypt the private key
                     match decrypt_user_private_key(enc, &enc_key) {

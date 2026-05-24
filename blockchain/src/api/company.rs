@@ -9,6 +9,7 @@ use serde_json::{json, Value};
 use sqlx::Row;
 use uuid::Uuid;
 
+use crate::api::fee;
 use crate::api::middleware::{
     create_structured_api_key, default_permissions, log_api_call, permissions_to_csv,
     require_account_token,
@@ -682,8 +683,17 @@ pub async fn withdraw_company_balance(
         });
     }
 
+    // Calculate withdrawal fee (deducted from what owner receives)
+    let withdrawal_fee = fee::calculate_fee(
+        &state.pg_pool,
+        "company_withdrawal",
+        payload.amount as i64,
+    )
+    .await as u64;
+    let net_amount = payload.amount.saturating_sub(withdrawal_fee);
+
     let tx_hash = sha256_hex(
-        format!("SYSTEM{}:{}:{}", owner.chain_address, payload.amount, now_ts())
+        format!("SYSTEM{}:{}:{}", owner.chain_address, net_amount, now_ts())
             .as_bytes(),
     );
 
@@ -692,8 +702,8 @@ pub async fn withdraw_company_balance(
         tx_type: TxType::Transfer,
         from: "SYSTEM".to_string(),
         to: owner.chain_address.clone(),
-        amount: payload.amount,
-        fee: 0,
+        amount: net_amount,
+        fee: withdrawal_fee,
         timestamp: now_ts(),
         signature: sign_hex(&state.system_private_key, &tx_hash).unwrap_or_default(),
         memo: format!("Company withdrawal: {}", payout_id),
@@ -746,7 +756,9 @@ pub async fn withdraw_company_balance(
         "success": true,
         "payout_id": payout_id,
         "status": "paid",
-        "amount": payload.amount,
+        "amount": net_amount,
+        "gross_amount": payload.amount,
+        "fee_amount": withdrawal_fee,
     })))
 }
 

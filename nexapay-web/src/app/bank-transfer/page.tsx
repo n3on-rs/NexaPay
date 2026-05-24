@@ -28,6 +28,16 @@ function BankTransferInner() {
   const [rib, setRib] = React.useState("");
   const [beneficiaryName, setBeneficiaryName] = React.useState("");
   const [rawAmount, setRawAmount] = React.useState(0);
+  const [feeAmount, setFeeAmount] = React.useState(0);
+
+  React.useEffect(() => {
+    if (rawAmount <= 0) { setFeeAmount(0); return; }
+    getJson(`/gateway/v1/fees/preview?amount=${rawAmount}&fee_type=p2p`)
+      .then((res) => {
+        if (res.ok && res.data?.fee_amount != null) setFeeAmount(Number(res.data.fee_amount));
+      })
+      .catch(() => {});
+  }, [rawAmount]);
   const [balance, setBalance] = React.useState(0);
   const [memo, setMemo] = React.useState("");
   const [showMemo, setShowMemo] = React.useState(false);
@@ -77,7 +87,7 @@ function BankTransferInner() {
     loadSavedBeneficiaries();
   }, [token, address, loadSavedBeneficiaries]);
 
-  const exceedsBalance = rawAmount > 0 && rawAmount + 10 > balance;
+  const exceedsBalance = rawAmount > 0 && rawAmount + feeAmount > balance;
 
   const handleAmountInput = (value: string) => {
     // Allow only digits and one decimal point
@@ -367,7 +377,7 @@ function BankTransferInner() {
             )}
 
             <div className="mt-5 text-center">
-              <p className="text-[13px] text-[#888]">Fee: 0.010 TND</p>
+              <p className="text-[13px] text-[#888]">Network fee: {formatMillimes(feeAmount)}</p>
               <p className="mt-2 text-[12px] text-[#888]">Available: {formatMillimes(balance)}</p>
             </div>
 
@@ -420,11 +430,11 @@ function BankTransferInner() {
               </div>
               <div className="flex items-center justify-between border-b border-white/[0.06] py-3">
                 <span className="text-[12px] text-[#888]">Fee</span>
-                <span className="text-[14px] font-semibold text-[#00d4aa]">0.010 TND</span>
+                <span className="text-[14px] font-semibold text-[#00d4aa]">{formatMillimes(feeAmount)}</span>
               </div>
               <div className="flex items-center justify-between pt-3">
                 <span className="text-[12px] text-[#888]">Total deducted</span>
-                <span className="text-[16px] font-extrabold text-white">{formatMillimes(rawAmount + 10)}</span>
+                <span className="text-[16px] font-extrabold text-white">{formatMillimes(rawAmount + feeAmount)}</span>
               </div>
             </div>
 
