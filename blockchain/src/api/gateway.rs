@@ -2069,12 +2069,9 @@ async fn send_webhook(
                 .body(body.clone())
                 .send()
                 .await;
-            let retry_ok = match &retry_result {
-                Ok(r) => (200..300).contains(&(r.status().as_u16() as i32)),
-                Err(_) => false,
-            };
+            let retry_ok = retry_result.as_ref().map(|r| r.status().is_success()).unwrap_or(false);
             let retry_status = retry_result.as_ref().ok().map(|r| r.status().as_u16() as i32);
-            let retry_body = match &retry_result {
+            let retry_body = match retry_result {
                 Ok(r) => r.text().await.unwrap_or_default(),
                 Err(e) => e.to_string(),
             };
