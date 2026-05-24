@@ -2083,7 +2083,7 @@ async fn send_webhook(
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
             )
             .bind(webhook_id).bind(event_type).bind(payload).bind(&signature)
-            .bind(retry_status).bind(truncate_response(&retry_body)).bind(retry_ok).bind(attempt)
+            .bind(retry_status).bind(truncate_response(&retry_body)).bind(retry_ok).bind(attempt as i32)
             .execute(&state.pg_pool).await;
             if retry_ok { break; }
         }
