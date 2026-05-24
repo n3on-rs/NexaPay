@@ -84,7 +84,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const cookieRes = await getJson("/auth/me");
       if (cookieRes.ok && cookieRes.data.full_name) {
-        await fetchUser(""); // fetchUser with empty token — will work since cookie is sent
+        // Sync localStorage so pages that read getSessionToken/getSessionAddress still work
+        const addr = String(cookieRes.data.address || cookieRes.data.chain_address || "");
+        if (addr && typeof window !== "undefined") {
+          localStorage.setItem("nexapay_address", addr);
+          if (cookieRes.data.full_name) localStorage.setItem("nexapay_full_name", String(cookieRes.data.full_name));
+          if (cookieRes.data.phone) localStorage.setItem("nexapay_phone", String(cookieRes.data.phone));
+        }
+        await fetchUser("");
         setIsLoading(false);
         return;
       }

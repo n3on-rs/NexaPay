@@ -172,9 +172,9 @@ function DashboardInner() {
 
   const load = React.useCallback(async (silent = false) => {
     if (!silent) { setLoading(true); setError(""); }
-    const token = getSessionToken();
-    const address = getSessionAddress();
-    if (!token || !address) {
+    const token = getSessionToken() || "";
+    const address = getSessionAddress() || user?.address || "";
+    if (!address) {
       if (!silent) { setError("Session expired. Please log in again."); setLoading(false); }
       return;
     }
