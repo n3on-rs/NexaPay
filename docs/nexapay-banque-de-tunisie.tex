@@ -140,52 +140,105 @@ NexaPay utilise un consensus \textbf{Byzantine Fault Tolerant} \`a 3 validateurs
 % ═══════════════════════════════════════════════════════
 \section{Processus KYC (Know Your Customer)}
 
-\textbf{Note :} Le module KYC complet est disponible mais \textbf{d\'esactiv\'e pour la d\'emo}. Les utilisateurs sont auto-v\'erifi\'es en mode sandbox. Le flux ci-dessous sera activ\'e en production.
+\textbf{Note importante :} Le module complet de v\'erification documentaire et KYC est d\'ej\`a d\'evelopp\'e et int\'egr\'e \`a la plateforme. Il est actuellement \textbf{d\'esactiv\'e en mode sandbox/d\'emo} pour fluidifier les tests --- les utilisateurs sont auto-v\'erifi\'es. \textbf{En production, le flux complet ci-dessous sera activ\'e.}
 
-\subsection{\'Etapes du KYC}
+\subsection{V\'erification d'Identit\'e --- Particuliers}
 
 \begin{enumerate}[leftmargin=*]
     \item \textbf{Soumission des documents}
     \begin{itemize}
-        \item Photographie du \textbf{recto} et \textbf{verso} de la CIN
-        \item Upload s\'ecuris\'e avec validation (PNG, JPG, max 5 Mo)
-        \item Stockage chiffr\'e des documents
+        \item L'utilisateur photographie le \textbf{recto} et le \textbf{verso} de sa Carte d'Identit\'e Nationale (CIN)
+        \item Upload s\'ecuris\'e avec validation de format (PNG, JPG, max 5 Mo) et stockage chiffr\'e AES-256-GCM
     \end{itemize}
 
-    \item \textbf{Extraction automatique (OCR)}
+    \item \textbf{Extraction automatique par OCR}
     \begin{itemize}
-        \item Nom, pr\'enom, num\'ero CIN, date de naissance, date d'\'emission, lieu de naissance
-        \item Croisement avec le formulaire d'inscription
+        \item Notre module OCR (Reconnaissance Optique de Caract\`eres) scanne les deux faces de la CIN et extrait automatiquement :\\
+        --- Nom et pr\'enom complets\\
+        --- Num\'ero CIN\\
+        --- Date de naissance et lieu de naissance\\
+        --- Date d'\'emission de la CIN
+        \item Les donn\'ees extraites sont crois\'ees avec le formulaire d'inscription pour v\'erifier la coh\'erence
     \end{itemize}
 
     \item \textbf{Test de vivacit\'e (Liveness Detection)}
     \begin{itemize}
-        \item V\'erification via cam\'era (clignement, rotation t\^ete, sourire)
-        \item Score de correspondance faciale entre photo CIN et selfie
-        \item Protection anti-photo et anti-vid\'eo
+        \item L'utilisateur effectue un \textbf{test de vivacit\'e} via la cam\'era de son t\'el\'ephone
+        \item Le syst\`eme v\'erifie qu'il s'agit d'une personne r\'eelle et vivante (pas une photo imprim\'ee, pas une vid\'eo)
+        \item Mouvements demand\'es : clignement des yeux, rotation de la t\^ete, sourire
+        \item Un \textbf{score de correspondance faciale} est calcul\'e entre la photo de la CIN et le selfie en direct
     \end{itemize}
 
-    \item \textbf{V\'erification et approbation}
+    \item \textbf{V\'erification crois\'ee et approbation automatique}
     \begin{itemize}
-        \item Score de vivacit\'e $>$ seuil requis ET donn\'ees CIN correspondantes
-        \item Compte marqu\'e \texttt{kyc\_status = verified}
-        \item Acc\`es complet \`a la plateforme
+        \item Si le score de vivacit\'e d\'epasse le seuil de confiance requis \textbf{ET} que les donn\'ees CIN correspondent au formulaire
+        \item Le compte est automatiquement marqu\'e \texttt{kyc\_status = verified}
+        \item \textbf{Aucune intervention humaine n\'ecessaire} --- le processus est enti\`erement automatis\'e
+        \item L'utilisateur peut imm\'ediatement acc\'eder \`a toutes les fonctionnalit\'es
     \end{itemize}
 \end{enumerate}
 
-\subsection{Donn\'ees KYC Stock\'ees}
+\subsection{V\'erification des Commer\c{c}ants --- Devenir Agent}
 
-\begin{description}[leftmargin=*]
-    \item[\texttt{kyc\_cin\_front\_path}] Chemin recto CIN
-    \item[\texttt{kyc\_cin\_back\_path}] Chemin verso CIN
-    \item[\texttt{kyc\_face\_match\_score}] Score correspondance faciale
-    \item[\texttt{kyc\_liveness\_passed}] R\'esultat test vivacit\'e
-    \item[\texttt{kyc\_verified\_at}] Date/heure v\'erification
-\end{description}
+Pour les candidats agents/commer\c{c}ants, un processus de v\'erification documentaire similaire est appliqu\'e :
+
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Soumission des documents professionnels}
+    \begin{itemize}
+        \item \textbf{Patente / Licence commerciale} (PDF) --- scan du document officiel
+        \item \textbf{Extrait du Registre National des Entreprises (RNE)} (PDF)
+        \item Formulaire avec : nom commercial, type d'activit\'e, matricule fiscal, adresse, volume mensuel estim\'e
+    \end{itemize}
+
+    \item \textbf{Scan et v\'erification automatique des documents}
+    \begin{itemize}
+        \item Notre algorithme scanne les documents professionnels soumis
+        \item Extraction automatique des informations cl\'es : raison sociale, matricule fiscal, date d'enregistrement, adresse du si\`ege
+        \item V\'erification crois\'ee de la coh\'erence entre la patente et le RNE
+        \item Contr\^ole de validit\'e : les documents doivent \^etre lisibles, non expir\'es, et correspondre aux informations du formulaire
+    \end{itemize}
+
+    \item \textbf{Scoring de risque automatis\'e}
+    \begin{itemize}
+        \item Le syst\`eme attribue un \textbf{score de risque} bas\'e sur la qualit\'e des documents, la coh\'erence des donn\'ees, et le volume estim\'e
+        \item Si le score est dans la plage acceptable ET que tous les documents sont valides
+        \item L'agent est \textbf{automatiquement approuv\'e} --- cr\'eation de l'espace entreprise, g\'en\'eration de la cl\'e API
+        \item \textbf{Aucune intervention humaine} dans le processus standard
+    \end{itemize}
+
+    \item \textbf{Cas litigieux}
+    \begin{itemize}
+        \item Si le score est en dessous du seuil ou si les documents pr\'esentent des incoh\'erences
+        \item Le dossier est transmis \`a un \textbf{administrateur humain} pour r\'evision manuelle
+        \item L'administrateur peut approuver, rejeter, ou demander des documents compl\'ementaires
+    \end{itemize}
+\end{enumerate}
 
 \subsection{Conformit\'e R\'eglementaire}
 
-Le processus est conforme avec la r\'eglementation BCT, les directives LCB-FT, et la Loi n$^\circ$ 2004-63.
+Le processus KYC et de v\'erification documentaire est con\c{c}u pour \^etre conforme avec :
+\begin{itemize}[leftmargin=*]
+    \item La r\'eglementation de la Banque Centrale de Tunisie (BCT)
+    \item Les directives LCB-FT (Lutte Contre le Blanchiment et le Financement du Terrorisme)
+    \item La Loi n$^\circ$ 2004-63 sur la protection des donn\'ees personnelles
+\end{itemize}
+
+\subsection{En R\'esum\'e}
+
+\begin{center}
+\begin{tabular}{|p{5cm}|p{7cm}|}
+\hline
+\textbf{Module} & \textbf{Statut} \\
+\hline
+KYC Particuliers (CIN + OCR + Liveness) & Int\'egr\'e --- Actif en production \\
+Scan Patente / RNE Commer\c{c}ants & Int\'egr\'e --- Actif en production \\
+Approbation automatique Agent & Int\'egr\'ee --- Actif en production \\
+Revue manuelle (cas litigieux) & Disponible pour les administrateurs \\
+\hline
+\multicolumn{2}{|c|}{\small\textbf{ Actuellement d\'esactiv\'es en sandbox --- d\'emonstration fluide }} \\
+\hline
+\end{tabular}
+\end{center}
 
 \newpage
 
