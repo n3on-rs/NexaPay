@@ -134,7 +134,7 @@ export default function TransactionsPage() {
     const token = getSessionToken();
     if (!address || !token) return;
     const amount = Math.round(parseFloat(payoutAmount) * 1000);
-    if (!amount || amount > balance) return;
+    if (!amount || amount <= 0) return;
     setActionLoading(true);
     try {
       const { ok, data } = await postJson(
@@ -146,10 +146,9 @@ export default function TransactionsPage() {
         setShowPayout(false);
         setPayoutAmount("");
         loadData();
-        // Also refresh the wallet balance to show the credited amount
-        setTimeout(() => loadData(), 3000);
       } else {
-        console.error("Withdraw failed:", data);
+        const err = String((data as any)?.error || "Withdraw failed");
+        console.error("Withdraw failed:", err);
       }
     } catch { /* ignore */ }
     setActionLoading(false);
