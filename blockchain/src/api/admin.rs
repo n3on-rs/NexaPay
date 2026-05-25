@@ -301,7 +301,7 @@ pub async fn get_user(
 
     let row = sqlx::query(
         "SELECT u.*, c.card_last4, c.expiry_month, c.expiry_year, c.frozen as card_frozen,
-                c.lost_reported, c.pin_set_at, c.failed_pin_attempts,
+                c.lost_reported, c.failed_pin_attempts,
                 ba.account_number, ba.rib, ba.iban
          FROM users u
          LEFT JOIN cards c ON c.chain_address = u.chain_address
