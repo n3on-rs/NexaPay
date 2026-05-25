@@ -216,9 +216,8 @@ pub async fn list_users(
     let rows = if search.is_empty() {
         sqlx::query(
             "SELECT u.chain_address, u.full_name, u.phone, u.email, u.cin, u.kyc_status, u.created_at, u.public_key,
-                    COALESCE(c.balance, 0) as balance
+                0 as balance
              FROM users u
-             LEFT JOIN cards c ON c.chain_address = u.chain_address
              ORDER BY u.created_at DESC
              LIMIT $1 OFFSET $2"
         )
@@ -228,9 +227,8 @@ pub async fn list_users(
     } else {
         sqlx::query(
             "SELECT u.chain_address, u.full_name, u.phone, u.email, u.cin, u.kyc_status, u.created_at, u.public_key,
-                    COALESCE(c.balance, 0) as balance
+                0 as balance
              FROM users u
-             LEFT JOIN cards c ON c.chain_address = u.chain_address
              WHERE u.full_name ILIKE $1 OR u.phone ILIKE $1 OR u.email ILIKE $1 OR u.cin ILIKE $1
              ORDER BY u.created_at DESC
              LIMIT $2 OFFSET $3"
