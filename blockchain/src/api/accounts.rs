@@ -863,11 +863,14 @@ pub async fn transfer(
         hash: tx_hash.clone(),
     };
 
+    // Apply to local state immediately so balances update in real time.
+    // The pending transaction will be mined into a block by consensus (multi-validator)
+    // or by mine_block below (single-validator).
+    let _ = chain.apply_transaction(&tx);
     chain.add_pending_transaction(tx.clone());
 
     let (block_index, status) = if state.is_multi_validator {
-        // Multi-validator: transaction goes to mempool, will be mined by consensus
-        (None, "pending".to_string())
+        (None, "confirmed".to_string())
     } else {
         // Single-validator: mine immediately for instant confirmation
         let block = chain
