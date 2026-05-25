@@ -35,6 +35,7 @@ services:
 
       APP_ENV: development
       DEV_SHOW_OTP: "${DEV_SHOW_OTP:-true}"
+      NEXAPAY_ADMIN_SEED_KEY: ${NEXAPAY_ADMIN_SEED_KEY}
       NEXAPAY_STATE_DIR: /app/chain_state
       NEXAPAY_CHAIN_DATA_DIR: /app/chain_data
       NEXAPAY_VALIDATOR_COUNT: "3"
@@ -66,6 +67,7 @@ services:
 
       APP_ENV: development
       DEV_SHOW_OTP: "${DEV_SHOW_OTP:-true}"
+      NEXAPAY_ADMIN_SEED_KEY: ${NEXAPAY_ADMIN_SEED_KEY}
       NEXAPAY_STATE_DIR: /app/chain_state
       NEXAPAY_CHAIN_DATA_DIR: /app/chain_data
       NEXAPAY_VALIDATOR_COUNT: "3"
@@ -97,6 +99,7 @@ services:
 
       APP_ENV: development
       DEV_SHOW_OTP: "${DEV_SHOW_OTP:-true}"
+      NEXAPAY_ADMIN_SEED_KEY: ${NEXAPAY_ADMIN_SEED_KEY}
       NEXAPAY_STATE_DIR: /app/chain_state
       NEXAPAY_CHAIN_DATA_DIR: /app/chain_data
       NEXAPAY_VALIDATOR_COUNT: "3"
