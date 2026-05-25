@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 use crate::api::admin_auth::{hash_admin_password, require_admin, AdminClaims};
 use crate::api::AppState;
+use crate::chain::NEXAPAY_REVENUE;
 
 fn api_error(sc: StatusCode, msg: &str) -> (StatusCode, Json<Value>) {
     (sc, Json(json!({"error": msg})))
@@ -57,6 +58,11 @@ pub struct AdminDashboard {
     pub validator_count: usize,
     pub today_transactions: i64,
     pub today_volume_millimes: i64,
+    // Revenue tracking
+    pub revenue_balance_millimes: u64,
+    pub revenue_address: String,
+    pub total_fees_collected: u64,
+    pub fee_brackets_count: i64,
 }
 
 /// GET /admin/dashboard
@@ -99,6 +105,18 @@ pub async fn dashboard(
     let chain_height = chain.chain_height();
     let total_txs = chain.total_tx_count() as i64;
     let validator_count = chain.active_validator_count();
+    // Revenue account
+    let revenue_balance = chain
+        .get_account(NEXAPAY_REVENUE)
+        .map(|a| a.balance)
+        .unwrap_or(0);
+    // Count total fees from all blocks
+    let total_fees: u64 = chain
+        .blocks()
+        .iter()
+        .flat_map(|b| b.transactions.iter())
+        .map(|tx| tx.fee as u64)
+        .sum();
     drop(chain);
 
     // Today's transactions (from funding_transactions + blockchain)
@@ -112,6 +130,13 @@ pub async fn dashboard(
     let today_vol: i64 = sqlx::query_scalar(
         "SELECT COALESCE(SUM(amount),0)::bigint FROM funding_transactions WHERE created_at::date = $1"
     ).bind(today).fetch_one(&state.pg_pool).await.unwrap_or(0);
+
+    // Active fee brackets count
+    let fee_brackets_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM fee_brackets WHERE active = true")
+            .fetch_one(&state.pg_pool)
+            .await
+            .unwrap_or(0);
 
     log_admin_action(
         &state,
@@ -134,6 +159,10 @@ pub async fn dashboard(
         validator_count,
         today_transactions: today_txs,
         today_volume_millimes: today_vol,
+        revenue_balance_millimes: revenue_balance,
+        revenue_address: NEXAPAY_REVENUE.to_string(),
+        total_fees_collected: total_fees,
+        fee_brackets_count,
     }))
 }
 

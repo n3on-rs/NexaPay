@@ -277,7 +277,18 @@ pub async fn admin_login(
         dev_otp = if state.env == "development" {
             Some(format!("TOTP Secret: {} | Code: {}", secret_str, current_totp))
         } else { None };
-        
+
+        // Store OTP hash so admin can verify and complete setup
+        let otp_hash =
+            sha256_hex(format!("admin:{}:{}", admin_uuid, current_totp).as_bytes());
+        let _ = sqlx::query(
+            "INSERT INTO admin_login_otps (admin_id, otp_hash, expires_at) VALUES ($1, $2, NOW() + INTERVAL '5 minutes')",
+        )
+        .bind(admin_uuid)
+        .bind(&otp_hash)
+        .execute(&state.pg_pool)
+        .await;
+
         step = "totp_setup".to_string();
         totp_qr_url = Some(qr_url);
         
