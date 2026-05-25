@@ -336,6 +336,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/admin/users/:address/unfreeze", post(admin::unfreeze_user))
         .route("/admin/transactions", get(admin::list_transactions))
         .route("/admin/audit", get(admin::audit_log))
+        .route("/admin/nodes", get(admin::nodes_status))
+        .route("/admin/logs", get(admin::system_logs))
         // ─── Multi-validator consensus P2P endpoints ───
         .route("/consensus/propose", post(consensus_api::receive_proposal))
         .route("/consensus/vote", post(consensus_api::receive_vote))

@@ -819,3 +819,141 @@ pub async fn process_withdrawal(
         Json(json!({"error":"invalid_action"})),
     )
 }
+
+// ═══════════════════════════════════════
+// NODES — validator status
+// ═══════════════════════════════════════
+
+/// GET /admin/nodes — validator node status
+pub async fn nodes_status(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let _admin = require_admin(&state, &headers)
+        .await
+        .map_err(|_| api_error(StatusCode::UNAUTHORIZED, "Unauthorized"))?;
+
+    let chain = state.chain.lock().await;
+    let validators: Vec<Value> = chain
+        .validators
+        .iter()
+        .map(|(addr, info)| {
+            json!({
+                "address": addr,
+                "url": info.url,
+                "is_active": info.is_active,
+                "joined_at": info.joined_at,
+            })
+        })
+        .collect();
+
+    let peers_configured = state.validator_peers.len();
+    let is_multi = state.is_multi_validator;
+    let chain_height = chain.chain_height();
+    let mempool_size = chain.pending_transactions.len();
+    let total_accounts = chain.accounts.len();
+    let revenue_balance = chain
+        .get_account(NEXAPAY_REVENUE)
+        .map(|a| a.balance)
+        .unwrap_or(0);
+    drop(chain);
+
+    Ok(Json(json!({
+        "success": true,
+        "is_multi_validator": is_multi,
+        "peers_configured": peers_configured,
+        "validators": validators,
+        "chain_height": chain_height,
+        "mempool_size": mempool_size,
+        "total_accounts": total_accounts,
+        "revenue_balance_millimes": revenue_balance,
+    })))
+}
+
+// ═══════════════════════════════════════
+// LOGS — recent system events
+// ═══════════════════════════════════════
+
+/// GET /admin/logs — recent system events (last 200 lines from audit + chain)
+pub async fn system_logs(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let _admin = require_admin(&state, &headers)
+        .await
+        .map_err(|_| api_error(StatusCode::UNAUTHORIZED, "Unauthorized"))?;
+
+    // Recent admin audit log entries
+    let audit_rows = sqlx::query(
+        "SELECT al.action, al.resource_type, al.resource_id, al.details, al.created_at, au.username
+         FROM admin_audit_log al
+         JOIN admin_users au ON au.id = al.admin_id
+         ORDER BY al.created_at DESC LIMIT 50",
+    )
+    .fetch_all(&state.pg_pool)
+    .await
+    .unwrap_or_default();
+
+    let audit_entries: Vec<Value> = audit_rows
+        .iter()
+        .map(|r| {
+            let ts: chrono::DateTime<chrono::Utc> = r.try_get("created_at").unwrap_or_else(|_| chrono::Utc::now());
+            json!({
+                "source": "audit",
+                "message": format!(
+                    "{}: {} {} {}",
+                    r.try_get::<String, _>("username").unwrap_or_default(),
+                    r.try_get::<String, _>("action").unwrap_or_default(),
+                    r.try_get::<String, _>("resource_type").unwrap_or_default(),
+                    r.try_get::<String, _>("details").unwrap_or_default(),
+                ),
+                "timestamp": ts.to_rfc3339(),
+            })
+        })
+        .collect();
+
+    // Recent chain transactions
+    let chain = state.chain.lock().await;
+    let txs: Vec<Value> = chain
+        .blocks()
+        .iter()
+        .rev()
+        .take(20)
+        .flat_map(|b| {
+            b.transactions.iter().map(|tx| {
+                json!({
+                    "source": "chain",
+                    "message": format!(
+                        "Block #{}: {} {} -> {} {} millimes (fee: {})",
+                        b.index,
+                        format!("{:?}", tx.tx_type),
+                        &tx.from[..tx.from.len().min(12)],
+                        &tx.to[..tx.to.len().min(12)],
+                        tx.amount,
+                        tx.fee,
+                    ),
+                    "timestamp": chrono::DateTime::from_timestamp(tx.timestamp as i64, 0)
+                        .map(|t| t.to_rfc3339())
+                        .unwrap_or_default(),
+                })
+            })
+        })
+        .collect();
+    drop(chain);
+
+    // Merge and sort by timestamp descending
+    let mut all: Vec<Value> = audit_entries;
+    all.extend(txs);
+    all.sort_by(|a, b| {
+        b.get("timestamp")
+            .and_then(|v| v.as_str())
+            .cmp(&a.get("timestamp").and_then(|v| v.as_str()))
+    });
+    all.truncate(100);
+
+    Ok(Json(json!({
+        "success": true,
+        "entries": all,
+        "total": all.len(),
+    })))
+}
