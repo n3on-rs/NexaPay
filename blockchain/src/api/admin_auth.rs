@@ -280,7 +280,7 @@ pub async fn admin_login(
 
         // Store OTP hash so admin can verify and complete setup
         let otp_hash =
-            sha256_hex(format!("admin:{}:{}", admin_uuid, current_totp).as_bytes());
+            sha256_hex(format!("admin:{}:{}:{}", admin_uuid, current_totp, state.encryption_key).as_bytes());
         let _ = sqlx::query(
             "INSERT INTO admin_login_otps (admin_id, otp_hash, expires_at) VALUES ($1, $2, NOW() + INTERVAL '5 minutes')",
         )
@@ -376,7 +376,7 @@ pub async fn admin_verify_otp(
     }
 
     let otp_hash =
-        sha256_hex(format!("admin:{}:{}", payload.admin_id, payload.otp_code).as_bytes());
+        sha256_hex(format!("admin:{}:{}:{}", payload.admin_id, payload.otp_code, state.encryption_key).as_bytes());
 
     let row = sqlx::query(
         "SELECT id, otp_hash, expires_at, used FROM admin_login_otps
