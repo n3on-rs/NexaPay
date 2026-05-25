@@ -1142,12 +1142,17 @@ async fn execute_transfer(
         hash: tx_hash.clone(),
     };
 
+    // Apply to local state immediately so balances update in real time.
+    // Consensus will mine the pending tx into a block for persistence.
+    let _ = chain.apply_transaction(&tx);
     chain.add_pending_transaction(tx.clone());
 
     let (new_balance, block_index) = if state.is_multi_validator {
-        // Multi-validator: tx goes to mempool, consensus will mine it
-        let expected = from_balance.saturating_sub(amount.saturating_add(fee));
-        (expected, 0u64)
+        let updated = chain
+            .get_account(address)
+            .map(|a| a.balance)
+            .unwrap_or(from_balance);
+        (updated, 0u64)
     } else {
         // Single-validator: mine immediately
         let block = chain
@@ -1913,11 +1918,12 @@ pub async fn pay_wallet_by_card(
         ));
     }
 
+    let _ = chain.apply_transaction(&tx);
     chain.add_pending_transaction(tx.clone());
 
     let (block_index, final_status, recipient_balance) = if state.is_multi_validator {
-        // Multi-validator: tx goes to mempool, consensus mines it
-        (None, "pending".to_string(), None)
+        let bal = chain.get_account(&address).map(|a| a.balance);
+        (None, "confirmed".to_string(), bal)
     } else {
         // Single-validator: mine immediately
         let block = chain
