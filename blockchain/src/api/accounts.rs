@@ -863,10 +863,9 @@ pub async fn transfer(
         hash: tx_hash.clone(),
     };
 
-    // Apply to local state immediately so balances update in real time.
-    // The pending transaction will be mined into a block by consensus (multi-validator)
-    // or by mine_block below (single-validator).
-    let _ = chain.apply_transaction(&tx);
+    // Pre-apply to state so balances update immediately.
+    // Consensus will mine the tx into a block (skipping re-apply via pre_applied set).
+    let _ = chain.pre_apply_transaction(&tx);
     chain.add_pending_transaction(tx.clone());
 
     let (block_index, status) = if state.is_multi_validator {
@@ -1142,9 +1141,7 @@ async fn execute_transfer(
         hash: tx_hash.clone(),
     };
 
-    // Apply to local state immediately so balances update in real time.
-    // Consensus will mine the pending tx into a block for persistence.
-    let _ = chain.apply_transaction(&tx);
+    let _ = chain.pre_apply_transaction(&tx);
     chain.add_pending_transaction(tx.clone());
 
     let (new_balance, block_index) = if state.is_multi_validator {
@@ -1918,7 +1915,7 @@ pub async fn pay_wallet_by_card(
         ));
     }
 
-    let _ = chain.apply_transaction(&tx);
+    let _ = chain.pre_apply_transaction(&tx);
     chain.add_pending_transaction(tx.clone());
 
     let (block_index, final_status, recipient_balance) = if state.is_multi_validator {

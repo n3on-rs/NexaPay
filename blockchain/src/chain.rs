@@ -54,6 +54,9 @@ pub struct Blockchain {
     pub accounts: HashMap<String, ChainAccount>,
     pub pending_transactions: Vec<Transaction>,
     storage: BlockStorage,
+    /// Hashes of transactions pre-applied to state (not yet mined into a block).
+    /// Prevents double-application when consensus mines them later.
+    pre_applied: std::collections::HashSet<String>,
     /// Active validator set: address → ValidatorInfo
     pub validators: HashMap<String, ValidatorInfo>,
     /// Convenience: validator address → public key hex for fast signature verification
@@ -96,6 +99,7 @@ impl Blockchain {
             accounts: HashMap::new(),
             pending_transactions: Vec::new(),
             storage,
+            pre_applied: std::collections::HashSet::new(),
             validators,
             validator_pubkeys,
             pending_proposals: HashMap::new(),
@@ -245,6 +249,21 @@ impl Blockchain {
         self.accounts.get(address)
     }
 
+    /// Apply transaction to state immediately and mark as pre-applied.
+    /// When consensus later mines the block, the tx is included without re-applying.
+    pub fn pre_apply_transaction(&mut self, tx: &Transaction) -> Result<(), ChainError> {
+        self.apply_transaction(tx)?;
+        if !tx.hash.is_empty() {
+            self.pre_applied.insert(tx.hash.clone());
+        }
+        Ok(())
+    }
+
+    /// Remove a hash from the pre-applied set (called after block is mined).
+    pub fn clear_pre_applied(&mut self) {
+        self.pre_applied.clear();
+    }
+
     pub fn add_pending_transaction(&mut self, mut tx: Transaction) {
         // Enforce mempool size limit: drop oldest if full
         while self.pending_transactions.len() >= Self::MAX_PENDING_TX {
@@ -290,11 +309,14 @@ impl Blockchain {
         let pending = std::mem::take(&mut self.pending_transactions);
         for tx in pending {
             if applied.len() >= Self::MAX_TX_PER_BLOCK {
-                // Return remaining transactions to the pool
                 self.pending_transactions.push(tx);
                 continue;
             }
-            if self.apply_transaction(&tx).is_ok() {
+            let already_applied = !tx.hash.is_empty() && self.pre_applied.contains(&tx.hash);
+            if already_applied {
+                self.pre_applied.remove(&tx.hash);
+                applied.push(tx);
+            } else if self.apply_transaction(&tx).is_ok() {
                 applied.push(tx);
             }
         }
@@ -523,7 +545,13 @@ impl Blockchain {
         let mut applied = Vec::new();
         let pending = std::mem::take(&mut self.pending_transactions);
         for tx in pending {
-            if self.apply_transaction(&tx).is_ok() {
+            let already_applied = !tx.hash.is_empty() && self.pre_applied.contains(&tx.hash);
+            if already_applied {
+                // Transaction was pre-applied by the API handler.
+                // Include it in the block without re-applying.
+                self.pre_applied.remove(&tx.hash);
+                applied.push(tx);
+            } else if self.apply_transaction(&tx).is_ok() {
                 applied.push(tx);
             }
         }
