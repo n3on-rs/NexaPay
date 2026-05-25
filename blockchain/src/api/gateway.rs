@@ -2036,7 +2036,7 @@ async fn dispatch_webhooks_for_intent(
     // 2. Intent-specific webhook URLs (success/failure)
     if let Some(iid) = intent_id {
         let intent_row = sqlx::query(
-            "SELECT success_webhook_url, failure_webhook_url FROM payment_intents WHERE intent_id = $1 LIMIT 1",
+            "SELECT success_webhook_url, failure_webhook_url, webhook_url FROM payment_intents WHERE intent_id = $1 LIMIT 1",
         )
         .bind(iid)
         .fetch_optional(&state.pg_pool)
