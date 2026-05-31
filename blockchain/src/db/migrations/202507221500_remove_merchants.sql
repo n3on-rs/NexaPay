@@ -36,8 +36,13 @@ BEGIN
     END IF;
 END $$;
 
--- Remove merchant API keys
-DELETE FROM api_keys WHERE owner_type = 'merchant';
+-- Remove merchant API keys (only if api_keys table exists)
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'api_keys') THEN
+        DELETE FROM api_keys WHERE owner_type = 'merchant';
+    END IF;
+END $$;
 
--- Drop merchants table
+-- Drop merchants table (only if it exists)
 DROP TABLE IF EXISTS merchants;

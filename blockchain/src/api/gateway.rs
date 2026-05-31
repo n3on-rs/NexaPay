@@ -795,35 +795,110 @@ pub async fn confirm_intent(
             let auto_first = name_parts.first().map(|s| s.to_string());
             let auto_last = if name_parts.len() > 1 { name_parts.last().map(|s| s.to_string()) } else { None };
 
-            // Deduct from payer's chain wallet: transfer amount to SYSTEM (merchant settlement),
-            // fee to NEXAPAY_REVENUE. Customer always pays the fee.
+            // ── Balance validation ──────────────────────────────────────────
+            // Check payer balance BEFORE attempting deduction so we can return
+            // a clear error instead of silently skipping the transfer.
             let pay_amount = final_amount as u64;
             let tx_fee = db_fee as u64;
             let total_charge = pay_amount.saturating_add(tx_fee);
             {
+                let chain = state.chain.lock().await;
+                let payer_balance = chain
+                    .get_account(&chain_address)
+                    .map(|a| a.balance)
+                    .unwrap_or(0);
+                if payer_balance < total_charge {
+                    return Err(api_error(
+                        StatusCode::BAD_REQUEST,
+                        &format!(
+                            "Insufficient wallet balance. Required: {:.3} TND, available: {:.3} TND",
+                            total_charge as f64 / 1000.0,
+                            payer_balance as f64 / 1000.0,
+                        ),
+                    ));
+                }
+            }
+
+            // ── Deduct payer → SYSTEM (settlement pool) ─────────────────
+            {
                 let mut chain = state.chain.lock().await;
-                if let Some(payer_acc) = chain.get_account(&chain_address) {
-                    if payer_acc.balance >= total_charge {
-                        let tx_hash = sha256_hex(
-                            format!("{}:SYSTEM:{}:{}:{}", chain_address, pay_amount, tx_fee, crate::chain::now_ts()).as_bytes(),
-                        );
-                        let tx = crate::block::Transaction {
+                let tx_hash = sha256_hex(
+                    format!("{}:SYSTEM:{}:{}:{}", chain_address, pay_amount, tx_fee, crate::chain::now_ts()).as_bytes(),
+                );
+                let tx = crate::block::Transaction {
+                    id: Uuid::new_v4().to_string(),
+                    tx_type: crate::block::TxType::Transfer,
+                    from: chain_address.clone(),
+                    to: "SYSTEM".to_string(),
+                    amount: pay_amount,
+                    fee: tx_fee,
+                    timestamp: crate::chain::now_ts(),
+                    signature: String::new(),
+                    memo: format!("Wallet payment: {}", intent_id),
+                    hash: tx_hash.clone(),
+                };
+                if let Err(e) = chain.apply_transaction(&tx) {
+                    tracing::error!("Wallet payment apply_transaction (payer→SYSTEM) failed: {:?}", e);
+                    return Err(api_error(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Payment processing failed — please try again",
+                    ));
+                }
+                chain.add_pending_transaction(tx);
+            }
+
+            // ── Credit merchant: SYSTEM → merchant wallet ───────────────
+            // Immediately credit the merchant's on-chain wallet so the
+            // store balance reflects the payment without waiting for a
+            // manual withdrawal.
+            {
+                let merchant_addr = sqlx::query_scalar::<_, String>(
+                    "SELECT owner_user_address FROM developers WHERE id = $1 LIMIT 1",
+                )
+                .bind(merchant_id)
+                .fetch_optional(&state.pg_pool)
+                .await
+                .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Database error"))?
+                .unwrap_or_default();
+
+                if !merchant_addr.is_empty() {
+                    let mut chain = state.chain.lock().await;
+                    // Ensure the merchant has a chain account before crediting
+                    if chain.get_account(&merchant_addr).is_none() {
+                        let _ = chain.apply_transaction(&crate::block::Transaction {
                             id: Uuid::new_v4().to_string(),
-                            tx_type: crate::block::TxType::Transfer,
-                            from: chain_address.clone(),
-                            to: "SYSTEM".to_string(),
-                            amount: pay_amount,
-                            fee: tx_fee,
+                            tx_type: crate::block::TxType::AccountCreate,
+                            from: "SYSTEM".to_string(),
+                            to: merchant_addr.clone(),
+                            amount: 0,
+                            fee: 0,
                             timestamp: crate::chain::now_ts(),
                             signature: String::new(),
-                            memo: format!("Wallet payment: {}", intent_id),
-                            hash: tx_hash.clone(),
-                        };
-                        if let Err(e) = chain.apply_transaction(&tx) {
-                            tracing::warn!("Wallet payment apply_transaction failed: {:?}", e);
-                        }
-                        chain.add_pending_transaction(tx);
+                            memo: format!("Auto-create merchant account for payment {}", intent_id),
+                            hash: sha256_hex(
+                                format!("create:{}:{}", merchant_addr, crate::chain::now_ts()).as_bytes(),
+                            ),
+                        });
                     }
+
+                    let credit_tx = crate::block::Transaction {
+                        id: Uuid::new_v4().to_string(),
+                        tx_type: crate::block::TxType::Transfer,
+                        from: "SYSTEM".to_string(),       // SYSTEM → no deduction
+                        to: merchant_addr.clone(),        // credits merchant
+                        amount: pay_amount,
+                        fee: 0,                            // no fee on settlement
+                        timestamp: crate::chain::now_ts(),
+                        signature: String::new(),
+                        memo: format!("Merchant settlement for payment {}", intent_id),
+                        hash: sha256_hex(
+                            format!("SYSTEM:{}:{}:0:{}", merchant_addr, pay_amount, crate::chain::now_ts()).as_bytes(),
+                        ),
+                    };
+                    if let Err(e) = chain.apply_transaction(&credit_tx) {
+                        tracing::error!("Merchant credit apply_transaction (SYSTEM→{}) failed: {:?}", merchant_addr, e);
+                    }
+                    chain.add_pending_transaction(credit_tx);
                 }
             }
 
@@ -948,6 +1023,61 @@ pub async fn confirm_intent(
 
     let final_status = if approved { "succeeded" } else { "failed" };
 
+    // ── Credit merchant on-chain for card payments ──────────────────
+    // Card payments donʼt debit a wallet, so we credit the merchant
+    // directly from SYSTEM (settlement pool) to reflect the payment
+    // in the storeʼs on-chain balance immediately.
+    if approved && payload.method.as_deref() != Some("wallet") {
+        let pay_amount = final_amount as u64;
+        let merchant_addr = sqlx::query_scalar::<_, String>(
+            "SELECT owner_user_address FROM developers WHERE id = $1 LIMIT 1",
+        )
+        .bind(merchant_id)
+        .fetch_optional(&state.pg_pool)
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_default();
+
+        if !merchant_addr.is_empty() {
+            let mut chain = state.chain.lock().await;
+            if chain.get_account(&merchant_addr).is_none() {
+                let _ = chain.apply_transaction(&crate::block::Transaction {
+                    id: Uuid::new_v4().to_string(),
+                    tx_type: crate::block::TxType::AccountCreate,
+                    from: "SYSTEM".to_string(),
+                    to: merchant_addr.clone(),
+                    amount: 0,
+                    fee: 0,
+                    timestamp: crate::chain::now_ts(),
+                    signature: String::new(),
+                    memo: format!("Auto-create merchant account for card payment {}", intent_id),
+                    hash: sha256_hex(
+                        format!("create:{}:{}", merchant_addr, crate::chain::now_ts()).as_bytes(),
+                    ),
+                });
+            }
+            let credit_tx = crate::block::Transaction {
+                id: Uuid::new_v4().to_string(),
+                tx_type: crate::block::TxType::Transfer,
+                from: "SYSTEM".to_string(),
+                to: merchant_addr.clone(),
+                amount: pay_amount,
+                fee: 0,
+                timestamp: crate::chain::now_ts(),
+                signature: String::new(),
+                memo: format!("Merchant settlement for card payment {}", intent_id),
+                hash: sha256_hex(
+                    format!("SYSTEM:{}:{}:0:{}", merchant_addr, pay_amount, crate::chain::now_ts()).as_bytes(),
+                ),
+            };
+            if let Err(e) = chain.apply_transaction(&credit_tx) {
+                tracing::error!("Card payment merchant credit apply_transaction (SYSTEM→{}) failed: {:?}", merchant_addr, e);
+            }
+            chain.add_pending_transaction(credit_tx);
+        }
+    }
+
     let customer_first_name = payload.customer_first_name.as_ref().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
         .or(auto_first_name);
     let customer_last_name = payload.customer_last_name.as_ref().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
@@ -1019,13 +1149,13 @@ pub async fn confirm_intent(
     // SSE notification to agent dashboard
     if approved {
         if let Ok(Some(dev_row)) = sqlx::query(
-            "SELECT user_address FROM developers WHERE id = $1 LIMIT 1"
+            "SELECT owner_user_address FROM developers WHERE id = $1 LIMIT 1"
         )
         .bind(merchant_id)
         .fetch_optional(&state.pg_pool)
         .await
         {
-            if let Ok(addr) = dev_row.try_get::<String, _>("user_address") {
+            if let Ok(addr) = dev_row.try_get::<String, _>("owner_user_address") {
                 let event = json!({
                     "type": "payment_intent.succeeded",
                     "intent_id": intent_id,
