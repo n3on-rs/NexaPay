@@ -81,6 +81,19 @@ export class PaymentIntentsResource extends BaseResource {
   }
 
   /**
+   * List all payment intents
+   * @param params Pagination and filter params
+   * @param options Request options
+   */
+  async list(
+    params?: ListParams,
+    options?: RequestOptions
+  ): Promise<ApiResponse<PaymentIntent[]>> {
+    const query = params ? `?${new URLSearchParams(params as any).toString()}` : '';
+    return this.client.get(`${this.resourcePath}${query}`, options);
+  }
+
+  /**
    * Confirm a payment intent with card details
    * @param intentId Payment intent ID
    * @param data Card details for confirmation
@@ -96,6 +109,18 @@ export class PaymentIntentsResource extends BaseResource {
       data,
       options
     );
+  }
+
+  /**
+   * Cancel a payment intent
+   * @param intentId Payment intent ID
+   * @param options Request options
+   */
+  async cancel(
+    intentId: string,
+    options?: RequestOptions
+  ): Promise<ApiResponse<PaymentIntent>> {
+    return this.client.delete(`${this.resourcePath}/${intentId}`, options);
   }
 }
 
@@ -116,6 +141,19 @@ export class RefundsResource extends BaseResource {
   ): Promise<ApiResponse<Refund>> {
     return this.client.post(this.resourcePath, data, options);
   }
+
+  /**
+   * List all refunds
+   * @param params Pagination and filter params
+   * @param options Request options
+   */
+  async list(
+    params?: ListParams,
+    options?: RequestOptions
+  ): Promise<ApiResponse<Refund[]>> {
+    const query = params ? `?${new URLSearchParams(params as any).toString()}` : '';
+    return this.client.get(`${this.resourcePath}${query}`, options);
+  }
 }
 
 /**
@@ -134,6 +172,19 @@ export class PayoutsResource extends BaseResource {
     options?: RequestOptions
   ): Promise<ApiResponse<Payout>> {
     return this.client.post(this.resourcePath, data, options);
+  }
+
+  /**
+   * List all payouts
+   * @param params Pagination and filter params
+   * @param options Request options
+   */
+  async list(
+    params?: ListParams,
+    options?: RequestOptions
+  ): Promise<ApiResponse<Payout[]>> {
+    const query = params ? `?${new URLSearchParams(params as any).toString()}` : '';
+    return this.client.get(`${this.resourcePath}${query}`, options);
   }
 }
 

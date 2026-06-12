@@ -36,12 +36,17 @@ cd sdk && npm publish    # Publish to npm (needs 2FA)
 
 ### Docker Compose
 ```bash
-docker compose up -d --build   # Full stack (3 validators + LB + frontend + PG)
+docker compose up -d --build   # Full stack (3 validators + LB + frontend, Neon PG)
 docker compose down             # Stop
-docker compose down -v          # Stop + wipe volumes (fresh DB)
+docker compose down -v          # Stop + wipe chain volumes
 ```
 
-**Published ports:** Frontend `:3001` | LB `:8088` | PostgreSQL `:5433` | Validators `:8090-8092`
+**Published ports:** Frontend `:3001` | LB `:8088` | Validators `:8090-8092`
+**Database:** Neon serverless PostgreSQL (no local PG container)
+
+### Oracle Cloud Always Free Deployment
+See `deploy/oracle-cloud/README.md` for full step-by-step.
+Quick start: `bash deploy/oracle-cloud/setup.sh`
 
 ## Architecture
 
@@ -104,7 +109,7 @@ nexapay-web/src/
 
 | Variable | Purpose |
 |---|---|
-| `NEXAPAY_DATABASE_URL` | PostgreSQL connection string |
+| `NEXAPAY_DATABASE_URL` | PostgreSQL connection string (Neon serverless) |
 | `NEXAPAY_JWT_SECRET` | HS256 key for user session tokens |
 | `NEXAPAY_ENCRYPTION_KEY` | 64 hex chars — AES-256-GCM |
 | `NEXAPAY_SYSTEM_PRIVATE_KEY` | 64 hex chars — Ed25519 system key |
@@ -117,6 +122,90 @@ nexapay-web/src/
 | `NEXAPAY_PORTAL_URL` | Frontend origin for CORS |
 | `API_PROXY_URL` | Backend proxy target for Next.js rewrites |
 | `NEXAPAY_API_URL` | SDK base URL (defaults to backend.nexapay.space) |
+
+## Gateway Payment Flow (`blockchain/src/api/gateway.rs`)
+
+### `confirm_intent` — wallet payment flow
+1. PIN step → OTP step → balance check → deduct payer → credit merchant
+2. **Balance validation happens BEFORE chain state changes** — returns `400 "Insufficient wallet balance. Required: X.XXX TND, available: Y.YYY TND"` if payer can't cover amount + fee
+3. After deducting `payer → SYSTEM`, immediately creates `SYSTEM → merchant` credit transaction so the store's on-chain wallet balance updates without waiting for a manual withdrawal
+4. Card payments also credit the merchant via `SYSTEM → merchant` (since no payer wallet is debited)
+5. Frontend displays "Insufficient funds" overlay when error contains `"insufficient"`
+
+### `pay_wallet_by_card` — card-to-wallet top-up
+- Creates `SYSTEM → recipient` transfer (funds originate from SYSTEM, not a wallet)
+
+### key pattern for merchant credit
+```rust
+// SYSTEM → merchant (SYSTEM as sender skips deduction per chain rules)
+// Merchant chain address is developers.owner_user_address (NOT user_address!)
+let merchant_addr = sqlx::query_scalar::<_, String>(
+    "SELECT owner_user_address FROM developers WHERE id = $1 LIMIT 1"
+)
+```
+
+## Database Schema Notes
+
+- **`developers`** table uses `owner_user_address` (not `user_address`) for the merchant's chain wallet
+- **`payment_intents.merchant_id`** references `developers.id` (UUID)
+- **Migration `202507221500_remove_merchants.sql`** — wrapped `DELETE FROM api_keys` in a table-existence guard to prevent failures on fresh databases where `api_keys` doesn't exist yet
+- Migration ordering: `202507221500` runs before `202604180001` (init), so newer migrations must guard against tables that don't exist yet
+
+## VPS & Deployment
+
+### Oracle Cloud Always Free (Production)
+- 4 ARM cores, 24 GB RAM, 200 GB disk — **$0/month forever**
+- Setup: `bash deploy/oracle-cloud/setup.sh`
+- Full guide: `deploy/oracle-cloud/README.md`
+
+### Production VPS (nexapay.space)
+- SSH: `ssh nexapay` → `/home/ivan/NexaPay`
+- Run: `docker compose -f ~/NexaPay/docker-compose.yml up -d --build`
+- Logs: `docker compose -f ~/NexaPay/docker-compose.yml logs validator-0`
+- Fresh start: `docker compose -f ~/NexaPay/docker-compose.yml down -v && docker compose -f ~/NexaPay/docker-compose.yml up -d --build`
+
+### KYC VPS (4.233.137.88)
+- SSH: `ssh kyc` — hosts `fabrix.sbs`, `terraintel.fun` (NexaPay NOT deployed here)
+- Uses PM2 (not Docker): `pm2 list`
+- Nginx sites: `/etc/nginx/sites-enabled/{fabrix,kyc}`
+
+### DNS (nexapay.space)
+- All A records point to the NexaPay VPS: `@`, `sandbox`, `auth`, `admin`, `backend`, `kyc`
+- Subdomain routing handled by Next.js `middleware.ts` + Nginx on the VPS
+
+## E2E Testing the API
+
+```bash
+# Against local: BASE="http://localhost:8088"  
+# Against production: BASE="https://backend.nexapay.space"
+
+# 1. Register users (two-step: init → set-pin)
+curl -s -X POST "$BASE/auth/register/init" -H "Content-Type: application/json" \
+  -d '{"full_name":"...","phone":"50xxxxxx","email":"...@t.com","date_of_birth":"1990-01-01"}'
+# → returns {"address":"NXP..."}
+
+curl -s -X POST "$BASE/auth/register/set-pin" -H "Content-Type: application/json" \
+  -d '{"address":"NXP...","pin":"123456","pin_confirm":"123456"}'
+
+# 2. Login (two-step: PIN → OTP → token)
+curl -s -X POST "$BASE/auth/login" -H "Content-Type: application/json" \
+  -d '{"phone":"50xxxxxx","pin":"123456"}'  # → {"dev_otp":"..."}
+
+curl -s -X POST "$BASE/auth/login/verify-otp" -H "Content-Type: application/json" \
+  -d '{"phone":"50xxxxxx","otp_code":"..."}'  # → {"token":"..."}
+
+# 3. Auth header for all authenticated requests:
+#    -H "X-Account-Token: <token>"
+
+# 4. Create company workspace (to get API key):
+curl -s -X POST "$BASE/accounts/{address}/company" -H "X-Account-Token: ..." \
+  -H "Content-Type: application/json" -d '{"company_name":"...","company_email":"..."}'
+
+# 5. Create payment intent + test checkout:
+#    POST /gateway/v1/intents (with X-API-Key)
+#    POST /gateway/v1/intents/{id}/session
+#    POST /gateway/v1/intents/{id}/confirm (wallet: PIN step → OTP step)
+```
 
 ## Security Notes
 

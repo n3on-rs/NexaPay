@@ -1,31 +1,17 @@
 # NexaPay — Docker Compose (3-validator BFT)
 #
 #   docker compose up -d --build
-#   → PostgreSQL + 3 validator nodes + load balancer + frontend
-#   → Ports: 5433 (PG) / 8088 (LB) / 3001 (web)
+#   → 3 validator nodes + load balancer + frontend
+#   → PostgreSQL is hosted on Neon (serverless) — no local PG container
+#   → Ports: 8088 (LB) / 3001 (web)
 
 services:
-  postgres:
-    image: postgres:16
-    environment:
-      POSTGRES_DB: nexapay
-      POSTGRES_USER: ${POSTGRES_USER:-nexapay}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nexapay_secret}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: '1'
-    # Database port NOT exposed to host in production — use internal Docker network
-
   validator-0:
     build: ./blockchain
     ports:
       - "8090:8080"
     environment:
-      NEXAPAY_DATABASE_URL: postgresql://${POSTGRES_USER:-nexapay}:${POSTGRES_PASSWORD:-nexapay_secret}@postgres:5432/nexapay
+      NEXAPAY_DATABASE_URL: ${NEXAPAY_DATABASE_URL}
       NEXAPAY_JWT_SECRET: ${NEXAPAY_JWT_SECRET}
       NEXAPAY_ENCRYPTION_KEY: ${NEXAPAY_ENCRYPTION_KEY}
       NEXAPAY_SYSTEM_PRIVATE_KEY: ${NEXAPAY_SYSTEM_PRIVATE_KEY}
@@ -46,8 +32,6 @@ services:
       NEXAPAY_VALIDATOR_0_URL: "http://validator-0:8080"
       NEXAPAY_VALIDATOR_1_URL: "http://validator-1:8080"
       NEXAPAY_VALIDATOR_2_URL: "http://validator-2:8080"
-    depends_on:
-      - postgres
     volumes:
       - nexapay_v0_chain_data:/app/chain_data
       - nexapay_v0_chain_state:/app/chain_state
@@ -57,7 +41,7 @@ services:
     ports:
       - "8091:8080"
     environment:
-      NEXAPAY_DATABASE_URL: postgresql://${POSTGRES_USER:-nexapay}:${POSTGRES_PASSWORD:-nexapay_secret}@postgres:5432/nexapay
+      NEXAPAY_DATABASE_URL: ${NEXAPAY_DATABASE_URL}
       NEXAPAY_JWT_SECRET: ${NEXAPAY_JWT_SECRET}
       NEXAPAY_ENCRYPTION_KEY: ${NEXAPAY_ENCRYPTION_KEY}
       NEXAPAY_SYSTEM_PRIVATE_KEY: ${NEXAPAY_SYSTEM_PRIVATE_KEY}
@@ -78,8 +62,6 @@ services:
       NEXAPAY_VALIDATOR_0_URL: "http://validator-0:8080"
       NEXAPAY_VALIDATOR_1_URL: "http://validator-1:8080"
       NEXAPAY_VALIDATOR_2_URL: "http://validator-2:8080"
-    depends_on:
-      - postgres
     volumes:
       - nexapay_v1_chain_data:/app/chain_data
       - nexapay_v1_chain_state:/app/chain_state
@@ -89,7 +71,7 @@ services:
     ports:
       - "8092:8080"
     environment:
-      NEXAPAY_DATABASE_URL: postgresql://${POSTGRES_USER:-nexapay}:${POSTGRES_PASSWORD:-nexapay_secret}@postgres:5432/nexapay
+      NEXAPAY_DATABASE_URL: ${NEXAPAY_DATABASE_URL}
       NEXAPAY_JWT_SECRET: ${NEXAPAY_JWT_SECRET}
       NEXAPAY_ENCRYPTION_KEY: ${NEXAPAY_ENCRYPTION_KEY}
       NEXAPAY_SYSTEM_PRIVATE_KEY: ${NEXAPAY_SYSTEM_PRIVATE_KEY}
@@ -110,8 +92,6 @@ services:
       NEXAPAY_VALIDATOR_0_URL: "http://validator-0:8080"
       NEXAPAY_VALIDATOR_1_URL: "http://validator-1:8080"
       NEXAPAY_VALIDATOR_2_URL: "http://validator-2:8080"
-    depends_on:
-      - postgres
     volumes:
       - nexapay_v2_chain_data:/app/chain_data
       - nexapay_v2_chain_state:/app/chain_state
@@ -143,7 +123,6 @@ services:
       - validator-lb
 
 volumes:
-  pgdata:
   nexapay_v0_chain_data:
   nexapay_v0_chain_state:
   nexapay_v1_chain_data:

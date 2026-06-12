@@ -127,7 +127,7 @@ NexaPay utilise un consensus \textbf{Byzantine Fault Tolerant} \`a 3 validateurs
     \item \textbf{Aucun point de d\'efaillance unique} --- Si un validateur tombe en panne, les deux autres continuent de fonctionner
     \item \textbf{Validation crois\'ee} --- Chaque bloc doit \^etre sign\'e par les 3 validateurs avant d'\^etre ajout\'e \`a la cha\^ine
     \item \textbf{Transactions instantan\'ees} --- Pas de minage, pas de proof-of-work. Les transferts sont appliqu\'es en moins d'une seconde
-    \item \textbf{Co\^ut z\'ero} --- Pas de frais de gas, pas de commission blockchain. Les transferts entre utilisateurs sont gratuits
+    \item \textbf{Co\^ut minimal} --- Pas de frais de gas, pas de commission blockchain. Frais de r\'eseau calcul\'es par tranches, visibles avant confirmation
     \item \textbf{Souverainet\'e} --- L'infrastructure est h\'eberg\'ee sur nos propres serveurs, pas sur un cloud public \'etranger
 \end{itemize}
 
@@ -266,7 +266,7 @@ Revue manuelle (cas litigieux) & Disponible pour les administrateurs \\
 
 \begin{itemize}[leftmargin=*]
     \item \textbf{Portefeuille} --- Solde TND, IBAN/RIB, carte Visa virtuelle
-    \item \textbf{Envoi d'argent} --- Transferts instantan\'es et gratuits entre utilisateurs
+    \item \textbf{Envoi d'argent} --- Transferts instantan\'es entre utilisateurs (frais par tranche)
     \item \textbf{Virement bancaire} --- Vers n'importe quel RIB tunisien
     \item \textbf{Rechargement} --- D\'ep\^ot esp\`eces en agence bancaire partenaire
     \item \textbf{Paiement en ligne} --- Checkout NexaPay chez les commer\c{c}ants
@@ -284,6 +284,311 @@ Revue manuelle (cas litigieux) & Disponible pour les administrateurs \\
     \item L'agent cr\'edite le compte via l'interface administrateur
     \item Le solde est mis \`a jour en temps r\'eel
 \end{enumerate}
+
+\newpage
+
+% ═══════════════════════════════════════════════════════
+\section{Structure des Frais --- Algorithme par Tranches}
+
+Tous les frais NexaPay sont calcul\'es via un \textbf{algorithme par tranches} (bracket-based pricing). Contrairement \`a un pourcentage fixe qui p\'enalise les petits montants et laisse de l'argent sur la table pour les gros montants, l'algorithme par tranches optimise le revenu \`a chaque niveau de transaction.
+
+\subsection{Algorithme de Calcul}
+
+\[
+\text{Frais}(montant) = \max\left(\text{Forfait}_{tranche},\; \text{Taux}_{tranche} \times \text{Montant} + \text{Fixe}_{tranche}\right)
+\]
+
+O\`u chaque montant tombe dans une tranche pr\'ecise. Le frais final est le maximum entre le plancher minimum et le pourcentage calcul\'e.
+
+\subsection{Grille Tarifaire --- Toutes Transactions}
+
+\begin{center}
+\begin{tabular}{|c|c|c|c|c|}
+\hline
+\textbf{Tranche} & \textbf{Frais} & \textbf{Type} & \textbf{Exemple} & \textbf{Taux effectif} \\
+\hline
+0 -- 10 TND   & 0,500 TND & Forfait & Split caf\'e : 5 TND $\rightarrow$ 0,500 TND & 5\% -- $\infty$ \\
+10 -- 50 TND  & 1,000 TND & Forfait & D\'ejeuner : 30 TND $\rightarrow$ 1,000 TND & 2\% -- 10\% \\
+50 -- 200 TND & 2,5\% + 0,300 TND & \% + Fixe & Courses : 150 TND $\rightarrow$ 4,050 TND & 2,65\% -- 3,1\% \\
+200 -- 1\,000 TND & 2,0\% + 0,500 TND & \% + Fixe & \'Electronique : 250 TND $\rightarrow$ 5,500 TND & 2,05\% -- 2,25\% \\
+1\,000 -- 5\,000 TND & 1,5\% + 1,000 TND & \% + Fixe & B2B : 3\,000 TND $\rightarrow$ 46,000 TND & 1,52\% -- 1,6\% \\
+5\,000+ TND & 1,0\% + 5,000 TND & \% + Fixe & V\'ehicule : 15\,000 TND $\rightarrow$ 155,000 TND & 1,1\% -- 1,5\% \\
+\hline
+\end{tabular}
+\end{center}
+
+\subsection{Pourquoi un Algorithme par Tranches ?}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Micro-transactions prot\'eg\'ees} --- Un frais fixe de 0,500 TND sur 5 TND garantit que la plateforme ne perd pas d'argent sur les petits montants
+    \item \textbf{Gros montants optimis\'es} --- Un taux de 1\% sur 15\,000 TND rapporte 155 TND sans para\^itre excessif
+    \item \textbf{Acceptation psychologique} --- Les paliers sont con\c{c}us pour correspondre aux habitudes de consommation tunisiennes (caf\'e, d\'ejeuner, courses, loyer, v\'ehicule)
+    \item \textbf{Configurable en direct} --- Les tranches sont stock\'ees en base de donn\'ees. Ajustables sans red\'eploiement de code
+\end{itemize}
+
+\subsection{Application par Type de Transaction}
+
+\begin{center}
+\begin{tabular}{|l|c|c|c|}
+\hline
+\textbf{Type de Transaction} & \textbf{Algorithme} & \textbf{Qui paie} & \textbf{Plafond} \\
+\hline
+P2P (transfert entre utilisateurs) & Tranches & \'Emetteur & Aucun \\
+Paiement commer\c{c}ant (gateway) & Tranches & Client final & Aucun \\
+Rechargement par carte & Tranches & Utilisateur & Aucun \\
+Retrait bancaire (RIB externe) & Tranches & Utilisateur & 50 TND max \\
+Retrait agent $\rightarrow$ portefeuille & Tranches & Agent & 50 TND max \\
+Transfert de fonds (EUR $\rightarrow$ TND) & Tranches + 1,5\% spread & Destinataire & Aucun \\
+\hline
+\end{tabular}
+\end{center}
+
+\textbf{Note :} Le client final paie toujours les frais. NexaPay n'offre pas l'option de faire payer le commer\c{c}ant --- le mod\`ele est transparent : chaque transaction affiche le total (montant + frais) avant confirmation.
+
+\newpage
+
+\subsection{Routage des Frais --- Compte Revenue On-Chain}
+
+Chaque frais pr\'elev\'e est achemin\'e vers un \textbf{compte de revenu on-chain} d\'edi\'e :
+
+\begin{verbatim}
+Expediteur debite : montant + frais
+  -> Destinataire credite : montant
+  -> Compte NEXAPAY_REVENUE : frais
+\end{verbatim}
+
+Les frais ne disparaissent jamais --- ils sont enregistr\'es dans le registre blockchain immuable et enti\`erement auditables. Le solde du compte revenue peut \^etre vir\'e quotidiennement vers le compte bancaire de r\`element.
+
+% ═══════════════════════════════════════════════════════
+\section{Mod\`ele de Revenu pour la Banque Partenaire}
+
+Ce chapitre d\'etaille comment \textbf{La Banque de Tunisie} g\'en\`ere des revenus concrets \`a travers le partenariat NexaPay.
+
+\subsection{Sources de Revenu pour la Banque}
+
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Partage des frais de transaction} --- La banque per\c{c}oit un pourcentage de chaque frais de transaction
+    \item \textbf{Int\'er\^ets sur le float} --- L'int\'egralit\'e des soldes des portefeuilles utilisateurs est d\'epos\'ee dans des comptes group\'es \`a la banque, g\'en\'erant des int\'er\^ets au taux du march\'e mon\'etaire (TMM, $\sim$8\% actuellement en Tunisie)
+    \item \textbf{Commissions de d\'ep\^ot en agence} --- Chaque d\'ep\^ot d'esp\`eces effectu\'e au guichet g\'en\`ere une commission pour l'agence
+    \item \textbf{Acquisition de nouveaux clients} --- Les utilisateurs NexaPay deviennent de facto des clients de la banque, avec un IBAN \`a leur nom
+\end{enumerate}
+
+\subsection{Grille de Partage des Revenus}
+
+\begin{center}
+\begin{tabular}{|l|c|c|c|}
+\hline
+\textbf{Type de Transaction} & \textbf{Part Banque} & \textbf{Part NexaPay} & \textbf{Raison} \\
+\hline
+Rechargement par carte   & 60\% & 40\% & La banque fournit la passerelle carte \\
+Retrait bancaire (RIB)   & 70\% & 30\% & La banque fournit l'infrastructure de r\`eglement \\
+Paiement commer\c{c}ant  & 40\% & 60\% & NexaPay fournit le checkout, SDK, et support \\
+P2P (transfert)          & 30\% & 70\% & NexaPay fournit le r\'eseau et l'exp\'erience \\
+Transfert de fonds (remittance) & 50\% & 50\% & Produit \`a forte marge, effort partag\'e \\
+Int\'er\^ets sur float   & 100\% & 0\%  & La banque garde l'int\'egralit\'e des int\'er\^ets \\
+D\'ep\^ot en agence      & 100\% & 0\%  & Commission de guichet pour la banque \\
+\hline
+\end{tabular}
+\end{center}
+
+\subsection{Simulation de Revenu --- Banque de Tunisie}
+
+Projection sur 12 mois avec 50\,000 utilisateurs actifs :
+
+\begin{center}
+\begin{tabular}{|l|c|c|c|c|}
+\hline
+\textbf{Activit\'e} & \textbf{Volume/mois} & \textbf{Panier moyen} & \textbf{Frais moyen} & \textbf{Revenu banque/mois} \\
+\hline
+P2P (transferts)    & 200\,K tx  & 40 TND  & 1,0 TND  & 60\,000 TND \\
+Paiements commer\c{c}ants & 30\,K tx & 120 TND & 3,0 TND  & 36\,000 TND \\
+Rechargements carte & 15\,K tx  & 100 TND & 1,5 TND  & 13\,500 TND \\
+Retraits bancaires   & 5\,K tx   & 300 TND & 2,5 TND  & 8\,750 TND \\
+Transfert de fonds   & 2\,K tx   & 1\,500 TND & 25 TND  & 25\,000 TND \\
+Int\'er\^ets float (2M TND \`a 8\%) & --- & --- & --- & 13\,300 TND \\
+\hline
+\textbf{Total mensuel} & & & & \textbf{$\sim$156\,550 TND} \\
+\hline
+\multicolumn{5}{|c|}{\textbf{Revenu annuel estim\'e pour la banque : $\sim$1,88M TND}} \\
+\hline
+\end{tabular}
+\end{center}
+
+\subsection{L'Effet Float --- Le Revenu Passif}
+
+\begin{itemize}[leftmargin=*]
+    \item Avec 50\,000 utilisateurs gardant en moyenne 40 TND dans leur portefeuille, le solde group\'e permanent est de \textbf{2M TND}
+    \item Au TMM actuel ($\sim$8\%), cela g\'en\`ere \textbf{160\,000 TND/an} en int\'er\^ets purs --- sans aucun effort
+    \item \`A 500\,000 utilisateurs : 20M TND de float $\rightarrow$ \textbf{1,6M TND/an} d'int\'er\^ets
+    \item La banque garde \textbf{100\% de ce revenu} --- c'est son capital qui dort dans ses comptes
+\end{itemize}
+
+\subsection{Ce Que la Banque Ne D\'epense Pas}
+
+\begin{itemize}[leftmargin=*]
+    \item Aucun co\^ut d'acquisition client --- NexaPay am\`ene les utilisateurs
+    \item Aucun co\^ut de d\'eveloppement --- NexaPay a construit toute la plateforme
+    \item Aucun co\^ut de support utilisateur --- NexaPay g\`ere le support de premi\`ere ligne
+    \item Aucun co\^ut d'infrastructure --- NexaPay h\'eberge les serveurs
+    \item Aucun co\^ut de conformit\'e additionnel --- NexaPay op\`ere sous la licence existante de la banque
+\end{itemize}
+
+\newpage
+
+% ═══════════════════════════════════════════════════════
+\section{Mod\`ele de Licence --- NexaPay sous Votre \'Egide}
+
+NexaPay ne poss\`ede \textbf{aucune licence bancaire} et ne pr\'etend pas en avoir besoin. Nous op\'erons comme \textbf{front-end num\'erique} de La Banque de Tunisie, sous votre licence existante.
+
+\subsection{Ce Que la Banque Couvre}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Licence bancaire} --- Toute l'activit\'e NexaPay est couverte par votre agrément BCT
+    \item \textbf{IBAN/RIB} --- Chaque utilisateur re\c{c}oit un IBAN sous votre BIC (code banque). L'utilisateur est un sous-compte de la banque
+    \item \textbf{KYC/AML} --- NexaPay collecte les donn\'ees, la banque valide contre ses syst\`emes de conformit\'e
+    \item \textbf{Sauvegarde des fonds} --- Tous les soldes utilisateurs sont d\'epos\'es dans vos comptes. La banque d\'etient les fonds --- NexaPay ne les touche jamais
+    \item \textbf{Reporting BCT} --- NexaPay g\'en\`ere les extraits de donn\'ees. La banque d\'epose les rapports r\'eglementaires sous son processus existant
+    \item \textbf{R\`eglement interbancaire} --- Acc\`es au clearing TND, SIB, CIVITAS via l'infrastructure de la banque
+\end{itemize}
+
+\subsection{Ce Que NexaPay Apporte}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Plateforme compl\`ete} --- Backend, frontend, mobile, SDK, blockchain --- enti\`erement d\'evelopp\'e et op\'erationnel
+    \item \textbf{Onboarding digital} --- Inscription en 6 \'etapes, 2 minutes, sans agence
+    \item \textbf{Acquisition utilisateurs} --- Marketing, croissance, support client de premi\`ere ligne
+    \item \textbf{Traitement des paiements} --- Gateway, checkout, P2P, QR codes, liens de paiement
+    \item \textbf{Ledger immuable} --- Blockchain NexaPay comme registre intra-journalier audit\'e
+    \item \textbf{Support et fraude} --- D\'etection de fraude automatis\'ee, r\'esolution de litiges, support client
+\end{itemize}
+
+\subsection{Mod\`ele de Compte}
+
+\begin{verbatim}
+Utilisateur NexaPay
+  -> Adresse NXP (identifiant NexaPay)
+  -> IBAN tunisien (sous le BIC de la Banque de Tunisie)
+  -> Compte groupe "Float Utilisateurs" (banque)
+  -> Toutes les transactions on-chain (NexaPay)
+  -> Reglement net quotidien (banque)
+\end{verbatim}
+
+\textbf{Flux quotidien :}
+\begin{enumerate}[leftmargin=*]
+    \item NexaPay traite les transactions en temps r\'eel sur sa blockchain (registre intra-journalier)
+    \item En fin de journ\'ee, NexaPay g\'en\`ere un fichier de r\`eglement net
+    \item La banque ex\'ecute le transfert net entre comptes group\'es
+    \item Rapprochement automatique le lendemain matin
+\end{enumerate}
+
+\subsection{Responsabilit\'es L\'egales}
+
+\begin{center}
+\begin{tabular}{|l|c|c|}
+\hline
+\textbf{Obligation} & \textbf{Responsable} & \textbf{Comment} \\
+\hline
+Licence et agrément BCT       & Banque 100\%   & Licence existante \\
+KYC -- collecte               & NexaPay        & Formulaire + OCR + liveness \\
+KYC -- validation             & Banque         & Contr\^ole contre base CIN \\
+LCB-FT -- monitoring          & NexaPay        & D\'etection automatique (seuils, patterns) \\
+LCB-FT -- d\'eclaration       & Banque         & D\'eclaration de soup\c{c}on \`a la BCT \\
+Protection des donn\'ees      & NexaPay        & AES-256-GCM, donn\'ees en Tunisie \\
+Audit et tra\c{c}abilit\'e   & NexaPay        & Blockchain immuable, acc\`es auditeurs \\
+Rapports r\'eglementaires     & Banque         & NexaPay fournit les extraits \\
+Sauvegarde des fonds          & Banque 100\%   & Comptes group\'es sous votre contr\^ole \\
+\hline
+\end{tabular}
+\end{center}
+
+\textbf{Ce mod\`ele a d\'ej\`a fait ses preuves :} C'est ainsi que Solarisbank op\`ere en Allemagne (sous licence de Solaris SE), que Treezor op\`ere en France (sous licence de la Banque de France via Treezor), et que Synapse op\'erait aux \'Etats-Unis (sous licence d'Evolve Bank). NexaPay applique le m\^eme sch\'ema \'eprouv\'e au contexte tunisien.
+
+\newpage
+
+% ═══════════════════════════════════════════════════════
+\section{Phases d'Int\'egration}
+
+L'int\'egration de NexaPay au syst\`eme de la Banque de Tunisie se fait en 4 phases progressives, con\c{c}ues pour minimiser l'effort technique c\^ot\'e banque.
+
+\subsection{Phase 1 --- Activation Imm\'ediate (48h)}
+
+\textbf{Aucun travail informatique requis.} Le d\'epartement commercial de la banque ouvre trois comptes group\'es :
+
+\begin{center}
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Compte} & \textbf{Fonction} & \textbf{Contenu} \\
+\hline
+Compte 1 & R\`eglement commer\c{c}ants & Soldes group\'es des agents/commer\c{c}ants \\
+Compte 2 & Revenu NexaPay & Part NexaPay des frais (revers\'e p\'eriodiquement) \\
+Compte 3 & Float utilisateurs & Tous les soldes des portefeuilles utilisateurs \\
+\hline
+\end{tabular}
+\end{center}
+
+\textbf{D\'elai : 48 heures.} NexaPay est op\'erationnel. Les utilisateurs peuvent s'inscrire, transf\'erer, et payer.
+
+\subsection{Phase 2 --- R\`eglement par Fichier (Semaine 1--2)}
+
+La banque fournit un acc\`es SFTP \`a son syst\`eme de traitement par lots existant. NexaPay g\'en\`ere des fichiers de r\`eglement quotidiens au format CSV/MT940 :
+
+\begin{verbatim}
+RIB;Montant;Reference;Type
+99000654364483768727;1250.500;INV-2026-001;payout_merchant
+99000654364483768728;340.000;WTH-2026-045;withdrawal_user
+\end{verbatim}
+
+La banque traite ces fichiers via son syst\`eme batch existant --- celui qui g\`ere d\'ej\`a les paies, les virements utilitaires, etc. \textbf{Z\'ero d\'eveloppement n\'ecessaire c\^ot\'e banque.}
+
+\textbf{D\'elai : 1--2 semaines} (cr\'eation acc\`es SFTP + test fichier).
+
+\subsection{Phase 3 --- EBICS / ISO 20022 (Mois 1--3)}
+
+Connexion via le protocole \textbf{EBICS} (Electronic Banking Internet Communication Standard), que toute banque tunisienne op\'erant des comptes corporate supporte d\'ej\`a.
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{EBICS Client} --- NexaPay impl\'emente le client EBICS pour pousser les ordres de paiement directement dans le core banking
+    \item \textbf{ISO 20022 pain.001} --- Messages de paiement standardis\'es pour les virements
+    \item \textbf{ISO 20022 camt.053} --- Relev\'es bancaires \'electroniques pour le rapprochement automatique
+    \item \textbf{NexaPay Bank Adapter} --- Module Rust qui traduit les transactions on-chain en messages ISO 20022
+\end{itemize}
+
+\textbf{Travail banque :} Activer EBICS sur les comptes group\'es (fonctionnalit\'e existante pour les clients corporate). \\
+\textbf{Travail NexaPay :} Impl\'ementation du client EBICS + module ISO 20022 ($\sim$300 lignes de Rust).
+
+\textbf{D\'elai : 2--4 semaines.}
+
+\subsection{Phase 4 --- Int\'egration Profonde (Mois 3--6)}
+
+Si le volume le justifie, connexion directe au core banking pour la validation en temps r\'eel :
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Vue DB en lecture seule} --- Validation RIB et v\'erification de solde en temps r\'eel
+    \item \textbf{KYC automatis\'e} --- NexaPay soumet les donn\'ees CIN, la banque valide contre sa base de donn\'ees clients
+    \item \textbf{Provisioning IBAN automatis\'e} --- Cr\'eation de sous-comptes ou IBAN virtuels \`a la vol\'ee
+    \item \textbf{R\'econciliation temps r\'eel} --- Rapprochement automatique entre le ledger NexaPay et le core banking
+\end{itemize}
+
+\textbf{Travail banque :} Cr\'eation d'une vue DB read-only + whitelist IP ($\sim$1--2 jours DBA).
+
+\subsection{R\'ecapitulatif --- Effort Banque par Phase}
+
+\begin{center}
+\begin{tabular}{|l|c|c|c|}
+\hline
+\textbf{Phase} & \textbf{D\'elai} & \textbf{Effort Banque} & \textbf{Qui fait quoi} \\
+\hline
+1 -- Comptes    & 48h      & Ouvrir 3 comptes                    & D\'epartement commercial \\
+2 -- Fichiers   & 1--2 sem & Cr\'eer acc\`es SFTP               & IT Operations \\
+3 -- EBICS      & 2--4 sem & Activer EBICS (existant)           & IT + Corporate Banking \\
+4 -- Direct     & 1--2 sem & Vue DB read-only + whitelist IP    & DBA \\
+\hline
+\textbf{Total}  & \textbf{3--4 mois} & \textbf{$\sim$4 jours de travail effectif} & \\
+\hline
+\end{tabular}
+\end{center}
+
+\textbf{Le point cl\'e :} ce n'est pas la banque qui s'int\`egre \`a NexaPay --- c'est NexaPay qui s'int\`egre \`a la banque. Nous adaptons notre plateforme \`a l'infrastructure existante de la banque, et non l'inverse.
 
 \newpage
 
@@ -423,7 +728,7 @@ NexaPay dispose d'un \textbf{panneau d'administration} complet permettant aux ad
 \hline
 \textbf{Vitesse transferts} & 1--3 jours ouvr\'es (virement) & Instantan\'e ($<$1 seconde) \\
 \hline
-\textbf{Frais transferts} & 0.5--2\% par transaction & Gratuit entre utilisateurs \\
+\textbf{Frais transferts} & 0.5--2\% par transaction & Algorithme par tranches (500 millimes -- 1\%) \\
 \hline
 \textbf{Tra\c{c}abilit\'e} & Base de donn\'ees interne & Blockchain immuable v\'erifiable \\
 \hline

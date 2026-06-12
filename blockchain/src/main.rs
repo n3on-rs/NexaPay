@@ -133,7 +133,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
     let database_url = env::var("NEXAPAY_DATABASE_URL").unwrap_or_else(|_| {
-        "postgresql://nexapay:nexapay_secret@localhost:5432/nexapay".to_string()
+        "postgresql://USER:PASSWORD@HOST:PORT/DATABASE?sslmode=require".to_string()
     });
     let jwt_secret = env::var("NEXAPAY_JWT_SECRET").unwrap_or_else(|_| {
         "change_this_in_production_64_chars_minimum_change_this_in_production".to_string()
@@ -234,6 +234,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         agent_scorer::spawn_agent_scorer(pg_pool_clone, chain_clone).await;
     });
 
+    // Spawn periodic chain state backup (every 6 hours)
+    let pg_backup = pool.clone();
+    let chain_backup = chain.clone();
+    tokio::spawn(async move {
+        // Run first backup after 1 minute (catch early state), then every 6 hours
+        tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
+        loop {
+            let state = chain_backup.lock().await;
+            let blocks = state.blocks().to_vec();
+            let block_height = state.chain_height();
+            crate::db::backup::backup_chain_state(
+                &pg_backup,
+                &blocks,
+                &state.accounts,
+                block_height,
+            ).await;
+            drop(state);
+            tokio::time::sleep(tokio::time::Duration::from_secs(6 * 3600)).await;
+        }
+    });
+
     // Derive a separate admin JWT key from the main secret with a domain separator
     let admin_jwt_secret = sha256_hex(format!("{}:admin", jwt_secret).as_bytes());
     let state = AppState {
@@ -275,6 +296,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         allowed_origins.push("https://sandbox.nexapay.space".parse().unwrap());
         allowed_origins.push("https://auth.nexapay.space".parse().unwrap());
         allowed_origins.push("https://backend.nexapay.space".parse().unwrap());
+    }
+
+    // Extra origins from env var (comma-separated) — for custom domains, Vercel previews, etc.
+    if let Ok(extra) = std::env::var("NEXAPAY_EXTRA_ORIGINS") {
+        for origin in extra.split(',') {
+            let origin = origin.trim();
+            if !origin.is_empty() {
+                if let Ok(parsed) = origin.parse() {
+                    allowed_origins.push(parsed);
+                } else {
+                    tracing::warn!("[cors] Invalid origin in NEXAPAY_EXTRA_ORIGINS: {}", origin);
+                }
+            }
+        }
     }
 
     // In multi-validator mode, also allow peer origins for P2P

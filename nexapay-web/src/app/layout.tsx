@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Bebas_Neue, Geist_Mono, Space_Grotesk } from "next/font/google";
+import BackendGate from "@/components/backend-gate";
 import "./globals.css";
 
 
@@ -48,7 +49,7 @@ export default function RootLayout({
       data-scroll-behavior="smooth"
     >
       <body className="min-h-full bg-[#0b0b0b] font-sans text-white">
-        {children}
+        <BackendGate>{children}</BackendGate>
       </body>
     </html>
   );

@@ -1,0 +1,82 @@
+name: Deploy NexaPay
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'blockchain/**'
+      - 'nexapay-web/**'
+      - 'sdk/**'
+      - 'deploy/huggingface/**'
+
+concurrency:
+  group: deploy
+  cancel-in-progress: true
+
+jobs:
+  # ─── Frontend: Deploy to Vercel ───
+  deploy-frontend:
+    name: Deploy Frontend (Vercel)
+    runs-on: ubuntu-latest
+    if: contains(github.event.head_commit.message, '[skip-frontend]') == false
+    defaults:
+      run:
+        working-directory: nexapay-web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: nexapay-web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Deploy to Vercel
+        run: |
+          npx vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }} --yes \
+            --env NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL }} \
+            --env API_PROXY_URL=${{ vars.API_PROXY_URL }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+  # ─── Backend: Push to HF Space (triggers rebuild) ───
+  deploy-backend:
+    name: Deploy Backend (HF Spaces)
+    runs-on: ubuntu-latest
+    if: contains(github.event.head_commit.message, '[skip-backend]') == false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Push to HF Space
+        run: |
+          git clone --depth 1 "https://oauth2:${{ secrets.HF_TOKEN }}@huggingface.co/spaces/samer24/nexapay-backend" /tmp/hf-space
+          cp -r blockchain/Cargo.toml /tmp/hf-space/
+          cp -r blockchain/src /tmp/hf-space/
+          cp deploy/huggingface/Dockerfile /tmp/hf-space/
+          cd /tmp/hf-space
+          git config user.email "ci@nexapay.space"
+          git config user.name "NexaPay CI"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to deploy"
+          else
+            git commit -m "ci: auto-deploy from ${GITHUB_SHA::7}"
+            git push origin main
+            echo "HF Space rebuild triggered"
+          fi
+
+  # ─── Notify on failure ───
+  notify-failure:
+    name: Notify on failure
+    runs-on: ubuntu-latest
+    needs: [deploy-frontend, deploy-backend]
+    if: failure()
+    steps:
+      - name: Log failure
+        run: |
+          echo "Deployment failed for commit ${GITHUB_SHA}"
+          echo "See: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"

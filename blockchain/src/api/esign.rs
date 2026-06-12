@@ -807,6 +807,15 @@ pub async fn download_signed_contract(
 
 // ─── PDF Generation & Download ───
 
+/// Minimal 1x1 transparent PNG — fallback when asset files are missing (e.g. HF Spaces)
+const MINIMAL_PNG: &[u8] = &[
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
+    0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00, 0x00, 0x00, 0x02,
+    0x00, 0x01, 0xE5, 0x27, 0xDE, 0xFC, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42,
+    0x60, 0x82,
+];
+
 fn generate_account_contract_pdf(
     full_name: &str,
     cin: &str,
@@ -820,9 +829,11 @@ fn generate_account_contract_pdf(
     tx_hash: &str,
     block_number: u64,
 ) -> Result<Vec<u8>, String> {
-    // Load embedded assets at compile time
-    let logo_bytes: &[u8] = include_bytes!("../../assets/logo.png");
-    let stamp_bytes: &[u8] = include_bytes!("../../assets/stamp.png");
+    // Load assets at runtime (fallback to minimal PNG if missing — HF Spaces has no binary assets)
+    let logo_bytes: Vec<u8> = std::fs::read("assets/logo.png")
+        .unwrap_or_else(|_| MINIMAL_PNG.to_vec());
+    let stamp_bytes: Vec<u8> = std::fs::read("assets/stamp.png")
+        .unwrap_or_else(|_| MINIMAL_PNG.to_vec());
 
     let (doc, page1, layer1) = PdfDocument::new(
         "Glitch INC — Account Opening Agreement",
@@ -846,7 +857,7 @@ fn generate_account_contract_pdf(
     let mut y = Mm(275.0);
 
     // Company logo at top-right
-    if let Ok(dynamic_logo) = printpdf::image_crate::load_from_memory(logo_bytes) {
+    if let Ok(dynamic_logo) = printpdf::image_crate::load_from_memory(&logo_bytes) {
         let logo_img = printpdf::Image::from_dynamic_image(&dynamic_logo);
         let logo_layer = make_layer(&doc, current_page_idx, current_layer_idx);
         logo_img.add_to_layer(
@@ -973,7 +984,7 @@ fn generate_account_contract_pdf(
     y -= Mm(8.0);
 
     // Embed the company stamp image using add_to_layer
-    if let Ok(dynamic_stamp) = printpdf::image_crate::load_from_memory(stamp_bytes) {
+    if let Ok(dynamic_stamp) = printpdf::image_crate::load_from_memory(&stamp_bytes) {
         let stamp_img = printpdf::Image::from_dynamic_image(&dynamic_stamp);
         if y >= Mm(35.0) {
             let stamp_layer = make_layer(&doc, current_page_idx, current_layer_idx);
