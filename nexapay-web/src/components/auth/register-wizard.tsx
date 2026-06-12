@@ -272,10 +272,20 @@ export function RegisterWizard() {
                 <span>
                   I accept the{" "}
                   <Link
-                    href="#"
+                    href="/terms"
+                    target="_blank"
                     className="inline-flex items-center gap-0.5 font-medium text-[#00d4aa] hover:underline"
                   >
-                    terms and conditions
+                    terms of service
+                    <ExternalLink className="size-3 opacity-80" aria-hidden />
+                  </Link>
+                  {" "}and{" "}
+                  <Link
+                    href="/privacy"
+                    target="_blank"
+                    className="inline-flex items-center gap-0.5 font-medium text-[#00d4aa] hover:underline"
+                  >
+                    privacy policy
                     <ExternalLink className="size-3 opacity-80" aria-hidden />
                   </Link>
                 </span>

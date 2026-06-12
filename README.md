@@ -119,4 +119,7 @@ deploy/nginx/     Nginx configs for LB + production
 
 ## License
 
-MIT
+- **SDK** (`sdk/`) — [MIT](sdk/LICENSE) — free to use, modify, and distribute
+- **Backend + Frontend** — [Source-Available](LICENSE) — view source for evaluation only. No use, modification, or deployment without permission
+
+For commercial licensing: contact@backendglitch.com

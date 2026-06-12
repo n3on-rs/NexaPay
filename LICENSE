@@ -1,0 +1,28 @@
+NexaPay — Source-Available License
+
+Copyright (c) 2025 Glitch Inc. All rights reserved.
+
+This repository contains the NexaPay backend (blockchain/) and frontend
+(nexapay-web/). The NexaPay SDK (sdk/) is separately licensed under MIT.
+
+Permission is hereby granted to view, inspect, and read the source code
+solely for evaluation, auditing, or educational reference.
+
+RESTRICTIONS:
+
+1. You may NOT use, copy, modify, merge, publish, distribute, sublicense,
+   or sell the software, in whole or in part, for any purpose (personal,
+   commercial, or otherwise) without prior written permission from Glitch Inc.
+
+2. You may NOT deploy, host, or make the software available as a service
+   (SaaS), API, or any other offering to third parties.
+
+3. You may NOT use the software to build or operate any product, service,
+   or platform that competes with NexaPay or Glitch Inc.
+
+4. You may NOT remove or alter any copyright, trademark, or attribution
+   notices contained in the software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
+
+For commercial licensing or permitted use: contact@backendglitch.com

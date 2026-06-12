@@ -25,6 +25,8 @@ export function LandingLower() {
             <div className="flex flex-col sm:flex-row items-center justify-between w-full gap-4">
               <p>NexaPay — Licensed financial institution, Tunisia</p>
               <div className="flex gap-6">
+                <Link href="/terms" className="hover:text-white/50 transition-colors">Terms</Link>
+                <Link href="/privacy" className="hover:text-white/50 transition-colors">Privacy</Link>
                 <Link href="https://auth.nexapay.space/login" className="hover:text-white/50 transition-colors">Log in</Link>
                 <Link href="https://auth.nexapay.space/register" className="hover:text-white/50 transition-colors">Sign up</Link>
                 <a href="mailto:contact@backendglitch.com" className="hover:text-white/50 transition-colors">contact@backendglitch.com</a>

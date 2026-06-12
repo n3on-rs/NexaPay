@@ -1,6 +1,6 @@
 # NexaPay Node.js SDK
 
-Official Node.js SDK for the NexaPay Payment Gateway. Process payments, manage webhooks, handle refunds, and more — with full TypeScript support.
+Official Node.js SDK for [NexaPay](https://nexapay.space) — Tunisia-focused payment gateway (Stripe-like). Create payment intents, process card/wallet payments, manage webhooks, refunds, and payouts. Full TypeScript support.
 
 ## Features
 
@@ -9,7 +9,7 @@ Official Node.js SDK for the NexaPay Payment Gateway. Process payments, manage w
 - **Error handling** — Typed error classes for every failure scenario
 - **Webhook verification** — HMAC-SHA256 signature verification built in
 - **Per-intent webhooks** — Set `success_webhook_url` / `failure_webhook_url` per payment
-- **Env-configurable** — `NEXAPAY_API_URL` env var for base URL
+- **Zero config** — Defaults to `https://backend.nexapay.space`, or set `NEXAPAY_API_URL`
 
 ## Installation
 
@@ -23,18 +23,45 @@ npm install @nexapay/node-sdk
 import NexaPay from "@nexapay/node-sdk";
 
 const client = new NexaPay({
-  apiKey: "nxp_developer_abc123def456ghi789_12345678",
+  apiKey: "nxp_developer_your_key_here",
+  // baseURL defaults to https://backend.nexapay.space
 });
 
-// Create a payment intent
+// Create a 42 TND payment intent
 const { data } = await client.paymentIntents.create({
-  amount: 42000, // 42.000 TND (in millimes)
+  amount: 42000, // millimes (1 TND = 1000)
   description: "Order #42",
+  customer_name: "Ahmed Ben Ali",
+  customer_email: "ahmed@example.tn",
+  success_webhook_url: "https://mysite.tn/webhooks/success",
 });
 
 // Redirect customer to checkout
-console.log(data.checkout_url);
-// → https://nexapay.space/checkout/pi_abc123...
+window.location.href = data.checkout_url;
+
+// List recent intents
+const { data: intents } = await client.paymentIntents.list({ limit: 10 });
+
+// Cancel an intent
+await client.paymentIntents.cancel("pi_abc123");
+
+// Get your balance
+const { data: balance } = await client.balance.get();
+console.log(balance.available, balance.currency); // 50000, "TND"
+
+// Create a refund
+const { data: refund } = await client.refunds.create({
+  intent_id: "pi_abc123",
+  amount: 21000,
+  reason: "customer_request",
+});
+
+// Withdraw to bank
+const { data: payout } = await client.payouts.create({
+  amount: 100000,
+  rib: "99000236175790748382",
+  account_holder_name: "Ahmed Ben Ali",
+});
 ```
 
 ## Authentication
@@ -42,7 +69,7 @@ console.log(data.checkout_url);
 API keys follow the format: `nxp_{type}_{token}_{checksum}`
 
 - **Developer keys** (`nxp_developer_...`) — Full gateway access
-- Obtain keys from the Agent Dashboard → API Keys
+- Obtain keys from the [Agent Dashboard](https://nexapay.space/agent/dashboard/api-keys)
 
 ## API Reference
 
@@ -51,22 +78,27 @@ API keys follow the format: `nxp_{type}_{token}_{checksum}`
 ```typescript
 // Create
 const intent = await client.paymentIntents.create({
-  amount: 42000,                    // Required: amount in millimes (1 TND = 1000)
+  amount: 42000,                    // Required: amount in millimes
   currency: "TND",                  // Optional: defaults to TND
   description: "Order #42",         // Optional
   customer_name: "Ahmed Ben Ali",   // Optional
   customer_email: "a@example.tn",   // Optional
-  idempotency_key: "order-42",      // Optional: prevents duplicates
-  webhook_url: "https://...",       // Optional: all events
-  success_webhook_url: "https://...", // Optional: payment succeeded only
-  failure_webhook_url: "https://...", // Optional: payment failed only
+  customer_phone: "50123456",       // Optional
+  success_webhook_url: "https://...", // Optional: payment succeeded
+  failure_webhook_url: "https://...", // Optional: payment failed
 });
 
 // Retrieve
-const details = await client.paymentIntents.get("pi_abc123...");
+const details = await client.paymentIntents.get("pi_abc123");
+
+// List all (with pagination)
+const list = await client.paymentIntents.list({ limit: 10 });
+
+// Cancel
+await client.paymentIntents.cancel("pi_abc123");
 
 // Confirm with card
-const result = await client.paymentIntents.confirm("pi_abc123...", {
+const result = await client.paymentIntents.confirm("pi_abc123", {
   method: "card",
   card_number: "4242424242424242",
   expiry_month: "12",
@@ -74,25 +106,48 @@ const result = await client.paymentIntents.confirm("pi_abc123...", {
   cvv: "123",
   card_holder_name: "Ahmed Ben Ali",
 });
+
+// Confirm with wallet (two-step: PIN → OTP)
+const step1 = await client.paymentIntents.confirm("pi_abc123", {
+  method: "wallet",
+  phone: "21653249239",
+  pin: "123456",
+});
+// step1.data.step === "otp_required"
+const step2 = await client.paymentIntents.confirm("pi_abc123", {
+  method: "wallet",
+  phone: "21653249239",
+  pin: "123456",
+  otp: "123456",
+});
 ```
 
 ### Refunds
 
 ```typescript
+// Create
 const refund = await client.refunds.create({
-  intent_id: "pi_abc123...",
-  amount: 21000,                          // Optional: partial refund
-  reason: "Customer request",             // Optional
+  intent_id: "pi_abc123",
+  amount: 21000,              // Optional: partial refund
+  reason: "customer_request", // Optional
 });
+
+// List all
+const refunds = await client.refunds.list();
 ```
 
 ### Payouts
 
 ```typescript
+// Withdraw to bank
 const payout = await client.payouts.create({
-  amount: 100000,   // millimes
-  destination: "wallet_address_or_rib",
+  amount: 100000,                      // millimes
+  rib: "99000236175790748382",        // 20-digit Tunisian RIB
+  account_holder_name: "Ahmed Ben Ali",
 });
+
+// List all
+const payouts = await client.payouts.list();
 ```
 
 ### Balance & Transactions
@@ -102,7 +157,6 @@ const balance = await client.balance.get();
 // → { available, gross, refunded, payouts, pending, currency }
 
 const txns = await client.transactions.list();
-// → { intents: [...], refunds: [...] }
 ```
 
 ### Webhooks
@@ -111,11 +165,7 @@ const txns = await client.transactions.list();
 // Create
 const webhook = await client.webhooks.create({
   url: "https://mysite.tn/webhooks/nexapay",
-  event_types: [
-    "payment_intent.succeeded",
-    "payment_intent.failed",
-    "payment_intent.refunded",
-  ],
+  event_types: ["payment_intent.succeeded", "payment_intent.failed"],
 });
 
 // List all
@@ -123,6 +173,9 @@ const webhooks = await client.webhooks.list();
 
 // Delivery history
 const deliveries = await client.webhooks.deliveries(webhook.data.id);
+
+// Test webhook
+await client.webhooks.test(webhook.data.id);
 
 // Delete
 await client.webhooks.delete(webhook.data.id);
@@ -165,15 +218,15 @@ try {
 }
 ```
 
-## Test Cards
+## Test Cards (Sandbox)
 
-| Card Number | CVV | Result |
-|---|---|---|
-| `4242424242424242` | 123 | Success |
-| `5555555555554444` | 123 | Success |
-| `4000000000000002` | 123 | Declined |
-| `4000000000009995` | 123 | Insufficient Funds |
-| `5105105105105100` | 123 | Declined |
+| Brand | Number | CVV | Result |
+|-------|--------|-----|--------|
+| Visa | `4242424242424242` | 123 | Success |
+| MasterCard | `5555555555554444` | 123 | Success |
+| Visa | `4000000000000002` | 123 | Declined |
+| Visa | `4000000000009995` | 123 | Insufficient Funds |
+| MasterCard | `5105105105105100` | 123 | Declined |
 
 Expiry: any future date (e.g. 12/2029). These only work in sandbox mode.
 
@@ -191,7 +244,7 @@ const client = new NexaPay({
 ## Development
 
 ```bash
-git clone https://github.com/Samer-Gassouma/NexaPay.git
+git clone https://github.com/n3on-rs/NexaPay.git
 cd NexaPay/sdk
 npm install
 npm run build
@@ -199,12 +252,13 @@ npm run build
 
 ## Links
 
-- **Developer Portal**: https://nexapay.space
-- **API Docs**: https://docs.nexapay.space
+- **Website**: https://nexapay.space
+- **API Docs**: https://nexapay.space/docs
 - **NPM**: https://www.npmjs.com/package/@nexapay/node-sdk
+- **GitHub**: https://github.com/n3on-rs/NexaPay
 - **Support**: contact@backendglitch.com
-- **Developer**: [Glitch Inc / BackendGlitch Division](https://backendglitch.com)
+- **Built by**: [Glitch Inc / BackendGlitch Division](https://backendglitch.com)
 
 ## License
 
-MIT
+MIT — free to use, modify, and distribute. See [LICENSE](./LICENSE).

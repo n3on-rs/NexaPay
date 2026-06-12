@@ -6,6 +6,12 @@ export function middleware(request: NextRequest) {
   const url = request.nextUrl.clone();
   const pathname = url.pathname;
 
+  // ─── backend.nexapay.space — Full API proxy to HF Space ───
+  if (hostname.startsWith("backend.")) {
+    const backendUrl = process.env.API_PROXY_URL || "https://samer24-nexapay-backend.hf.space";
+    return NextResponse.rewrite(new URL(pathname + url.search, backendUrl));
+  }
+
   // Pass through /api, /_next, /favicon.ico, /logo.png etc.
   if (
     pathname.startsWith("/api/") ||
@@ -24,6 +30,16 @@ export function middleware(request: NextRequest) {
 
   // Docs page is public on any domain
   if (pathname.startsWith("/docs")) {
+    return NextResponse.next();
+  }
+
+  // Legal pages — public on any domain
+  if (
+    pathname === "/terms" ||
+    pathname === "/privacy" ||
+    pathname === "/api-terms" ||
+    pathname === "/agent-agreement"
+  ) {
     return NextResponse.next();
   }
 
@@ -64,5 +80,6 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|logo.png).*)"],
+  // Include /api paths — needed for backend.nexapay.space proxy
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };
