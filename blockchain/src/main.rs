@@ -9,6 +9,7 @@ mod generator;
 mod services;
 mod storage;
 
+use sqlx::Row;
 use std::collections::HashMap;
 use std::env;
 use std::fs;
@@ -24,6 +25,8 @@ use tower_http::trace::TraceLayer;
 use crate::api::{build_router, AppState};
 use crate::block::ValidatorInfo;
 use crate::chain::Blockchain;
+use crate::account::{AccountType, ChainAccount};
+use crate::chain::now_ts;
 use crate::consensus::start_consensus;
 use crate::crypto::{generate_keypair, sha256_hex};
 use crate::db::postgres::{connect, run_migrations};
@@ -214,6 +217,42 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         validator_address.clone(),
     )?;
     let chain = Arc::new(Mutex::new(chain));
+
+    // Seed chain accounts from PostgreSQL users on startup
+    // (rebuild_state_from_blocks handles tx history, this handles initial account creation)
+    {
+        let mut chain_guard = chain.lock().await;
+        match sqlx::query("SELECT chain_address FROM users WHERE chain_address IS NOT NULL AND chain_address != ''")
+            .fetch_all(&pool)
+            .await
+        {
+            Ok(rows) => {
+                let mut count = 0;
+                for row in &rows {
+                    let addr: String = row.try_get("chain_address").unwrap_or_default();
+                    if addr.is_empty() { continue; }
+                    if !chain_guard.accounts.contains_key(&addr) {
+                        chain_guard.accounts.insert(addr.clone(), ChainAccount {
+                            address: addr.clone(),
+                            public_key: String::new(),
+                            balance: 300_000,
+                            tx_count: 0,
+                            account_type: AccountType::User,
+                            created_at: now_ts(),
+                            is_active: true,
+                            kyc_hash: String::new(),
+                        });
+                        count += 1;
+                        tracing::info!("[startup] Seeded chain account: {}", addr);
+                    }
+                }
+                tracing::info!("[startup] Seeded {} accounts from PostgreSQL ({} total users)", count, rows.len());
+            }
+            Err(e) => {
+                tracing::error!("[startup] Failed to seed accounts: {}", e);
+            }
+        }
+    }
 
     let http_client = reqwest::Client::new();
 

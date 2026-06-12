@@ -199,6 +199,8 @@ pub struct RequestTransferOtpResponse {
 pub struct VerifyTransferOtpPayload {
     pub otp_id: String,
     pub otp_code: String,
+    #[serde(default)]
+    pub pin: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -349,7 +351,21 @@ pub async fn get_account(
         "User".to_string()
     };
 
-    let chain = state.chain.lock().await;
+    let mut chain = state.chain.lock().await;
+    // Auto-create chain account if it exists in PostgreSQL but not in chain state
+    // (handles HF Space rebuilds that lose in-memory state)
+    if chain.get_account(&address).is_none() {
+        chain.create_account(ChainAccount {
+            address: address.clone(),
+            public_key: String::new(),
+            balance: 300_000, // default for seeded accounts
+            tx_count: 0,
+            account_type: AccountType::User,
+            created_at: now_ts(),
+            is_active: true,
+            kyc_hash: "auto_seeded".to_string(),
+        });
+    }
     let chain_account = chain
         .get_account(&address)
         .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "On-chain account not found"))?;
@@ -1141,7 +1157,13 @@ async fn execute_transfer(
         hash: tx_hash.clone(),
     };
 
-    let _ = chain.pre_apply_transaction(&tx);
+    if let Err(e) = chain.pre_apply_transaction(&tx) {
+        tracing::error!("Failed to pre-apply transfer: {:?}", e);
+        return Err(api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to process transfer",
+        ));
+    }
     chain.add_pending_transaction(tx.clone());
 
     let (new_balance, block_index) = if state.is_multi_validator {
@@ -1158,7 +1180,10 @@ async fn execute_transfer(
                 &state.validator_private_key,
                 &state.validator_public_key,
             )
-            .map_err(|_| api_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to append block"))?;
+            .map_err(|e| {
+                tracing::error!("Failed to append block: {:?}", e);
+                api_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to append block")
+            })?;
 
         let new_bal = chain
             .get_account(address)
@@ -1304,8 +1329,15 @@ pub async fn verify_transfer_otp(
             _ => api_error(StatusCode::BAD_REQUEST, "Invalid recipient"),
         })?;
 
+    // Re-derive PIN from the request payload so user signing key can be used
+    let pin_for_sign = if !payload.pin.is_empty() {
+        &payload.pin
+    } else {
+        ""
+    };
+
     let (tx_hash, new_balance, block_index) =
-        execute_transfer(&state, &address, &to_address, amount as u64, &memo, "").await?;
+        execute_transfer(&state, &address, &to_address, amount as u64, &memo, pin_for_sign).await?;
 
     // Notify connected SSE clients
     let from_name = lookup_display_name(&state, &address).await;

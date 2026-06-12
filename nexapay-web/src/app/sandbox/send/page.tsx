@@ -123,6 +123,17 @@ function SendInner() {
   const address = getSessionAddress();
   const token = getSessionToken();
 
+  // Fetch balance
+  const refreshBalance = React.useCallback(async () => {
+    if (!token || !address) return;
+    try {
+      const accRes = await getJson(`/accounts/${address}`, { "X-Account-Token": token });
+      if (accRes.ok && "balance" in accRes.data) {
+        setBalance(Number(accRes.data.balance) || 0);
+      }
+    } catch {}
+  }, [token, address]);
+
   // Fetch balance and recent contacts on mount
   React.useEffect(() => {
     document.title = "Send Money — NexaPay";
@@ -278,6 +289,7 @@ function SendInner() {
         if (res.ok) {
           setTxHash(String((res.data as any).transfer_id || ""));
           setToName(beneficiaryName);
+          refreshBalance();
           setStep("success");
         } else {
           const msg = String((res.data as any).error || (res.data as any).message || "");
@@ -293,12 +305,13 @@ function SendInner() {
       } else {
         const res = await postJson(
           `/accounts/${address}/transfer/verify-otp`,
-          { otp_id: otpId, otp_code: otpCode },
+          { otp_id: otpId, otp_code: otpCode, pin },
           { "X-Account-Token": token, "X-Idempotency-Key": idempotencyKey }
         );
         if (res.ok) {
           setTxHash(String((res.data as any).tx_hash || ""));
           setToName(String((res.data as any).to_name || recipient?.full_name || ""));
+          refreshBalance();
           setStep("success");
         } else {
           const msg = String((res.data as any).error || (res.data as any).message || "");

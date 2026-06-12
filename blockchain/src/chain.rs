@@ -677,8 +677,24 @@ impl Blockchain {
                 if tx.to != "SYSTEM" {
                     let to_acc = self
                         .accounts
-                        .get_mut(&tx.to)
-                        .ok_or(ChainError::AccountNotFound)?;
+                        .entry(tx.to.clone())
+                        .or_insert_with(|| {
+                            // Auto-create only for recovery (HF rebuild). The pre-check
+                            // in execute_transfer already verified the recipient exists in
+                            // PostgreSQL/chain state. This handles the edge case where chain
+                            // state was rebuilt from Sled but accounts aren't seeded yet.
+                            tracing::warn!("[chain] Auto-creating recipient account: {}", tx.to);
+                            ChainAccount {
+                                address: tx.to.clone(),
+                                public_key: String::new(),
+                                balance: 0,
+                                tx_count: 0,
+                                account_type: AccountType::User,
+                                created_at: now_ts(),
+                                is_active: true,
+                                kyc_hash: "recovered".to_string(),
+                            }
+                        });
                     to_acc.balance = to_acc.balance.saturating_add(tx.amount);
                     to_acc.tx_count = to_acc.tx_count.saturating_add(1);
                 }
